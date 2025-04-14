@@ -1,4 +1,4 @@
-import os
+import os, timeit
 import numpy as np
 import scipy as sp
 from scipy.constants import e, hbar, m_e
@@ -309,6 +309,34 @@ def compare_error():
     make_plot("Boltzmann FEM Model Error", "Number of Elements",
               "Maximum Error", "free_electron_error.pdf", legend=False)
 
+
+def compare_performance():
+    magnetic_fields = np.linspace(0, 1, 10)
+    kf = 1e10
+    scattering_rate_constant = 1e12
+
+    ns = np.linspace(10, 1000, 50, dtype=int)
+    times = np.zeros_like(ns, dtype=float)
+    for (i, n) in enumerate(ns):
+        theta = np.linspace(0, 2*np.pi, n, endpoint=False)
+        kx = kf * np.cos(theta)
+        ky = kf * np.sin(theta)
+        scattering_rate = np.full_like(kx, scattering_rate_constant)
+        timer = timeit.Timer(lambda: calculate_boltzmann(
+            kx, ky, scattering_rate, magnetic_fields))
+        nloops = 100
+        # single loop for compilations and other warmup
+        calculate_boltzmann(kx, ky, scattering_rate, magnetic_fields)
+        time_list = timer.repeat(5, nloops)
+        times[i] = min(time_list) / nloops * 1e3 # ms
+
+    plt.plot(ns, times, color='mediumblue')
+    plt.xticks([10] + list(np.linspace(0, ns[-1], 5, dtype=int)[1:]))
+    make_plot("Boltzmann FEM Model Performance", "Number of Elements",
+              "Execution Time (ms)", "free_electron_performance.pdf",
+              legend=False)
+
+
 def make_plot(title, xlabel, ylabel, save_path, legend=True):
     plt.title(title)
     plt.xlabel(xlabel)
@@ -325,4 +353,5 @@ def make_plot(title, xlabel, ylabel, save_path, legend=True):
 
 if __name__ == "__main__":
     # free_electron_test()
-    compare_error()
+    # compare_error()
+    compare_performance()
