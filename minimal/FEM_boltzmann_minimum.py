@@ -260,9 +260,9 @@ def free_electron_test():
     """
     Test Boltzmann transport for the free electron system vs the Drude model.
     """
-    magnetic_fields = np.linspace(0, 30, 10000)
+    magnetic_fields = np.linspace(0, 30, 1000)
     kf = 1e10
-    theta = np.linspace(0, 2*np.pi, 500, endpoint=False)
+    theta = np.linspace(0, 2*np.pi, 100, endpoint=False)
     kx = kf * np.cos(theta)
     ky = kf * np.sin(theta)
     scattering_rate_constant = 1e12
@@ -281,21 +281,48 @@ def free_electron_test():
              color='red', label=fr"$\sigma_{{xx}}$ Boltzmann")
     plt.plot(magnetic_fields, sigma_xy_boltzmann, linestyle=(0, (3, 3)),
              color='lime', label=fr"$\sigma_{{xy}}$ Boltzmann")
-    make_plot()
+    make_plot("Free Electron Test", "Magnetic Field (T)",
+              "Conductivity (S/m)", "free_electron_test.pdf")
 
 
-def make_plot():
-    plt.title("Free Electron Test")
-    plt.xlabel("Magnetic Field (T)")
-    plt.ylabel("Conductivity (S/m)")
+def compare_error():
+    magnetic_fields = np.linspace(0, 30, 1000)
+    kf = 1e10
+    scattering_rate_constant = 1e12
+    
+    sigma_xx_drude, sigma_xy_drude = calculate_drude(
+        kf, scattering_rate_constant, magnetic_fields)
+    ns = np.linspace(10, 200, 50, dtype=int)
+    errors = np.zeros_like(ns, dtype=float)
+    for (i, n) in enumerate(ns):
+        theta = np.linspace(0, 2*np.pi, n, endpoint=False)
+        kx = kf * np.cos(theta)
+        ky = kf * np.sin(theta)
+        scattering_rate = np.full_like(kx, scattering_rate_constant)
+        sigma_xx_boltzmann, sigma_xy_boltzmann = calculate_boltzmann(
+            kx, ky, scattering_rate, magnetic_fields)
+        errors[i] = max(np.max(np.abs(sigma_xx_boltzmann - sigma_xx_drude)),
+                        np.max(np.abs(sigma_xy_boltzmann - sigma_xy_drude)))
+    
+    plt.loglog(ns, errors, color='mediumblue')
+    # plt.xticks([10] + list(np.linspace(0, ns[-1], 5, dtype=int)[1:]))
+    make_plot("Boltzmann FEM Model Error", "Number of Elements",
+              "Maximum Error", "free_electron_error.pdf", legend=False)
+
+def make_plot(title, xlabel, ylabel, save_path, legend=True):
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
     plt.tick_params(axis='x', which='major', pad=8)
     plt.tick_params(axis='y', which='major', pad=10)
-    plt.legend()
+    if legend:
+        plt.legend()
     plt.tight_layout()
     plt.savefig(os.path.dirname(os.path.relpath(__file__))
-                + "/free_electron_test.pdf", bbox_inches='tight')
+                + '/' + save_path, bbox_inches='tight')
     plt.show()
 
 
 if __name__ == "__main__":
-    free_electron_test()
+    # free_electron_test()
+    compare_error()
