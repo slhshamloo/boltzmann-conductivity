@@ -1,6 +1,19 @@
 # figures
 **/*.pdf
 
+# LaTeX
+**/*.aux
+**/*.bbl
+**/*.blg
+**/*.dvi
+**/*.idx
+**/*.log
+**/*.out
+**/*.toc
+**/*.fls
+**/*.synctex.gz
+**/*.fdb_latexmk
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

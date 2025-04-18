@@ -1,0 +1,537 @@
+\documentclass[12pt]{article}
+\usepackage{amsmath,amssymb,bbold,bm,empheq,graphicx,hyperref,siunitx,subcaption,upgreek,xcolor}
+\usepackage[italicdiff]{physics}
+\usepackage[justification=centering]{caption}
+\usepackage{subcaption}
+\usepackage[section]{placeins}
+
+\hypersetup{colorlinks=true, urlcolor=cyan}
+\newcommand{\ddfrac}[2]{{\displaystyle\frac{\displaystyle #1}{\displaystyle #2}}}
+
+\title{FEM for Boltzmann Conductivity: An Introduction}
+\author{Saleh Shamloo Ahmadi}
+\date{April 18, 2025}
+
+\begin{document}
+\maketitle
+\section{Problem Statement}
+\subsection{The Boltzmann Transport Equation}
+From the Boltzmann transport equation, we have
+\begin{gather}
+    \dv{f}{t} = \qty(\pdv{f}{t})_{\text{coll}}, \\
+    \pdv{f}{t} + \frac{\vb{p}}{m}\vdot\grad f + \vb{F}\vdot\grad_{\vb{p}}f = I[f],
+\end{gather}
+where $f$ is any density function, $\vb{p}$ is the momentum of the particles, $\vb{F}$ is the
+external force, and $I[f]$ is the \emph{collision integral}. In the context of conductivity of
+electrons,
+\begin{equation}
+    \vb{F} = -e\qty(\vb{E} + \vb{v}\cross\vb{B}),
+\end{equation}
+and replacing the momentum $\vb{p}$ with the wavevector $\vb{k}$, we have
+\begin{equation}
+    \pdv{f}{t} + \frac{\hbar\vb{k}}{m}\vdot\grad f
+    - \frac{e}{\hbar}\qty(\vb{E} + \vb{v}\cross\vb{B})\vdot\grad_{\vb{k}}f = I[f].
+\end{equation}
+If we consider a fluctuation to the equilibrium distribution $f_0(\vb{k})$ (the Fermi-Dirac
+distribution here), then,
+\begin{equation}
+    f(\vb{r}, \vb{k}; t) = f_0(\vb{k}) + g(\vb{r}, \vb{k}; t)
+\end{equation}
+(we assume the material is uniform), and using
+\begin{equation}
+    \vb{v} = \frac{\grad_{\vb{k}}\varepsilon}{\hbar}
+\end{equation}
+where $\vb{v}$ is the group velocity $\varepsilon$ is the energy, we get
+\begin{equation}
+    \pdv{g}{t} + \frac{\hbar\vb{k}}{m}\vdot\grad g
+    - \frac{e(\vb{E} + \vb{v}\cross\vb{B})}{\hbar}\vdot\grad_{\vb{k}}g - I[f_0 + g]
+    = e\vb{E}\vdot\vb{v}\pdv{f_0}{\varepsilon} \label{eq:boltzmann}
+\end{equation}
+(note that $\vb{v}\cross\vb{B}$ is perpendicular to $\vb{v}$). Now, we only consider the case of
+uniform fields, so we can drop the spatial gradient term. Also, for the conductivity tensor, we
+are only interested in the linear response to the electric field, so we can drop the electric field
+term on the right hand side. Finally, linearizing the collision integral in terms of the fluctuation
+$g$, we have
+\begin{equation}
+    I[f_0 + g] = \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t)
+    - \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) g(\vb{k}; t) + \mathcal{O}(g^2),
+\end{equation} 
+where $C(\vb{k}, \vb{k'})$ is a scattering kernel. I call the two terms the \emph{in-scattering} and
+\emph{out-scattering} terms respectively. The out-scattering is usually expressed with the
+\emph{relaxation time} $\tau$ or \emph{scattering rate} $\Gamma=1/\tau$, which is equal to
+\begin{equation}
+    \frac{1}{\tau(\vb{k})} = \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}).
+\end{equation}
+
+\sloppy{In-scattering is dropped in the \emph{relaxation time
+approximation}, which is the case for the Chambers formula. Our goal here is to keep this term, as
+it especially becomes important when the Fermi surface has strong anisotropy, which is the case for
+cuprates. When the Fermi surface is roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend
+on $\vb{k}$ and, because of charge conservation,
+\begin{equation}
+    \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t) \approx C\int\dd{\vb{k'}} g(\vb{k'}; t) = 0.
+\end{equation}
+Due to time-reversal symmetry, $C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$, so if we consider any
+anisotropy in the out-scattering, we must do the same for the in-scattering. This means the
+Chambers formula is just wrong for anisotropic Fermi surfaces. So, why does it work effectively
+anyway? The scattering in cuprates might only be low-angle, so the in-scattering is small compared
+to the out-scattering.}
+
+Plugging in the expression for the collision integral into equation \eqref{eq:boltzmann} and
+applying the approximations, we get
+\begin{equation}
+    \qty(\pdv{t} + \frac{1}{\tau(\vb{k})} - \frac{e(\vb{v}\cross\vb{B})}{\hbar}\vdot\grad_{\vb{k}})
+    g(\vb{k}; t) - \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t)
+    = e\vb{E}\vdot\vb{v}\pdv{f_0}{\varepsilon}.
+\end{equation}
+Depending on whether we want to study steady-state DC fields or AC fields, we can set $\pdv*{t}$ to
+equal to zero or perform a Fourier transform and set $\pdv*{t} = -i\omega$. For the sake of
+completeness, I will go with the latter case (just setting $omega=0$ and using the regular,
+non-Fourier-trasformed fields would produce the former case easily).
+
+This equation can be expressed as
+\begin{equation}
+    \int \dd{\vb{k'}} v(\vb{k}) A(\vb{k}, \vb{k'}) g(\vb{k'}) = h(\vb{k})
+    \label{eq:integral_equation}
+\end{equation}
+where
+\begin{gather}
+    A(\vb{k}, \vb{k'}) = \qty(-\frac{i\omega}{v(\vb{k})} + \frac{1}{v(\vb{k})\tau(\vb{k})}
+        - \frac{e\qty(\vu{v}(\vb{k})\cross\vb{B})}{\hbar}\vdot\grad_{\vb{k}})\delta(\vb{k}-\vb{k'})
+        - \frac{C(\vb{k},\vb{k'})}{v(\vb{k})}, \label{eq:operator} \\
+    h(\vb{k}) = e\vb{E}\vdot\vb{v}(\vb{k})\pdv{f_0}{\varepsilon}.
+\end{gather}
+Adding the velocity magnitude $v(\vb{k})$ seems like an arbitrary choice here, but it is done with
+good reason. Later, it will make the formula for the conductivity tensor more symmetric and makes
+the calculation of $A$ a bit more streamlined. The solution can be expressed as
+\begin{equation}
+    g(\vb{k}) = \frac{1}{v(\vb{k})} \int\dd{\vb{k'}} A^{-1}(\vb{k}, \vb{k'}) h(\vb{k'}).
+\end{equation}
+So, if we could discretize everything, this would just become a linear system of equations. This is
+the goal of the finite element method (FEM).
+
+\subsection{The Conductivity Tensor}
+The current density is given by
+\begin{equation}
+    \vb{J} = -\frac{2e}{(2\pi)^d} \int\dd{\vb{k}} \vb{v}(\vb{k}) f(\vb{k}).
+\end{equation}
+The factor of 2 in the numerator is due to the two possible spin configurations per wavevector $k$
+and the factor $(2\pi)^d$ in the denominator comes from the weighted sum over the wavevectors.
+and the conductivity tensor is given by
+\begin{equation}
+    \sigma_{ab} = \pdv{J_a}{E_b}.
+\end{equation}
+Since there are no currents in equilibrium, we have
+\begin{equation}
+    \sigma_{ab} = -\frac{2e}{(2\pi)^d} \int\dd{\vb{k}} v_a(\vb{k}) \pdv{g(\vb{k})}{E_b}.
+\end{equation}
+plugging in the expression for $g(\vb{k})$,
+\begin{equation}
+    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d} \int\dd{\vb{k}} \frac{v_a(\vb{k})}{v(\vb{k})} \int\dd{\vb{k'}}
+    A^{-1}(\vb{k}, \vb{k'}) v_b(\vb{k'})\qty(\pdv{f_0}{\varepsilon}).
+\end{equation}
+As $T\to0$, the Fermi-Dirac distribution becomes a step function, so the term
+$\pdv*{f_0}{\varepsilon}$ becomes a Dirac delta at the Fermi energy. If we apply the integral over
+the delta function, an extra factor of $(\grad_{k}\varepsilon)^{-1} = (\hbar v)^{-1}$ (the Jacobian)
+is added. In the end, we have
+\begin{equation}
+    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \int\dd{\vb{k}}\int\dd{\vb{k'}}
+    \hat{v}_a(\vb{k}) A^{-1}(\vb{k}, \vb{k'}) \hat{v}_b(\vb{k'}).
+    \label{eq:conductivity}
+\end{equation}
+
+\section{Finite Element Method}
+\subsection{Discretization}
+To solve this using the finite element method, we first define a set of basis functions, and then
+approximate everything as a linear combination of these basis functions. So, the goal is to express
+everything in equation \eqref{eq:conductivity} in terms of linear combinations of these basis
+functions and transform the differential equation problem into a linear algebra problem. To do this,
+we use the machinery of tensor calculus, but it is not necessary to have a deep understanding of it.
+We only use it to simplify the notation.
+
+Before we begin, remember the simple rule that when summing over an index, it should be on the top
+for one symbol and on the bottom for another. If an index is not summed over, then it will obviously
+stay where it is in the final symbol. We call this the \emph{index contraction} rule. The placement
+of indices on the top or the bottom has a deeper connection with tensor calculus and covariance and
+contravariance, but it is not needed to understand the procedures here. You can just think of it as
+a syntactic game. We will also not use the Einstein summation convention, just to make things
+completely explicit and hopefully clearer.
+
+Defining the basis as the set $\{\psi_i(\vb{k})\}$, we can approximate any function by a linear
+combination of these basis functions;
+\begin{equation}
+    f(\vb{k}) = \sum_i f^{i}\psi_i(\vb{k}). \label{eq:vector}
+\end{equation}
+Now, we would like to evaluate integrals over the Fermi surface. So, to make our notation simpler,
+we can define symbols with subscripts to represent integrals.
+\begin{equation}
+    f_i \equiv \int\dd{\vb{k}} \psi_i(\vb{k}) f(\vb{k})
+    = \sum_j f^j \int\dd{\vb{k}} \psi_i(\vb{k}) \psi_j(\vb{k})
+    \label{eq:integral_vector}
+\end{equation}
+It is useful to define the symbol
+\begin{equation}
+    M_{ij} \equiv \int \dd{\vb{k}} \psi_i(\vb{k}) \psi_j(\vb{k}),
+    \label{eq:overlap}
+\end{equation}
+which we call the \emph{overlap matrix}. Using it,
+\begin{equation}
+    f_i = \sum_j M_{ij} f^j.
+    \label{eq:lowering_vector}
+\end{equation}
+
+We now try to define the operator in this basis. The question is, where should we put the indices
+for the matrix representing the action of operator $A$ in this space? Well, the action of such
+matrix on a vector $f^i$ should produce a new vector $(Af)^i$. This should be a linear combination
+of the components of the vector $f^i$. So, to abide by our rule of index contraction, the symbol for
+the matrix of $A$ should have one index on the bottom to sum over the elements of $f^i$ and one index
+on the top for each of the elements of the resulting vector $(Af)^i$. Putting it all together,
+\begin{equation}
+    (Af)(\vb{k}) = \sum_i (Af)^i \psi_i(\vb{k}) \equiv \sum_{ij} A^i_j f^j \psi_i(\vb{k}).
+\end{equation}
+For the integrals, we have
+\begin{equation}
+    (Af)_i = \int\dd{\vb{k}} \psi_i(\vb{k}) (Af)(\vb{k}) = \sum_j A^i_jf^j
+    \int\dd{\vb{k}} \psi_i(\vb{k})\psi_j(\vb{k}) = \sum_j M_{ij} A^i_j f^j.
+    \label{eq:integral}
+\end{equation}
+To make it simpler, we can define the symbol
+\begin{equation}
+    A_{ij} \equiv \sum_k M_{ik} A^k_j
+    \label{eq:lowering_matrix}
+\end{equation}
+so that
+\begin{equation}
+    (Af)_i = \sum_j A_{ij} f^j.
+    \label{eq:integral_matrix}
+\end{equation}
+
+From equations \eqref{eq:lowering_vector} and \eqref{eq:lowering_matrix}, we can see that the
+overlap matrix $M$ performs the action of \emph{lowering} the indices. If we invert this matrix
+in each of these linear systems, we have
+\begin{align}
+    f^i &= \sum_j (M^{-1})^{ij} f_j, \\
+    A^i_j &= \sum_k (M^{-1})^{ik} A_{kj}.
+\end{align}
+Again, the index placement is done by the index contraction rule. So we can see that the inverse of
+the overlap matrix $M^{-1}$ performs the action of \emph{raising} the indices. In tensor algebra,
+the equivalent of this is the metric tensor.
+
+Finding the components of the vectors $f^i$ is easy; they are just the value of the functions at
+each discrete point in our approximation space. But how do we find the elements of the matrix $A$?
+The action of the operator $A$ on a function $f(\vb{k})$ is
+\begin{equation}
+    (Af)(\vb{k}) = \int\dd{\vb{k'}} A(\vb{k}, \vb{k'}) f(\vb{k'}).
+\end{equation}
+Inserting this into equation \eqref{eq:integral}, and utilizing equation \eqref{eq:integral_matrix},
+we get
+\begin{equation}
+    \sum_j A_{ij} f^j = \int\dd{\vb{k}} \psi_i(\vb{k}) \int\dd{\vb{k'}} A(\vb{k}, \vb{k'}) f(\vb{k'}).
+\end{equation}
+expanding the function $f(\vb{k'})$ in terms of the basis functions from equation \eqref{eq:vector},
+\begin{equation}
+    \sum_j A_{ij} f^j = \int\dd{\vb{k}} \psi_i(\vb{k}) \int\dd{\vb{k'}} A(\vb{k}, \vb{k'})
+    \sum_j f^j \psi_j(\vb{k'}).
+\end{equation}
+This is true for any function vector $f^j$, so we can drop it from both sides. This finally gives
+\begin{equation}
+    A_{ij} = \int\dd{\vb{k}} \int\dd{\vb{k'}} \psi_i(\vb{k}) A(\vb{k}, \vb{k'}) \psi_j(\vb{k'}).
+    \label{eq:matrix_elements}
+\end{equation}
+
+Now that we know how to expand everything in this discrete basis, let us go back to our original
+integral equation \eqref{eq:integral_equation}. We would like to solve
+\begin{equation}
+    \int \dd{\vb{k'}} A(\vb{k}, \vb{k'}) g(\vb{k'}) = (Ag)(\vb{k}) = h(\vb{k}).
+\end{equation}
+To express this equation in terms of the symbols we know, we can multiply both sides by
+$\psi_i(\vb{k})$ and integrate over $\vb{k}$. This gives
+\begin{equation}
+    \int \dd{\vb{k}} \psi_i(\vb{k}) (Af)(\vb{k}) = \int \dd{\vb{k}} \psi_i(\vb{k}) h(\vb{k}).
+\end{equation}
+Using equations \eqref{eq:integral_vector} and \eqref{eq:integral_matrix}, this becomes
+\begin{equation}
+    (Ag)_i = h_i.
+\end{equation}
+Expanding the left-hand side,
+\begin{equation}
+    \sum_j A_{ij} g^j = h_i
+\end{equation}
+and solving the linear system,
+\begin{equation}
+    g^i = \sum_j (A^{-1})^{ij} h_j.
+    \label{eq:inverse}
+\end{equation}
+Again, the index placement is done by the index contraction rule. The important result is that
+we need to invert the $A_{ij}$ form of the matrix to get the inverse we need for our case.
+\begin{equation}
+    (A^{-1})^{ij} = (A_{ij})^{-1}.
+\end{equation}
+
+Finally, to calculate the conductivity tensor from \eqref{eq:conductivity}, we need to multiply
+$\hat{v}_a$ with $A^{-1}\hat{v}_b$ and take an integral over the result. To express this operation
+in our discrete basis, consider two functions $f$ and $g$. Their product is
+\begin{equation}
+    f(\vb{k})g(\vb{k}) = \sum_{ij} f^i g^j \psi_i(\vb{k}) \psi_j(\vb{k}),
+\end{equation}
+and the integral over this product is
+\begin{equation}
+    \int\dd{\vb{k}} f(\vb{k}) g(\vb{k}) = \sum_{ij} f^i g^j \int\dd{\vb{k}}
+    \psi_i(\vb{k})\psi_j(\vb{k}) = \sum_{ij} f^i g^j M_{ij} = \sum_i f^i g_i.
+\end{equation}
+So, the vector for one function needs to have indices on top and the other on the bottom. From
+equation \eqref{eq:inverse}, we can see $A^{-1}\hat{v}_b$ has the form
+$(A^{-1})^{ij} (\hat{v}_b)_j$, which would have an index on top after contraction. Therefore,
+$\hat{v}_a$ would have to have an index on the bottom to perform the multiplication and integration.
+
+Putting everything together, we have
+\begin{equation}
+    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \sum_{ij} \qty(\hat{v}_a)_i
+    \qty(A^{-1})^{ij} \qty(\hat{v}_b)_j,
+\end{equation}
+or, in terms of all the terms we know how to calculate,
+\begin{equation}
+    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \sum_{ij} \qty[
+    \qty(\sum_k M_{ik} (\hat{v}_a)^k) \qty(A_{ij})^{-1} \qty(\sum_k M_{jk} \qty(\hat{v}_b)^k)].
+\end{equation}
+To do the computation in practice, $M_{ij}$ and $A_{ij}$ can be calculated from \eqref{eq:overlap}
+and \eqref{eq:matrix_elements} respectively, and $(\hat{v}_a)^i$ and $(\hat{v}_b)^i$ vector
+components are the values of $\hat{v}_a$ and $\hat{v}_b$ at the discrete points of our approximation
+space.  Afterwards, all that will be left to do is two matrix multiplications $M\hat{v}$, one linear
+system solution $A^{-1}(M\hat{v}_b)$, and one dot product $(M\hat{v}_a)\vdot(A^{-1}M\hat{v}_b)$.
+
+\subsection{Piecewise Linear Basis for 2D Fermi Surfaces}
+For quasi-2D materials, it is more efficent to calculate the conductivity layer by layer in 2D and
+then sum over the layers. It is also simpler than the full 3D case. So, we will analyze the 2D
+case here.
+
+We choose $n$ points on $\vb{k}_i$ to represent the Fermi surface. Then, the discretization of the
+Fermi surface would be the line segments $I_i$ connecting these points. These line segments are also
+called the \emph{elements}. The length of each line segment is
+\begin{equation}
+    \ell_i = \abs{\vb{k}_{i+1} - \vb{k}_i}.
+\end{equation}
+The simplest continuous basis one can define on these elements is the piecewise linear basis. The
+basis function for each point $\vb{k}_i$ on the Fermi surface is linear on the connected elements
+and peaks at the point $\vb{k}_i$, equal to 1. It is zero everywhere else. So with the
+parametrization of each line segment $I_i$ as
+\begin{equation}
+    x: I_i \mapsto [0, 1],
+\end{equation}
+then the basis functions can be defined as
+\begin{empheq}[left={\psi_i(\vb{k})=\empheqlbrace}]{align}
+    &x, &k \in I_{i-1}; \\
+    &1-x, &k \in I_i; \\
+    &0, &k \in I_j,\ j\notin \{i-1,i\}.
+\end{empheq}
+
+We can now calculate the matrices $M_{ij}$ and $A_{ij}$ in this basis. It is easy to see that, because
+each element in these matrices contains the multiplication of two basis functions, they are only
+nonzero when $i$ and $j$ are associated with the same point or neighboring points.
+
+For the overlap matrix,
+\begin{equation}
+\begin{aligned}
+    M_{ii} &= \int_{I_{i-1}} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 + \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 \\
+    &= \int_0^1 \dd{x} x^2 \ell_{i-1} + \int_0^1 \dd{x} (1-x)^2 \ell_i = \frac{\ell_{i-1} + \ell_i}{3},
+\end{aligned}
+\end{equation}
+\begin{equation}
+    M_{i,i+1} = M_{i+1,i} = \int_{I_i} \dd{\vb{k}} \psi_i(\vb{k})\psi_{i+1}(\vb{k})
+    = \int_0^1 \dd{x} x(1-x) \ell_i = \frac{\ell_i}{6}.
+\end{equation}
+Therefore, the full overlap matrix is
+\begin{equation}
+    M_{ij} = \frac{\ell_{i-1} + \ell_i}{3}\delta_{ij} + \frac{\ell_i}{6}\qty(\delta_{i+1,j} + \delta_{i,j+1}).
+\end{equation}
+
+For the matrix $A_{ij}$, using \eqref{eq:operator} and \eqref{eq:matrix_elements},
+\begin{align}
+A_{ij} &= \begin{aligned}[t]
+    &\int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau(\vb{k})})
+        \frac{\psi_i(\vb{k})\psi_j(\vb{k})}{v(\vb{k})} \\
+    &-\int\dd{\vb{k}} \psi_i(\vb{k})\frac{e\qty(\vu{v}(\vb{k})\cross\vb{B})}{\hbar}
+        \vdot\grad_{\vb{k}}\psi_j(\vb{k}) \\
+    &- \int\dd{\vb{k}} \int\dd{\vb{k'}}
+    \psi_i(\vb{k}) \frac{C(\vb{k},\vb{k'})}{v(\vb{k})} \psi_j(\vb{k'})
+\end{aligned} \\
+&\equiv \Gamma_{ij} - \frac{eB}{\hbar} \qty(D_{\vu{v}\cross\vu{B}})_{ij} - S_{ij}.
+\end{align}
+Now we will calculate each of these terms separately.
+
+For the out-scattering term $\Gamma_{ij}$, we first need to expand the $k$-dependant terms.
+This gives
+\begin{equation}
+    \Gamma_{ij} = \sum_k \int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau_k})
+    \frac{\psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k})}{v_k}
+\end{equation}
+let us define the tensor $\Pi_{ijk}$ and the vector $\gamma^k$, such that
+\begin{empheq}[left={\Gamma_{ij}=\sum_k\Pi_{ijk}\gamma^k\implies\empheqlbrace}]{align}
+    \Pi_{ijk} &= \int\dd{\vb{k}} \psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k}), \\
+    \gamma^k &= -\frac{i\omega}{v_k} + \frac{1}{v_k\tau_k}.
+\end{empheq}
+Only the terms where $i$, $j$ and $k$ are all associated with the same point or neighboring points.
+\begin{equation}
+\begin{aligned}
+    \Pi_{iii} &= \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 + \int_{I_{i-1}}
+        \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 \\
+    &= \int_0^1 \dd{x} x^3 \ell_i + \int_0^1 \dd{x} (1-x)^3 \ell_{i-1} = \frac{\ell_i + \ell_{i-1}}{4},
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+    \Pi_{i+1,i,i} &= \Pi_{i,i+1,i} = \Pi_{i,i,i+1} \\ &= \int_{I_i} \dd{\vb{k}}
+    \qty[\psi_i(\vb{k})]^2\psi_{i+1}(\vb{k}) = \int_0^1 \dd{x} (1-x)^2 x \ell_i = \frac{\ell_i}{12},
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+    \Pi_{i,i+1,i+1} &= \Pi_{i+1,i,i+1} = \Pi_{i+1,i+1,i} \\ &= \int_{I_i} \dd{\vb{k}}
+    \psi_i(\vb{k})\qty[\psi_{i+1}(\vb{k})]^2 = \int_0^1 \dd{x} x(1-x)^2 \ell_i = \frac{\ell_i}{12},
+\end{aligned}
+\end{equation}
+\begin{equation}
+\begin{aligned}
+    \Pi_{ijk} =\ & \frac{\ell_{i-1} + \ell_i}{4}\delta_{ijk}
+    + \frac{\ell_i}{12}\qty(\delta_{i+1,j,k} + \delta_{i,j-1,k}) \\
+    &+ \frac{\ell_j}{12}\qty(\delta_{i,j+1,k} + \delta_{i,j,k-1})
+    + \frac{\ell_k}{12}\qty(\delta_{i,j,k+1} + \delta_{i-1,j,k})
+\end{aligned}
+\end{equation}
+Multiplying this tensor by $\gamma^k$, we get the full $\Gamma_{ij}$ matrix.
+\begin{equation}
+\begin{aligned}
+    \Gamma_{ij} = \qty(\frac{\ell_{i-1} + \ell_i}{4}\gamma^i + \frac{\ell_i}{12}\gamma^{i+1}
+        + \frac{\ell_{i-1}}{12}\gamma^{i-1})\delta_{ij}
+    &+ \frac{\ell_i}{12}\qty(\gamma^i + \gamma^{i+1})\delta_{i+1,j} \\
+    &+ \frac{\ell_j}{12}\qty(\gamma^j + \gamma^{j+1})\delta_{i,j+1}
+\end{aligned}
+\end{equation}
+
+For the derivative term $D_{\vu{v}\cross\vu{B}}$, note that the part
+\begin{equation}
+    (\vu{v}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}
+\end{equation}
+is the directional derivative in the direction $\vu{v}(\vb{k})\cross\vu{B}$. Since the functions are
+only defined on the discretized 2D rings in $k$-space, this is the dot product of the vector
+$\vu{v}(\vb{k})\cross\vu{B}$ with the direction of the vector $\vb{k}_{i+1} - \vb{k}_i$ (which is
+along the line segment $I_i$), which we call $\Delta\vu{k}_i$. The diagonal terms vanish, since the
+integral over $I_i$ and $I_{i-1}$ are completely the same, but with opposite signs; in the
+direction of $\vb{k}_{i-1}$ to $\vb{k}_i$, the function $\psi_i$ increases on $I_{i-1}$, and in the
+direction of $\vb{k}_i$ to $\vb{k}_{i+1}$, it decreases on $I_i$. The neighboring terms are
+\begin{equation}
+\begin{aligned}
+    \qty(D_{\vu{v}\cross\vu{B}})_{i,i+1} &= -\qty(D_{\vu{v}\cross\vu{B}})_{i+1,i}
+        = \int_{I_i} \dd{\vb{k}} \psi_i(\vb{k})
+        \frac{\qty(\vu{v}_i\cross\vu{B})\vdot\Delta\vu{k}_i}{\ell_i} \\
+    &= \int_0^1 \dd{x} (1-x) \qty[\qty(\vu{v}_i\cross\vu{B})\vdot\Delta\vu{k}_i]
+    = \frac{\qty(\vu{v}_i\cross\vu{B})\vdot\Delta\vu{k}_i}{2},
+\end{aligned}
+\end{equation}
+So, the full matrix is
+\begin{equation}
+    \qty(D_{\vu{v}\cross\vu{B}})_{ij} = \qty(\vu{v}_i\cross\vu{B})\vdot\Delta\vu{k}_i
+    \qty(\frac{\delta_{i,j+1} - \delta_{i+1,j}}{2}).
+\end{equation}
+
+Finally, for the in-scattering term $S_{ij}$, we must expand the $k$-dependant terms again.
+\textcolor{red}{TODO: Chaitanya did not calculate this. I'll do it later.}
+
+\section{Implementation Details}
+Luckily, the matrices in FEM are sparse, since there is only overlap between neighboring elements.
+Even better, they are \emph{banded}, meaning that the non-zero elements are only on the main
+diagonal and the minor diagonals surrounding it. This greatly speeds up the calculations and
+simplifies the storage of the matrices. We store these matrices in a format called \emph{diagonal
+ordered form}. For example, the $n+1$ by $n+1$ matrix
+\begin{equation}
+    \mqty(b_0 & a_0 & 0 & 0 & 0 & \dots & c_0 \\
+          c_1 & b_1 & a_1 & 0 & 0 & \dots & 0 \\
+          0 & c_2 & b_2 & a_2 & 0 & \dots & 0 \\
+          0 & 0 & c_3 & b_3 & a_3 & \dots & 0 \\
+          \vdots & \vdots & \vdots & \ddots & \ddots & \ddots & \vdots \\
+          0 & 0 & 0 & \dots & c_{n-1} & b_{n-1} & a_{n-1} \\
+          a_n & 0 & 0 & \dots & 0 & c_n & b_n \\)
+\end{equation}
+can be stored as
+\begin{equation}
+    \mqty(a_n & a_0 & \dots & a_{n-1} \\ b_0 & b_1 & \dots & b_n \\ c_0 & c_1 & \dots & c_n)
+\end{equation}
+(the first row is not a typo, it is just convention). This is a banded matrix plus two elemnts in
+the corners. Usually, the corner terms are not utilized, but they are important in our case.
+
+There is an annoying little detail with our matrices: since we are dealing with closed surfaces,
+we have periodic boundary conditions and the corner elements of the matrices are also nonzero. This
+means our matrices are not purely banded. While this does not pose a problem for storing them (we
+just use the corner terms usually unused by others), but it means the inversion algorithms made for
+banded matrices will not work out of the box. To fix this, we can utilize the Sherman--Morrison
+formula. It states that, given the banded matrix $B$ and a rank-1 update $uv^T$, the inverse of the
+full matrix is
+\begin{equation}
+    A^{-1} = (B + uv^T)^{-1} = B^{-1} - \frac{B^{-1}uv^TB^{-1}}{1 + v^TB^{-1}u}.
+\end{equation}
+In our case, we can choose the matrices such that
+\begin{equation}
+    B = \mqty(b_0 - \gamma & a_0 & 0 & \dots & 0 \\
+          c_1 & b_1 & a_1 & \dots & 0 \\
+          \vdots & \ddots & \ddots & \ddots & \vdots \\
+          0 & \dots & c_{n-1} & b_{n-1} & a_{n-1} \\
+          0 & \dots & 0 & c_n & b_n - \flatfrac{c_0a_n}{\gamma}),\ 
+    u = \mqty(1 \\ 0 \\ \vdots \\ 0 \\ a_n/\gamma),\ 
+    v = \mqty(\gamma \\ 0 \\ \vdots \\ 0 \\ c_0).
+\end{equation}
+
+\section{Results}
+\subsection{Free Electrons}
+
+Figure \ref{fig:test} compares the results from my FEM implementation to the Drude model for free
+electrons. Figure \ref{fig:error} shows the maximum error in every magnetic field as a function of
+the number of elements. The error reduces quadratically with the number of elements
+($\mathrm{Error}\sim n^{-2}$). Table \ref{tab:performance} compares the runtime of my implementation
+with and without the bandedness optimization to the code by Chaitanya. Figure \ref{fig:performance}
+shows the performance of the banded implementation as a function of the number of elements.
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/free_electron_test}
+    \caption{Boltzmann FEM model with 100 elements vs the Drude model for free electrons.}
+    \label{fig:test}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/free_electron_error}
+    \caption{Maximum error in the conductivity tensor in different fields as a function of the
+        number of elements.}
+    \label{fig:error}
+\end{figure}
+
+\begin{table}
+    \centering
+    \begin{tabular}{|c|c|c|}
+        \hline
+        \# Elements & Non-banded & Banded \\
+        \hline
+        10 & $\SI{123}{\milli\second}$ & $\SI{40.7}{\milli\second}$ \\
+        100 & $\SI{154}{\milli\second}$ & $\SI{44.8}{\milli\second}$ \\
+        200 & $\SI{184}{\milli\second}$ & $\SI{51.2}{\milli\second}$ \\
+        500 & $\SI{273}{\milli\second}$ & $\SI{65.4}{\milli\second}$ \\
+        1000 & $\SI{663}{\milli\second}$ & $\SI{87.1}{\milli\second}$ \\
+        \hline
+    \end{tabular}
+    \caption{Runtime of the different implementations for the free electron model.
+        The calculation is done for 1000 different magnetic fields.}
+    \label{tab:performance}
+\end{table}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/free_electron_performance}
+    \caption{Runtime of the banded implementation for 10 different magnetic fields as a function
+        of the number of elements.}
+    \label{fig:performance}
+\end{figure}
+
+\subsection{Cuprates}
+\textcolor{red}{TODO: After I complete the code for the quasi-2D case, we can compare it to the
+    relaxation time approximation package.}
+\end{document}
