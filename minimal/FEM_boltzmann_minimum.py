@@ -1,4 +1,4 @@
-import os
+import os, timeit
 import numpy as np
 import scipy as sp
 from scipy.constants import e, hbar, m_e
@@ -173,8 +173,8 @@ def solve_cyclic_tridiagonal_system(A, b):
     u[-1] = A[0, 0] / free_factor
     # For v, only the dot product is calculated, so only the first
     # and the last elements (the only nonzero elements) are kept
-    v1 = free_factor
-    vN = A[2, -1]
+    v_1 = free_factor
+    v_n = A[2, -1]
 
     # Tridiagonal matrix inversions
     # B^{-1}b
@@ -183,8 +183,8 @@ def solve_cyclic_tridiagonal_system(A, b):
     rank_1_solution = sp.linalg.solve_banded((1, 1), A, u)
 
     # Dot products
-    v_dot_banded_solution = v1*banded_solution[0] + vN*banded_solution[-1]
-    v_dot_rank_1_solution = v1*rank_1_solution[0] + vN*rank_1_solution[-1]
+    v_dot_banded_solution = v_1*banded_solution[0] + v_n*banded_solution[-1]
+    v_dot_rank_1_solution = v_1*rank_1_solution[0] + v_n*rank_1_solution[-1]
 
     # A^{-1}b = B^{-1}b - (B^{-1}u) (v^T B^{-1}b) / (1 + v^T B^{-1}u)
     full_solution = (banded_solution - rank_1_solution
@@ -260,9 +260,9 @@ def free_electron_test():
     """
     Test Boltzmann transport for the free electron system vs the Drude model.
     """
-    magnetic_fields = np.linspace(0, 30, 10000)
+    magnetic_fields = np.linspace(0, 30, 1000)
     kf = 1e10
-    theta = np.linspace(0, 2*np.pi, 500, endpoint=False)
+    theta = np.linspace(0, 2*np.pi, 100, endpoint=False)
     kx = kf * np.cos(theta)
     ky = kf * np.sin(theta)
     scattering_rate_constant = 1e12
@@ -281,21 +281,77 @@ def free_electron_test():
              color='red', label=fr"$\sigma_{{xx}}$ Boltzmann")
     plt.plot(magnetic_fields, sigma_xy_boltzmann, linestyle=(0, (3, 3)),
              color='lime', label=fr"$\sigma_{{xy}}$ Boltzmann")
-    make_plot()
+    make_plot("Free Electron Test", "Magnetic Field (T)",
+              "Conductivity (S/m)", "free_electron_test.pdf")
 
 
-def make_plot():
-    plt.title("Free Electron Test")
-    plt.xlabel("Magnetic Field (T)")
-    plt.ylabel("Conductivity (S/m)")
+def compare_error():
+    magnetic_fields = np.linspace(0, 30, 1000)
+    kf = 1e10
+    scattering_rate_constant = 1e12
+    
+    sigma_xx_drude, sigma_xy_drude = calculate_drude(
+        kf, scattering_rate_constant, magnetic_fields)
+    ns = np.linspace(10, 200, 50, dtype=int)
+    errors = np.zeros_like(ns, dtype=float)
+    for (i, n) in enumerate(ns):
+        theta = np.linspace(0, 2*np.pi, n, endpoint=False)
+        kx = kf * np.cos(theta)
+        ky = kf * np.sin(theta)
+        scattering_rate = np.full_like(kx, scattering_rate_constant)
+        sigma_xx_boltzmann, sigma_xy_boltzmann = calculate_boltzmann(
+            kx, ky, scattering_rate, magnetic_fields)
+        errors[i] = max(np.max(np.abs(sigma_xx_boltzmann - sigma_xx_drude)),
+                        np.max(np.abs(sigma_xy_boltzmann - sigma_xy_drude)))
+    
+    plt.loglog(ns, errors, color='mediumblue')
+    # plt.xticks([10] + list(np.linspace(0, ns[-1], 5, dtype=int)[1:]))
+    make_plot("Boltzmann FEM Model Error", "Number of Elements",
+              "Maximum Error", "free_electron_error.pdf", legend=False)
+
+
+def compare_performance():
+    magnetic_fields = np.linspace(0, 1, 10)
+    kf = 1e10
+    scattering_rate_constant = 1e12
+
+    ns = np.linspace(10, 1000, 50, dtype=int)
+    times = np.zeros_like(ns, dtype=float)
+    for (i, n) in enumerate(ns):
+        theta = np.linspace(0, 2*np.pi, n, endpoint=False)
+        kx = kf * np.cos(theta)
+        ky = kf * np.sin(theta)
+        scattering_rate = np.full_like(kx, scattering_rate_constant)
+        timer = timeit.Timer(lambda: calculate_boltzmann(
+            kx, ky, scattering_rate, magnetic_fields))
+        nloops = 100
+        # single loop for compilations and other warmup
+        calculate_boltzmann(kx, ky, scattering_rate, magnetic_fields)
+        time_list = timer.repeat(5, nloops)
+        times[i] = min(time_list) / nloops * 1e3 # ms
+
+    plt.plot(ns, times, color='mediumblue')
+    plt.xticks([10] + list(np.linspace(0, ns[-1], 5, dtype=int)[1:]))
+    make_plot("Boltzmann FEM Model Performance", "Number of Elements",
+              "Execution Time (ms)", "free_electron_performance.pdf",
+              legend=False)
+
+
+def make_plot(title, xlabel, ylabel, save_path, legend=True):
+    plt.title(title)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
     plt.tick_params(axis='x', which='major', pad=8)
     plt.tick_params(axis='y', which='major', pad=10)
-    plt.legend()
+    if legend:
+        plt.legend()
     plt.tight_layout()
     plt.savefig(os.path.dirname(os.path.relpath(__file__))
-                + "/free_electron_test.pdf", bbox_inches='tight')
+                + '/' + save_path, bbox_inches='tight')
     plt.show()
 
 
 if __name__ == "__main__":
-    free_electron_test()
+    # free_electron_test()
+    # compare_error()
+    compare_performance()
