@@ -63,11 +63,11 @@ where $C(\vb{k}, \vb{k'})$ is a scattering kernel. I call the two terms the \emp
     \frac{1}{\tau(\vb{k})} = \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}).
 \end{equation}
 
-\sloppy{In-scattering is dropped in the \emph{relaxation time
-approximation}, which is the case for the Chambers formula. Our goal here is to keep this term, as
-it especially becomes important when the Fermi surface has strong anisotropy, which is the case for
-cuprates. When the Fermi surface is roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend
-on $\vb{k}$ and, because of charge conservation,
+\sloppy{In-scattering is dropped in the \emph{relaxation time approximation}, which is the case for
+the Chambers formula. Our goal here is to keep this term, as it especially becomes important when
+the Fermi surface has strong anisotropy, which is the case for cuprates. When the Fermi surface is
+roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend on $\vb{k}$ and, because of charge
+conservation,
 \begin{equation}
     \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t) \approx C\int\dd{\vb{k'}} g(\vb{k'}; t) = 0.
 \end{equation}
@@ -301,7 +301,7 @@ space.  Afterwards, all that will be left to do is two matrix multiplications $M
 system solution $A^{-1}(M\hat{v}_b)$, and one dot product $(M\hat{v}_a)\vdot(A^{-1}M\hat{v}_b)$.
 
 \subsection{Piecewise Linear Basis for 2D Fermi Surfaces}
-For quasi-2D materials, it is more efficent to calculate the conductivity layer by layer in 2D and
+For quasi-2D materials, it is more efficient to calculate the conductivity layer by layer in 2D and
 then sum over the layers. It is also simpler than the full 3D case. So, we will analyze the 2D
 case here.
 
@@ -359,7 +359,7 @@ A_{ij} &= \begin{aligned}[t]
 \end{align}
 Now we will calculate each of these terms separately.
 
-For the out-scattering term $\Gamma_{ij}$, we first need to expand the $k$-dependant terms.
+For the out-scattering term $\Gamma_{ij}$, we first need to expand the $k$-dependent terms.
 This gives
 \begin{equation}
     \Gamma_{ij} = \sum_k \int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau_k})
@@ -434,7 +434,7 @@ So, the full matrix is
     \qty(\frac{\delta_{i,j+1} - \delta_{i+1,j}}{2}).
 \end{equation}
 
-Finally, for the in-scattering term $S_{ij}$, we must expand the $k$-dependant terms again.
+Finally, for the in-scattering term $S_{ij}$, we must expand the $k$-dependent terms again.
 \textcolor{red}{TODO: Chaitanya did not calculate this. I'll do it later.}
 
 \section{Implementation Details}
