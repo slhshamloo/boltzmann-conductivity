@@ -19,7 +19,7 @@
 From the Boltzmann transport equation, we have
 \begin{gather}
     \dv{f}{t} = \qty(\pdv{f}{t})_{\text{coll}}, \\
-    \pdv{f}{t} + \frac{\vb{p}}{m}\vdot\grad f + \vb{F}\vdot\grad_{\vb{p}}f = I[f],
+    \pdv{f}{t} + \frac{\vb{p}}{m}\vdot\grad_{\vb{r}} f + \vb{F}\vdot\grad_{\vb{p}}f = I[f],
 \end{gather}
 where $f$ is any density function, $\vb{p}$ is the momentum of the particles, $\vb{F}$ is the
 external force, and $I[f]$ is the \emph{collision integral}. In the context of conductivity of
@@ -29,29 +29,35 @@ electrons,
 \end{equation}
 and replacing the momentum $\vb{p}$ with the wavevector $\vb{k}$, we have
 \begin{equation}
-    \pdv{f}{t} + \frac{\hbar\vb{k}}{m}\vdot\grad f
+    \pdv{f}{t} + \frac{\hbar\vb{k}}{m}\vdot\grad_{\vb{r}} f
     - \frac{e}{\hbar}\qty(\vb{E} + \vb{v}\cross\vb{B})\vdot\grad_{\vb{k}}f = I[f].
+    \label{eq:boltzmann_general}
 \end{equation}
 If we consider a fluctuation to the equilibrium distribution $f_0(\vb{k})$ (the Fermi-Dirac
 distribution here), then,
 \begin{equation}
     f(\vb{r}, \vb{k}; t) = f_0(\vb{k}) + g(\vb{r}, \vb{k}; t)
 \end{equation}
-(we assume the material is uniform), and using
+(assuming the material is uniform, the equilibrium distribution does not have any $\vb{r}$
+dependence). We could also rewrite the wavevector gradient by applying the chain rule and using
+the relation between the group velocity and the energy. That is,
+\begin{gather}
+    \vb{v} = \frac{\grad_{\vb{k}}\varepsilon}{\hbar} \implies \\
+    \grad_{\vb{k}}f_0 = \grad_{\vb{k}}\varepsilon \pdv{f_0}{\varepsilon}
+    = \hbar\vb{v} \pdv{f_0}{\varepsilon},
+\end{gather}
+where $\vb{v}$ is the group velocity $\varepsilon$ is the energy. Using all this, equation
+\eqref{eq:boltzmann_general} becomes
 \begin{equation}
-    \vb{v} = \frac{\grad_{\vb{k}}\varepsilon}{\hbar}
-\end{equation}
-where $\vb{v}$ is the group velocity $\varepsilon$ is the energy, we get
-\begin{equation}
-    \pdv{g}{t} + \frac{\hbar\vb{k}}{m}\vdot\grad g
+    \pdv{g}{t} + \frac{\hbar\vb{k}}{m}\vdot\grad_{\vb{r}} g
     - \frac{e(\vb{E} + \vb{v}\cross\vb{B})}{\hbar}\vdot\grad_{\vb{k}}g - I[f_0 + g]
     = e\vb{E}\vdot\vb{v}\pdv{f_0}{\varepsilon} \label{eq:boltzmann}
 \end{equation}
 (note that $\vb{v}\cross\vb{B}$ is perpendicular to $\vb{v}$). Now, we only consider the case of
-uniform fields, so we can drop the spatial gradient term. Also, for the conductivity tensor, we
-are only interested in the linear response to the electric field, so we can drop the electric field
-term on the right hand side. Finally, linearizing the collision integral in terms of the fluctuation
-$g$, we have
+uniform fields (i.e. no $\vb{r}$ dependence), so we can drop the spatial gradient term. Also, for
+the conductivity tensor, we are only interested in the linear response to the electric field, so we
+can drop the electric field term on the left-hand side. Finally, linearizing the collision integral
+in terms of the fluctuation $g$, we have
 \begin{equation}
     I[f_0 + g] = \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t)
     - \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) g(\vb{k}; t) + \mathcal{O}(g^2),
