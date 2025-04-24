@@ -460,7 +460,9 @@ ordered form}. For example, the $n+1$ by $n+1$ matrix
 \end{equation}
 can be stored as
 \begin{equation}
-    \mqty(a_n & a_0 & \dots & a_{n-1} \\ b_0 & b_1 & \dots & b_n \\ c_1 & c_2 & \dots & c_n & c_0).
+    \mqty(a_n & a_0 & \dots & a_{n-2} & a_{n-1} \\
+        b_0 & b_1 & \dots & b_{n-1} & b_n \\
+        c_1 & c_2 & \dots & c_n & c_0).
 \end{equation}
 The first and last rows are not typos; this is usually used for purely banded matrices, without the
 extra corner terms, and the convention is made to make sense for that ($a_n$ and $c_0$ are just
