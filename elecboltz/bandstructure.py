@@ -146,8 +146,8 @@ class BandStructure:
         """
         Discretize the Fermi surface based on the specified number
         of points aThe "resolution" of the grid (side-length) used for
-            approximating each 2D layer of the Fermi surface using the
-            marching squares algorithm.nd layers.
+        approximating each 2D layer of the Fermi surface using the
+        marching squares algorithm.nd layers.
 
         Parameters
         ----------
