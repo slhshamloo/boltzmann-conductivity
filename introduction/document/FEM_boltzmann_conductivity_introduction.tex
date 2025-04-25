@@ -41,11 +41,11 @@ distribution here), then,
 (assuming the material is uniform, the equilibrium distribution does not have any $\vb{r}$
 dependence). We could also rewrite the wavevector gradient by applying the chain rule and using
 the relation between the group velocity and the energy. That is,
-\begin{gather}
-    \vb{v} = \frac{\grad_{\vb{k}}\varepsilon}{\hbar} \implies \\
-    \grad_{\vb{k}}f_0 = \grad_{\vb{k}}\varepsilon \pdv{f_0}{\varepsilon}
-    = \hbar\vb{v} \pdv{f_0}{\varepsilon},
-\end{gather}
+\begin{empheq}[right={\empheqrbrace\implies\grad_{\vb{k}}
+    f_0=\hbar\vb{v}\displaystyle\pdv{f_0}{\varepsilon}}]{align}
+    \vb{v} &= \frac{\grad_{\vb{k}}\varepsilon}{\hbar} \\
+    \grad_{\vb{k}}f_0 &= \qty(\grad_{\vb{k}}\varepsilon)\qty(\pdv{f_0}{\varepsilon}),
+\end{empheq}
 where $\vb{v}$ is the group velocity $\varepsilon$ is the energy. Using all this, equation
 \eqref{eq:boltzmann_general} becomes
 \begin{equation}
@@ -55,9 +55,11 @@ where $\vb{v}$ is the group velocity $\varepsilon$ is the energy. Using all this
 \end{equation}
 (note that $\vb{v}\cross\vb{B}$ is perpendicular to $\vb{v}$). Now, we only consider the case of
 uniform fields (i.e. no $\vb{r}$ dependence), so we can drop the spatial gradient term. Also, for
-the conductivity tensor, we are only interested in the linear response to the electric field, so we
-can drop the electric field term on the left-hand side. Finally, linearizing the collision integral
-in terms of the fluctuation $g$, we have
+the conductivity tensor, we are only interested in the linear response to the electric field
+$\vb{E}$, so we can drop the electric field term on the left-hand side ($g$ itself is in first order
+with respect to the electric field, so multiplying by the electric field itself gives a term of
+second order in the electric field). Finally, linearizing the collision integral in terms of the
+fluctuation $g$, we have
 \begin{equation}
     I[f_0 + g] = \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t)
     - \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) g(\vb{k}; t) + \mathcal{O}(g^2),
@@ -71,15 +73,13 @@ where $C(\vb{k}, \vb{k'})$ is a scattering kernel. I call the two terms the \emp
 
 \sloppy{In-scattering is dropped in the \emph{relaxation time approximation}, which is the case for
 the Chambers formula. Our goal here is to keep this term, as it especially becomes important when
-the Fermi surface has strong anisotropy, which is the case for cuprates. When the Fermi surface is
-roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend on $\vb{k}$ and, because of charge
-conservation,
-\begin{equation}
-    \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t) \approx C\int\dd{\vb{k'}} g(\vb{k'}; t) = 0.
-\end{equation}
+there is strong anisotropy in the scattering, which is the case for cuprates. When the scattering
+is roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend on $\vb{k}$ and, because of
+charge conservation,
+$\int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t) \approx C\int\dd{\vb{k'}} g(\vb{k'}; t) = 0.$
 Due to time-reversal symmetry, $C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$, so if we consider any
 anisotropy in the out-scattering, we must do the same for the in-scattering. This means the
-Chambers formula is just wrong for anisotropic Fermi surfaces. So, why does it work effectively
+Chambers formula is just wrong for anisotropic scattering. So, why does it work effectively
 anyway? The scattering in cuprates might only be low-angle, so the in-scattering is small compared
 to the out-scattering.}
 
@@ -107,9 +107,10 @@ where
         - \frac{C(\vb{k},\vb{k'})}{v(\vb{k})}, \label{eq:operator} \\
     h(\vb{k}) = e\vb{E}\vdot\vb{v}(\vb{k})\pdv{f_0}{\varepsilon}.
 \end{gather}
-Adding the velocity magnitude $v(\vb{k})$ seems like an arbitrary choice here, but it is done with
-good reason. Later, it will make the formula for the conductivity tensor more symmetric and makes
-the calculation of $A$ a bit more streamlined. The solution can be expressed as
+Where $v=\norm{\vb{v}}$ and $\vu{v}=\vb{v}/v$. Separating the velocity magnitude $v(\vb{k})$
+seems like an arbitrary choice here, but it is done with good reason. Later, it will make the
+formula for the conductivity tensor more symmetric and makes the calculation of $A$ a bit more
+streamlined. The solution can be expressed as
 \begin{equation}
     g(\vb{k}) = \frac{1}{v(\vb{k})} \int\dd{\vb{k'}} A^{-1}(\vb{k}, \vb{k'}) h(\vb{k'}).
 \end{equation}
@@ -119,32 +120,34 @@ the goal of the finite element method (FEM).
 \subsection{The Conductivity Tensor}
 The current density is given by
 \begin{equation}
-    \vb{J} = -\frac{2e}{(2\pi)^d} \int\dd{\vb{k}} \vb{v}(\vb{k}) f(\vb{k}).
+    \vb{J} = -\frac{2e}{(2\pi)^d} \int_{\text{BZ}} \dd{\vb{k}} \vb{v}(\vb{k}) f(\vb{k}),
 \end{equation}
-The factor of 2 in the numerator is due to the two possible spin configurations per wavevector $k$
-and the factor $(2\pi)^d$ in the denominator comes from the weighted sum over the wavevectors.
-and the conductivity tensor is given by
+where BZ is the brillouin zone. The factor of 2 in the numerator is due to the two possible spin
+configurations per wavevector $k$ and the factor $(2\pi)^d$ in the denominator comes from the
+weighted sum over the wavevectors. The conductivity tensor is given by
 \begin{equation}
     \sigma_{ab} = \pdv{J_a}{E_b}.
 \end{equation}
 Since there are no currents in equilibrium, we have
 \begin{equation}
-    \sigma_{ab} = -\frac{2e}{(2\pi)^d} \int\dd{\vb{k}} v_a(\vb{k}) \pdv{g(\vb{k})}{E_b}.
+    \sigma_{ab} = -\frac{2e}{(2\pi)^d} \int_{\text{BZ}}\dd{\vb{k}} v_a(\vb{k}) \pdv{g(\vb{k})}{E_b}.
 \end{equation}
 plugging in the expression for $g(\vb{k})$,
 \begin{equation}
-    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d} \int\dd{\vb{k}} \frac{v_a(\vb{k})}{v(\vb{k})} \int\dd{\vb{k'}}
-    A^{-1}(\vb{k}, \vb{k'}) v_b(\vb{k'})\qty(\pdv{f_0}{\varepsilon}).
+    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d} \int_{\text{BZ}}\dd{\vb{k}} \frac{v_a(\vb{k})}{v(\vb{k})}
+    \int\dd{\vb{k'}} A^{-1}(\vb{k}, \vb{k'}) v_b(\vb{k'})\qty(\pdv{f_0}{\varepsilon}).
 \end{equation}
 As $T\to0$, the Fermi-Dirac distribution becomes a step function, so the term
 $\pdv*{f_0}{\varepsilon}$ becomes a Dirac delta at the Fermi energy. If we apply the integral over
 the delta function, an extra factor of $(\grad_{k}\varepsilon)^{-1} = (\hbar v)^{-1}$ (the Jacobian)
 is added. In the end, we have
 \begin{equation}
-    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \int\dd{\vb{k}}\int\dd{\vb{k'}}
-    \hat{v}_a(\vb{k}) A^{-1}(\vb{k}, \vb{k'}) \hat{v}_b(\vb{k'}).
+    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \int_{\text{FS}}\dd{\vb{k}}\int\dd{\vb{k'}}
+    \hat{v}_a(\vb{k}) A^{-1}(\vb{k}, \vb{k'}) \hat{v}_b(\vb{k'}),
     \label{eq:conductivity}
 \end{equation}
+where FS is the Fermi surface, and $\hat{v}_a=v_a/v$ is the component of the velocity in the
+$a$ direction, divided by the full magnitude of the velocity.
 
 \section{Finite Element Method}
 \subsection{Discretization}
@@ -153,15 +156,15 @@ approximate everything as a linear combination of these basis functions. So, the
 everything in equation \eqref{eq:conductivity} in terms of linear combinations of these basis
 functions and transform the differential equation problem into a linear algebra problem. To do this,
 we use the machinery of tensor calculus, but it is not necessary to have a deep understanding of it.
-We only use it to simplify the notation.
+It is only used to simplify the notation.
 
 Before we begin, remember the simple rule that when summing over an index, it should be on the top
-for one symbol and on the bottom for another. If an index is not summed over, then it will obviously
-stay where it is in the final symbol. We call this the \emph{index contraction} rule. The placement
-of indices on the top or the bottom has a deeper connection with tensor calculus and covariance and
-contravariance, but it is not needed to understand the procedures here. You can just think of it as
-a syntactic game. We will also not use the Einstein summation convention, just to make things
-completely explicit and hopefully clearer.
+for one quantity and on the bottom for another. If an index is not summed over, then it will
+obviously stay where it is in the final quantity. We call this the \emph{index contraction} rule.
+The placement of indices on the top or the bottom has a deeper connection with tensor calculus and
+covariance and contravariance, but it is not needed to understand the procedures here. You can just
+think of it as a syntactic game. I will also not use the Einstein summation convention, just to
+make things completely explicit and hopefully clearer.
 
 Defining the basis as the set $\{\psi_i(\vb{k})\}$, we can approximate any function by a linear
 combination of these basis functions;
@@ -317,9 +320,11 @@ called the \emph{elements}. The length of each line segment is
 \begin{equation}
     \ell_i = \abs{\vb{k}_{i+1} - \vb{k}_i}.
 \end{equation}
-The simplest continuous basis one can define on these elements is the piecewise linear basis. The
-basis function for each point $\vb{k}_i$ on the Fermi surface is linear on the connected elements
-and peaks at the point $\vb{k}_i$, equal to 1. It is zero everywhere else. So with the
+Note that since our domain is a closed curve (the Fermi surface is closed), there are periodic
+boundary conditions, which means the point $i=n+1$ is the same as $i=1$ and $i=0$ is the same as
+$i=n$. The simplest continuous basis one can define on these elements is the piecewise linear basis.
+The basis function for each point $\vb{k}_i$ on the Fermi surface is linear on the connected
+elements and peaks at the point $\vb{k}_i$, equal to 1. It is zero everywhere else. So, with the
 parametrization of each line segment $I_i$ as
 \begin{equation}
     x: I_i \mapsto [0, 1],
@@ -338,7 +343,7 @@ nonzero when $i$ and $j$ are associated with the same point or neighboring point
 For the overlap matrix,
 \begin{equation}
 \begin{aligned}
-    M_{ii} &= \int_{I_{i-1}} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 + \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 \\
+    M_{ii} &= \int\dd{k}\psi_i(\vb{k})\psi_i(\vb{k}) = \int_{I_{i-1}} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 + \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 \\
     &= \int_0^1 \dd{x} x^2 \ell_{i-1} + \int_0^1 \dd{x} (1-x)^2 \ell_i = \frac{\ell_{i-1} + \ell_i}{3},
 \end{aligned}
 \end{equation}
@@ -445,10 +450,11 @@ Finally, for the in-scattering term $S_{ij}$, we must expand the $k$-dependent t
 
 \section{Implementation Details}
 Luckily, the matrices in FEM are sparse, since there is only overlap between neighboring elements.
-Even better, they are \emph{banded}, meaning that the non-zero elements are only on the main
-diagonal and the minor diagonals surrounding it. This greatly speeds up the calculations and
-simplifies the storage of the matrices. We store these matrices in a format called \emph{diagonal
-ordered form}. For example, the $n+1$ by $n+1$ matrix
+Even better, they are nearly \emph{banded}, meaning that the non-zero elements are only on the main
+diagonal and the minor diagonals surrounding it. I say nearly, because there are also extra corner
+terms which we can handle separately. This greatly speeds up the calculations and simplifies the
+storage of the matrices. We store these matrices in a format called \emph{diagonal ordered form}.
+For example, the $n+1$ by $n+1$ matrix
 \begin{equation}
     \mqty(b_0 & a_0 & 0 & 0 & 0 & \dots & c_0 \\
           c_1 & b_1 & a_1 & 0 & 0 & \dots & 0 \\
@@ -466,8 +472,7 @@ can be stored as
 \end{equation}
 The first and last rows are not typos; this is usually used for purely banded matrices, without the
 extra corner terms, and the convention is made to make sense for that ($a_n$ and $c_0$ are just
-missing in that case). This is a banded matrix plus two elemnts in the corners. Usually, the corner
-terms are not utilized, but they are important in our case.
+missing in that case).
 
 There is an annoying little detail with our matrices: since we are dealing with closed surfaces,
 we have periodic boundary conditions and the corner elements of the matrices are also nonzero. This
@@ -497,8 +502,8 @@ Figure \ref{fig:test} compares the results from my FEM implementation to the Dru
 electrons. Figure \ref{fig:error} shows the maximum error in every magnetic field as a function of
 the number of elements. The error reduces quadratically with the number of elements
 ($\mathrm{Error}\sim n^{-2}$). Table \ref{tab:performance} compares the runtime of my implementation
-with and without the bandedness optimization to the code by Chaitanya. Figure \ref{fig:performance}
-shows the performance of the banded implementation as a function of the number of elements.
+with and without the bandedness optimization. Figure \ref{fig:performance} shows the performance
+of the banded implementation as a function of the number of elements.
 
 \begin{figure}
     \centering
@@ -513,6 +518,14 @@ shows the performance of the banded implementation as a function of the number o
     \caption{Maximum error in the conductivity tensor in different fields as a function of the
         number of elements.}
     \label{fig:error}
+\end{figure}
+
+\begin{figure}
+    \centering
+    \includegraphics[width=0.8\textwidth]{figures/free_electron_performance}
+    \caption{Runtime of the banded implementation for 10 different magnetic fields as a function
+        of the number of elements.}
+    \label{fig:performance}
 \end{figure}
 
 \begin{table}
@@ -532,14 +545,6 @@ shows the performance of the banded implementation as a function of the number o
         The calculation is done for 1000 different magnetic fields.}
     \label{tab:performance}
 \end{table}
-
-\begin{figure}
-    \centering
-    \includegraphics[width=0.8\textwidth]{figures/free_electron_performance}
-    \caption{Runtime of the banded implementation for 10 different magnetic fields as a function
-        of the number of elements.}
-    \label{fig:performance}
-\end{figure}
 
 \subsection{Cuprates}
 \textcolor{red}{TODO: After I complete the code for the quasi-2D case, we can compare it to the
