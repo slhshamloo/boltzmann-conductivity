@@ -168,21 +168,23 @@ class BandStructure:
 
         # unit cell in reciprocal space, in angstrom^-1
         gx, gy, gz = [np.pi / a for a in self.unit_cell]
+        self._kgrid = np.ogrid[-gy:gy:self.res[0]*1j, -gx:gx:self.res[1]*1j]
         self.kx = []
         self.ky = []
-        self.kz = np.linspace(
-            -self.atoms_per_cell * gz, self.atoms_per_cell * gz, self.nlayers)
-        self._kgrid = np.ogrid[-gx:gx:self.res[1]*1j, -gy:gy:self.res[0]*1j]
+        self.kz = np.linspace(-self.atoms_per_cell*gz, self.atoms_per_cell*gz,
+                              self.nlayers, endpoint=False)
+        # shift kz to make it centered around zero
+        self.kz += (self.kz[1] - self.kz[0]) / 2
 
         for layer in range(self.nlayers):
             self.kx.append(np.empty(0))
             self.ky.append(np.empty(0))
             # Find Fermi surface contours using marching squares
             contours = find_contours(self.energy_func(
-                self._kgrid[0], self._kgrid[1], self.kz[layer]),
+                self._kgrid[1], self._kgrid[0], self.kz[layer]),
                 self.chemical_potential)
+            # TODO: handle the case where no contours are found
             self._add_contours_in_order(contours, layer)
-            
     
     def calculate_mass(self):
         """
