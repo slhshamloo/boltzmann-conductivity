@@ -229,8 +229,8 @@ class BandStructure:
             # Find closest contour
             min_distance_squared = np.inf
             for (i, neighboring_contour) in enumerate(contours):
-                delta_k = (contour[-1,:]-neighboring_contour[0,:]
-                            ) % (2*np.pi)
+                delta_k = np.abs(contour[-1,:]-neighboring_contour[0,:]
+                                 ) % (2*np.pi/self.unit_cell[2])
                 distance_squared = delta_k[0]**2 + delta_k[1]**2
                 if distance_squared < min_distance_squared:
                     min_distance_squared = distance_squared
