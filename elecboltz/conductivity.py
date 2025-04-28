@@ -33,6 +33,30 @@ class Conductivity:
     
     Attributes
     ----------
+    band : BandStructure
+        The class holding band structure information of the material.
+    field : Collection[float]
+        The magnetic field in the x, y, and z directions.
+    scattering_rate : Union[callable, float, Collection[float], None]
+        The (out-)scattering rate as a function of kx, ky, and kz. Can
+        also be a constant value instead of a function. If initialized
+        as None, it will be calculated from the scattering kernel upon
+        the next calculation.
+    scattering_kernel : Union[callable, None]
+        The scattering kernel as a function of a pair of coordinates
+        (kx, ky, kz) and (kx', ky', kz'). All coordinates are given to
+        the function in order, so the function signature would be
+        C(kx, ky, kz, kx', ky', kz'). If None, the scattering rate
+        should be specified instead. The out-scattering rate will be
+        calculated from the scattering kernel if the scattering rate
+        is not provided.
+    frequency : float
+        The frequency of the applied field. If non-zero, the
+        conductivity output will be complex.
+    sigma : numpy.ndarray
+        The conductivity tensor, which is a 3x3 matrix. Can be
+        calculated using the `solve` method. Elements that are not
+        calculated yet are set to zero.
 
     Notes
     -----
