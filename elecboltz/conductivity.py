@@ -1,5 +1,6 @@
 import numpy as np
 import scipy.sparse as sp
+import opt_einsum
 # units
 from scipy.constants import e, hbar, angstrom
 # type hinting
@@ -213,8 +214,9 @@ class Conductivity:
         self._lengths = [np.sqrt(dx**2 + dy**2) for dx, dy
                          in zip(delta_kx, delta_ky)]
         self._delta_k_hat = [
-            np.column_stack((dkx, dky)) / k[:, None] for dkx, dky, k
-            in zip(delta_kx, delta_ky, self._lengths)]
+            np.column_stack((dkx, dky, np.zeros_like(dkx))) / k[:, None]
+            for dkx, dky, k in zip(delta_kx, delta_ky, self._lengths)]
+        
         self.velocities = [
             np.array(self.band.velocity_func(kx, ky, kz)).T for kx, ky, kz
             in zip(self.band.kx, self.band.ky, self.band.kz)]
@@ -287,11 +289,12 @@ class Conductivity:
             np.cross(nhat, self.field) for nhat in self._normals]
         # vhat x B . dkhat
         derivative_component = [
-            direction.T @ dkhat for direction, dkhat
-            in zip(derivative_directions, self._delta_k_hat)]
+            opt_einsum.contract('ij,ij->i', u, dkhat)
+            for u, dkhat in zip(derivative_directions, self._delta_k_hat)]
         # (vhat x B . dkhat) (delta_{i,j+1} - delta_{i+1,j}) / 2
-        derivative_matrix = [dcomp * np.array([-0.5, 0, 0.5]).T
-                             for dcomp in derivative_component]        
+        derivative_matrix = [
+            dcomp * np.array([-0.5, 0, 0.5]).reshape(-1, 1)[:, None]
+            for dcomp in derivative_component]        
         self._differential_operator = [
             out_scattering - e/hbar * derivative for out_scattering, derivative
             in zip(self._out_scattering, derivative_matrix)]
