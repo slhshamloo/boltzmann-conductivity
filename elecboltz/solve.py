@@ -1,5 +1,5 @@
 import numpy as np
-import scipy.sparse as sp
+import scipy
 
 
 def solve_cyclic_tridiagonal(A: np.ndarray, b: np.ndarray) -> np.ndarray:
@@ -31,9 +31,9 @@ def solve_cyclic_tridiagonal(A: np.ndarray, b: np.ndarray) -> np.ndarray:
 
     # Tridiagonal matrix inversions
     # B^{-1}b
-    banded_solution = sp.linalg.solve_banded((1, 1), A, b)
+    banded_solution = scipy.linalg.solve_banded((1, 1), A, b)
     # B^{-1}u
-    rank_1_solution = sp.linalg.solve_banded((1, 1), A, u)
+    rank_1_solution = scipy.linalg.solve_banded((1, 1), A, u)
 
     # Dot products
     v_dot_banded_solution = v_1*banded_solution[0] + v_n*banded_solution[-1]
