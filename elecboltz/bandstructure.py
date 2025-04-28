@@ -53,6 +53,9 @@ class BandStructure:
         collection of integers is given, each integer indicates the
         resolution for each axis in k-space. Can be set later when
         discretizing the Fermi surface. The default is 50.
+    npoints : int, optional
+        The number of points used for approximating each 2D layer of
+        the Fermi surface. The default is 100.
     nlayers : int, optional
         The number of 2D layers for approximating the 3D Fermi
         surface. Can be set later when discretizing the Fermi
@@ -86,6 +89,12 @@ class BandStructure:
         for approximating each 2D layer of the Fermi surface using the
         marching squares algorithm. Updating this will automatically
         erase the current Fermi surface discretization.
+    npoints : int, optional
+        The number of points used for approximating each 2D layer of
+        the Fermi surface. The number of points is enforced by
+        interpolating the contours found by marching squares.
+        Updating this will automatically erase the current Fermi
+        surface discretization.
     nlayers : int
         The number of 2D layers for approximating the 3D Fermi surface.
         updating this will automatically erase the current Fermi
@@ -107,8 +116,8 @@ class BandStructure:
             bandparams: dict = {},
             axis_names: Union[Collection[str], str] = ['a', 'b', 'c'],
             wavevector_names: Union[Collection[str], str] = ['kx', 'ky', 'kz'],
-            res: Union[int, Collection[int]] = 50, nlayers: int = 10,
-            **kwargs):
+            res: Union[int, Collection[int]] = 100,
+            npoints: int = 100, nlayers: int = 10, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('bandparams', bandparams)
@@ -119,6 +128,7 @@ class BandStructure:
         self.wavevector_names = wavevector_names
         self.res = res
         self.nlayers = nlayers
+        self.npoints = npoints
         self._parse_dispersion()
         self.kx = []
         self.ky = []
@@ -135,7 +145,8 @@ class BandStructure:
         elif name == 'dispersion' or name == 'bandparams':
             super().__setattr__(name, value)
             self._parse_dispersion()
-        if name in ['chemical_potential', 'unit_cell', 'res', 'nlayers']:
+        if name in ['chemical_potential', 'unit_cell',
+                    'res', 'npoints', 'nlayers']:
             self.kx = []
             self.ky = []
             self.kz = np.empty(0)
@@ -179,7 +190,7 @@ class BandStructure:
         for layer in range(self.nlayers):
             self.kx.append(np.empty(0))
             self.ky.append(np.empty(0))
-            # Find Fermi surface contours using marching squares
+            # find fermi surface contours using marching squares
             contours = find_contours(self.energy_func(
                 self._kgrid[1], self._kgrid[0], self.kz[layer]),
                 self.chemical_potential)
@@ -226,6 +237,7 @@ class BandStructure:
         contour_idx = 0
         while contours:
             contour = contours.pop(contour_idx)
+            contour = self._interpolate_contour(contour)
             self.kx[layer] = np.append(self.kx[layer], contour[:, 1])
             self.ky[layer] = np.append(self.ky[layer], contour[:, 0])
             # Find closest contour
@@ -237,3 +249,21 @@ class BandStructure:
                 if distance_squared < min_distance_squared:
                     min_distance_squared = distance_squared
                     contour_idx = i
+
+    def _interpolate_contour(self, contour):
+        """Interpolate the contour to a fixed number of points `npoints`"""
+        dk = np.diff(contour, axis=0)
+        # line segment lengths
+        ds = np.linalg.norm(dk, axis=1)
+        # parametrization of the curve, which is the length along the curve
+        # add back first point and remove last point to avoid duplication
+        s = np.concatenate(([0], np.cumsum(ds)[:-1]))
+        # remove last contour point to avoid duplication
+        contour = contour[:-1]
+        interpolated_s = np.linspace(0, s[-1], self.npoints)
+        interpolated_contour = np.empty((self.npoints, 2))
+        interpolated_contour[:, 0] = np.interp(
+            interpolated_s, s, contour[:, 0])
+        interpolated_contour[:, 1] = np.interp(
+            interpolated_s, s, contour[:, 1])
+        return interpolated_contour
