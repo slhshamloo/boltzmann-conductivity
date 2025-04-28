@@ -87,7 +87,7 @@ class Conductivity:
         if name == "frequency" and self._are_terms_saved:
             self.erase_memory(elements=False)
         if name == "field":
-            self.field = np.array(value)
+            super().__setattr__(name, np.array(value))
             self._is_solution_saved = False
 
     def solve(self, i: Union[Collection[int], int, None] = None,
