@@ -202,7 +202,7 @@ class Conductivity:
                     linear_solution, col,
                     self._saved_solutions[col][layer], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
-        return dkz * v.T[:, i] @ linear_solution
+        return dkz * v[:, i].T @ linear_solution
 
     def _generate_elements(self):
         """
