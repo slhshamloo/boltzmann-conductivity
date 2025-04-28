@@ -261,7 +261,8 @@ class Conductivity:
         """
         Calculate the terms needed to make the differential operator
         and calculate the conductivity solving the Boltzmann transport
-        equation using an FEM.
+        equation using an FEM. Note that all matrices are stored in
+        diagonal ordered form.
         """
         self._out_scattering = [self._generate_out_scattering(layer)
                                 for layer in self.band.nlayers]
