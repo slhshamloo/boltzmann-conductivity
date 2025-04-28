@@ -303,7 +303,7 @@ class Conductivity:
         from velocity vectors v^i and the overlap matrix M
         for a given layer.
         """
-        i = np.arange(len(self._lengths))
+        i = np.arange(len(self._lengths[layer]))
         i_plus_one = np.roll(i, -1)
         lengths = self._lengths[layer]
         # (l_i + l_{i+1} / 3) delta_{ij}
