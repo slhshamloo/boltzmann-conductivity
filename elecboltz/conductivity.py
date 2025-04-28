@@ -130,7 +130,7 @@ class Conductivity:
                 self._saved_solutions[col] = []
                 j_calc.append(col)
 
-        for layer in range(len(self.band.nlayers)):
+        for layer in range(self.band.nlayers):
             sigma_result += self._calculate_layer_conductivity(
                 layer, i, j, j_calc)
         sigma_result *= e**2 / (4 * np.pi**3 * hbar)
