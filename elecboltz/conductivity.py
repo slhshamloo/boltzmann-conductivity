@@ -293,8 +293,8 @@ class Conductivity:
             for u, dkhat in zip(derivative_directions, self._delta_k_hat)]
         # (vhat x B . dkhat) (delta_{i,j+1} - delta_{i+1,j}) / 2
         derivative_matrix = [
-            dcomp * np.array([-0.5, 0, 0.5]).reshape(-1, 1)[:, None]
-            for dcomp in derivative_component]        
+            dcomp[None, :] * np.array([-0.5, 0, 0.5]).reshape(-1, 1)
+            for dcomp in derivative_component]
         self._differential_operator = [
             out_scattering - e/hbar * derivative for out_scattering, derivative
             in zip(self._out_scattering, derivative_matrix)]
