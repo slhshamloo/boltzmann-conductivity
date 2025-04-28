@@ -20,17 +20,19 @@ class Conductivity:
     field : Collection[float]
         The magnetic field in the x, y, and z directions.
     scattering_rate : Union[callable, float, None]
-        The (out-)scattering rate as a function of kx, ky, and kz. Can
-        also be a constant value instead of a function. If None, it will
-        be calculated from the scattering kernel. The default is None.
+        The (out-)scattering rate as a function of kx, ky, and kz, in
+        units of THz. Can also be a constant value instead of a
+        function. If None, it will be calculated from the scattering
+        kernel. The default is None.
     scattering_kernel : Union[callable, None]
         The scattering kernel as a function of a pair of coordinates
-        (kx, ky, kz) and (kx', ky', kz'). All coordinates are given to
-        the function in order, so the function signature would be
-        C(kx, ky, kz, kx', ky', kz'). If None, the scattering rate
-        should be specified instead. The default is None.
+        (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
+        coordinates are given to the function in order, so the function
+        signature would be C(kx, ky, kz, kx', ky', kz'). If None, the
+        scattering rate should be specified instead. The default is None.
     frequency : float
-        The frequency of the applied field. Default is `0.0`.
+        The frequency of the applied field in units of THz.
+        Default is `0.0`.
     
     Attributes
     ----------
@@ -45,15 +47,15 @@ class Conductivity:
         the next calculation.
     scattering_kernel : Union[callable, None]
         The scattering kernel as a function of a pair of coordinates
-        (kx, ky, kz) and (kx', ky', kz'). All coordinates are given to
-        the function in order, so the function signature would be
-        C(kx, ky, kz, kx', ky', kz'). If None, the scattering rate
-        should be specified instead. The out-scattering rate will be
-        calculated from the scattering kernel if the scattering rate
-        is not provided.
+        (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
+        coordinates are given to the function in order, so the function
+        signature would be C(kx, ky, kz, kx', ky', kz'). If None, the
+        scattering rate should be specified instead. The out-scattering
+        rate will be calculated from the scattering kernel if the
+        scattering rate is not provided.
     frequency : float
-        The frequency of the applied field. If non-zero, the
-        conductivity output will be complex.
+        The frequency of the applied field in units of THz.
+        If non-zero, the conductivity output will be complex.
     sigma : numpy.ndarray
         The conductivity tensor, which is a 3x3 matrix. Can be
         calculated using the `solve` method. Elements that are not
@@ -245,15 +247,15 @@ class Conductivity:
 
         if isinstance(self.scattering_rate, callable):
             self._inverse_scattering_length = [
-                self.scattering_rate(kx, ky, kz) / v for kx, ky, kz, v
+                1e12 * self.scattering_rate(kx, ky, kz) / v for kx, ky, kz, v
                 in zip(self.band.kx, self.band.ky, self.band.kz,
                        self._velocity_magnitudes)]
         elif self.frequency == 0.0:
             self._inverse_scattering_length = [
-                self.scattering_rate / self._velocity_magnitudes]
+                1e12 * self.scattering_rate / self._velocity_magnitudes]
         else:
             self._inverse_scattering_length = [
-                (self.scattering_rate - 2j*np.pi*self.frequency)
+                1e12 * (self.scattering_rate - 2j*np.pi*self.frequency)
                 / self._velocity_magnitudes]
     
         # TODO: discretize the scattering kernel
