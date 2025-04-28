@@ -270,10 +270,10 @@ class Conductivity:
         diagonal ordered form.
         """
         self._out_scattering = [self._generate_out_scattering(layer)
-                                for layer in self.band.nlayers]
+                                for layer in range(self.band.nlayers)]
         self._velocity_projections = [
             self._generate_velocity_projections(layer)
-            for layer in self.band.nlayers]
+            for layer in range(self.band.nlayers)]
         # TODO: calculate the in-scattering matrix
         self._are_terms_saved = True
     
