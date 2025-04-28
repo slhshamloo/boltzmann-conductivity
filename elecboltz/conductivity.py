@@ -209,8 +209,10 @@ class Conductivity:
         Generate the Finite Elements from the discretization of the
         Fermi surface.
         """
-        delta_kx = [np.roll(kx, -1) - kx for kx in self.band.kx]
-        delta_ky = [np.roll(ky, -1) - ky for ky in self.band.ky]
+        delta_kx = [(np.roll(kx,-1)-kx) % (2*np.pi/self.band.unit_cell[0])
+                    for kx in self.band.kx]
+        delta_ky = [(np.roll(kx,-1)-kx) % (2*np.pi/self.band.unit_cell[1])
+                    for kx in self.band.kx]
         self._lengths = [np.sqrt(dx**2 + dy**2) for dx, dy
                          in zip(delta_kx, delta_ky)]
         self._delta_k_hat = [
