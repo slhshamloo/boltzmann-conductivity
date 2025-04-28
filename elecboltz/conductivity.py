@@ -212,15 +212,16 @@ class Conductivity:
         delta_ky = [np.roll(ky, -1) - ky for ky in self.band.ky]
         self._lengths = [np.sqrt(dx**2 + dy**2) for dx, dy
                          in zip(delta_kx, delta_ky)]
-        self._delta_k_hat = [np.column_stack((dkx, dky)) / k for dkx, dky, k
-                             in zip(delta_kx, delta_ky, self._lengths)]
+        self._delta_k_hat = [
+            np.column_stack((dkx, dky)) / k[:, None] for dkx, dky, k
+            in zip(delta_kx, delta_ky, self._lengths)]
         self.velocities = [
             np.array(self.band.velocity_func(kx, ky, kz)).T for kx, ky, kz
             in zip(self.band.kx, self.band.ky, self.band.kz)]
         self._velocity_magnitudes = [np.linalg.norm(v, axis=-1)
                                      for v in self.velocities]
         self._velocity_hats = [
-            v / vmag for v, vmag
+            v / vmag[:, None] for v, vmag
             in zip(self.velocities, self._velocity_magnitudes)]
         # Velocity hats over the segments themselves, used for the derivative
         # term. I call them the normals, because they are the normals to each
@@ -252,11 +253,12 @@ class Conductivity:
                        self._velocity_magnitudes)]
         elif self.frequency == 0.0:
             self._inverse_scattering_length = [
-                1e12 * self.scattering_rate / self._velocity_magnitudes]
+                1e12 * self.scattering_rate / vmag
+                for vmag in self._velocity_magnitudes]
         else:
             self._inverse_scattering_length = [
-                1e12 * (self.scattering_rate - 2j*np.pi*self.frequency)
-                / self._velocity_magnitudes]
+                1e12 * (self.scattering_rate - 2j*np.pi*self.frequency) / vmag
+                for vmag in self._velocity_magnitudes]
     
         # TODO: discretize the scattering kernel
 
