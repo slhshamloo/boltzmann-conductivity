@@ -73,11 +73,11 @@ class BandStructure:
     bandparams : dict
         The parameters of the dispersion relation. Updating this 
         will automatically update `energy_func` and `velocity_func`.
-    energy_func : callable
+    energy_func : function
         The energy function for the dispersion relation. Takes
         kx, ky, and kz in angstrome^-1 as arguments and returns
         the energy in milli eV.
-    velocity_func : callable
+    velocity_func : function
         The velocity function for the dispersion relation. Takes
         kx, ky, and kz in angstrome^-1 as arguments and returns
         the velocity vector as a list [vx, vy, vz] in units of m/s.

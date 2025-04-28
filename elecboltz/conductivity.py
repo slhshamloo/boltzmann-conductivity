@@ -3,7 +3,7 @@ import scipy.sparse as sp
 # units
 from scipy.constants import e, hbar, angstrom
 # type hinting
-from typing import Union
+from typing import Union, Callable
 from collections.abc import Collection
 from .bandstructure import BandStructure
 from .solve import solve_cyclic_tridiagonal
@@ -19,12 +19,12 @@ class Conductivity:
         The class holding band structure information of the material.
     field : Collection[float]
         The magnetic field in the x, y, and z directions.
-    scattering_rate : Union[callable, float, None]
+    scattering_rate : Union[Callable, float, None]
         The (out-)scattering rate as a function of kx, ky, and kz, in
         units of THz. Can also be a constant value instead of a
         function. If None, it will be calculated from the scattering
         kernel. The default is None.
-    scattering_kernel : Union[callable, None]
+    scattering_kernel : Union[Callable, None]
         The scattering kernel as a function of a pair of coordinates
         (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
         coordinates are given to the function in order, so the function
@@ -40,12 +40,12 @@ class Conductivity:
         The class holding band structure information of the material.
     field : Collection[float]
         The magnetic field in the x, y, and z directions.
-    scattering_rate : Union[callable, float, Collection[float], None]
+    scattering_rate : Union[Callable, float, Collection[float], None]
         The (out-)scattering rate as a function of kx, ky, and kz. Can
         also be a constant value instead of a function. If initialized
         as None, it will be calculated from the scattering kernel upon
         the next calculation.
-    scattering_kernel : Union[callable, None]
+    scattering_kernel : Union[Callable, None]
         The scattering kernel as a function of a pair of coordinates
         (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
         coordinates are given to the function in order, so the function
@@ -65,8 +65,8 @@ class Conductivity:
     -----
     """
     def __init__(self, band: BandStructure, field: Collection[float],
-                 scattering_rate: Union[callable, float, None] = None,
-                 scattering_kernel: Union[callable, None] = None,
+                 scattering_rate: Union[Callable, float, None] = None,
+                 scattering_kernel: Union[Callable, None] = None,
                  frequency: float = 0.0):
         self.band = band
         self.field = field
@@ -245,7 +245,7 @@ class Conductivity:
             else:
                 self.scattering_rate = self._generate_out_scattering()
 
-        if isinstance(self.scattering_rate, callable):
+        if isinstance(self.scattering_rate, Callable):
             self._inverse_scattering_length = [
                 1e12 * self.scattering_rate(kx, ky, kz) / v for kx, ky, kz, v
                 in zip(self.band.kx, self.band.ky, self.band.kz,
