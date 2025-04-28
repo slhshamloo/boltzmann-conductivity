@@ -211,16 +211,15 @@ class Conductivity:
         Generate the Finite Elements from the discretization of the
         Fermi surface.
         """
-        delta_kx = [(np.roll(kx,-1)-kx) % (2*np.pi/self.band.unit_cell[0])
-                    for kx in self.band.kx]
-        delta_ky = [(np.roll(kx,-1)-kx) % (2*np.pi/self.band.unit_cell[1])
-                    for kx in self.band.kx]
+        delta_kx = [((np.roll(kx,-1)-kx) % (2*np.pi/self.band.unit_cell[0])
+                     ) / angstrom for kx in self.band.kx]
+        delta_ky = [((np.roll(ky,-1)-ky) % (2*np.pi/self.band.unit_cell[1])
+                     ) / angstrom for ky in self.band.ky]
         self._lengths = [np.sqrt(dx**2 + dy**2) for dx, dy
                          in zip(delta_kx, delta_ky)]
         self._delta_k_hat = [
             np.column_stack((dkx, dky, np.zeros_like(dkx))) / k[:, None]
             for dkx, dky, k in zip(delta_kx, delta_ky, self._lengths)]
-        
         self.velocities = [
             np.array(self.band.velocity_func(kx, ky, kz)).T for kx, ky, kz
             in zip(self.band.kx, self.band.ky, self.band.kz)]
@@ -300,7 +299,7 @@ class Conductivity:
             dcomp[None, :] * np.array([-0.5, 0, 0.5]).reshape(-1, 1)
             for dcomp in derivative_component]
         self._differential_operator = [
-            out_scattering - e/hbar * derivative for out_scattering, derivative
+            out_scattering - e/hbar*derivative for out_scattering, derivative
             in zip(self._out_scattering, derivative_matrix)]
         # TODO: also add the in-scattering term
 
