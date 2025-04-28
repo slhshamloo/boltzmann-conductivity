@@ -135,7 +135,9 @@ class Conductivity:
                 layer, i, j, j_calc)
         sigma_result *= e**2 / (4 * np.pi**3 * hbar)
 
-        self.sigma[i, j] = sigma_result
+        for idx_row, row in enumerate(i):
+            for idx_col, col in enumerate(j):
+                self.sigma[row, col] = sigma_result[idx_row, idx_col]
         return sigma_result
 
     def erase_memory(self, elements: bool = True, terms: bool = True):
