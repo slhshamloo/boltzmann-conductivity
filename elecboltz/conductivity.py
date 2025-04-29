@@ -220,9 +220,11 @@ class Conductivity:
         self._delta_k_hat = [
             np.column_stack((dkx, dky, np.zeros_like(dkx))) / k[:, None]
             for dkx, dky, k in zip(delta_kx, delta_ky, self._lengths)]
+        velocity_lists = [self.band.velocity_func(kx, ky, kz)
+            for kx, ky, kz in zip(self.band.kx, self.band.ky, self.band.kz)]
         self.velocities = [
-            np.array(self.band.velocity_func(kx, ky, kz)).T for kx, ky, kz
-            in zip(self.band.kx, self.band.ky, self.band.kz)]
+            np.array([vlist[0], vlist[1], [vlist[2]] * len(vlist[0])]).T
+            for vlist in velocity_lists]
         self._velocity_magnitudes = [np.linalg.norm(v, axis=-1)
                                      for v in self.velocities]
         self._velocity_hats = [
