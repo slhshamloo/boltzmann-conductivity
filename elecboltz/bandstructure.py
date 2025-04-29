@@ -197,6 +197,11 @@ class BandStructure:
                 self.chemical_potential)
             # TODO: handle the case where no contours are found
             self._add_contours_in_order(contours, layer)
+            # convert back into angstrom^-1
+            self.kx[layer] *= 2 * gx / self.res[0]
+            self.kx[layer] -= gx
+            self.ky[layer] *= 2 * gy / self.res[1]
+            self.ky[layer] -= gy
     
     def calculate_mass(self):
         """
@@ -244,8 +249,10 @@ class BandStructure:
             # Find closest contour
             min_distance_squared = np.inf
             for (i, neighboring_contour) in enumerate(contours):
-                delta_k = np.abs(contour[-1,:]-neighboring_contour[0,:]
-                                 ) % (2*np.pi/self.unit_cell[2])
+                delta_k = np.abs(contour[-1,:] - neighboring_contour[0,:])
+                # periodic boundary conditions, in array units
+                delta_k[0] %= self.res[0]
+                delta_k[1] %= self.res[1]
                 distance_squared = delta_k[0]**2 + delta_k[1]**2
                 if distance_squared < min_distance_squared:
                     min_distance_squared = distance_squared
