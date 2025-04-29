@@ -1,5 +1,6 @@
 \documentclass[12pt]{article}
 \usepackage{amsmath,amssymb,bbold,bm,empheq,graphicx,hyperref,siunitx,subcaption,upgreek,xcolor}
+\usepackage[a4paper, margin=1in]{geometry}
 \usepackage[italicdiff]{physics}
 \usepackage[justification=centering]{caption}
 \usepackage{subcaption}
@@ -384,31 +385,23 @@ let us define the tensor $\Pi_{ijk}$ and the vector $\gamma^k$, such that
 \end{empheq}
 Only the terms where $i$, $j$ and $k$ are all associated with the same point or neighboring points.
 \begin{equation}
-\begin{aligned}
-    \Pi_{iii} &= \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 + \int_{I_{i-1}}
-        \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 \\
-    &= \int_0^1 \dd{x} x^3 \ell_i + \int_0^1 \dd{x} (1-x)^3 \ell_{i-1} = \frac{\ell_i + \ell_{i-1}}{4},
-\end{aligned}
+    \Pi_{iii} = \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 + \int_{I_{i-1}}
+        \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3
+    = \int_0^1 \dd{x} x^3 \ell_i + \int_0^1 \dd{x} (1-x)^3 \ell_{i-1} = \frac{\ell_i + \ell_{i-1}}{4},
 \end{equation}
 \begin{equation}
-\begin{aligned}
-    \Pi_{i+1,i,i} &= \Pi_{i,i+1,i} = \Pi_{i,i,i+1} \\ &= \int_{I_i} \dd{\vb{k}}
+    \Pi_{i+1,i,i} = \Pi_{i,i+1,i} = \Pi_{i,i,i+1} = \int_{I_i} \dd{\vb{k}}
     \qty[\psi_i(\vb{k})]^2\psi_{i+1}(\vb{k}) = \int_0^1 \dd{x} (1-x)^2 x \ell_i = \frac{\ell_i}{12},
-\end{aligned}
 \end{equation}
 \begin{equation}
-\begin{aligned}
-    \Pi_{i,i+1,i+1} &= \Pi_{i+1,i,i+1} = \Pi_{i+1,i+1,i} \\ &= \int_{I_i} \dd{\vb{k}}
+    \Pi_{i,i+1,i+1} = \Pi_{i+1,i,i+1} = \Pi_{i+1,i+1,i} = \int_{I_i} \dd{\vb{k}}
     \psi_i(\vb{k})\qty[\psi_{i+1}(\vb{k})]^2 = \int_0^1 \dd{x} x(1-x)^2 \ell_i = \frac{\ell_i}{12},
-\end{aligned}
 \end{equation}
 \begin{equation}
-\begin{aligned}
-    \Pi_{ijk} =\ & \frac{\ell_{i-1} + \ell_i}{4}\delta_{ijk}
-    + \frac{\ell_i}{12}\qty(\delta_{i+1,j,k} + \delta_{i,j-1,k}) \\
-    &+ \frac{\ell_j}{12}\qty(\delta_{i,j+1,k} + \delta_{i,j,k-1})
+    \Pi_{ijk} = \frac{\ell_{i-1} + \ell_i}{4}\delta_{ijk}
+    + \frac{\ell_i}{12}\qty(\delta_{i+1,j,k} + \delta_{i,j-1,k})
+    + \frac{\ell_j}{12}\qty(\delta_{i,j+1,k} + \delta_{i,j,k-1})
     + \frac{\ell_k}{12}\qty(\delta_{i,j,k+1} + \delta_{i-1,j,k})
-\end{aligned}
 \end{equation}
 Multiplying this tensor by $\gamma^k$, we get the full $\Gamma_{ij}$ matrix.
 \begin{equation}
