@@ -211,10 +211,10 @@ class Conductivity:
         Generate the Finite Elements from the discretization of the
         Fermi surface.
         """
-        delta_kx = [((np.roll(kx,-1)-kx) % (2*np.pi/self.band.unit_cell[0])
-                     ) / angstrom for kx in self.band.kx]
-        delta_ky = [((np.roll(ky,-1)-ky) % (2*np.pi/self.band.unit_cell[1])
-                     ) / angstrom for ky in self.band.ky]
+        delta_kx = [self.band.apply_periodic_boundary(np.roll(kx,-1) - kx, 0)
+                    / angstrom for kx in self.band.kx]
+        delta_ky = [self.band.apply_periodic_boundary(np.roll(ky,-1) - ky, 1)
+                    / angstrom for ky in self.band.ky]
         self._lengths = [np.sqrt(dx**2 + dy**2) for dx, dy
                          in zip(delta_kx, delta_ky)]
         self._delta_k_hat = [
@@ -236,9 +236,8 @@ class Conductivity:
         self._normals = [(np.roll(vhat, -1, axis=0) + vhat) / 2
                          for vhat in self._velocity_hats]
         self._discretize_scattering()
-        self._layer_thicknesses = ((np.roll(self.band.kz, -1) - self.band.kz
-                                   ) % (2*np.pi/self.band.unit_cell[2])
-                                   ) / angstrom
+        self._layer_thicknesses = self.band.apply_periodic_boundary(
+            np.roll(self.band.kz, -1) - self.band.kz, 2) / angstrom
         self._are_elements_saved = True
 
     def _discretize_scattering(self):

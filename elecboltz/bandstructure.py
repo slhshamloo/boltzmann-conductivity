@@ -203,6 +203,29 @@ class BandStructure:
             self.ky[layer] *= 2 * gy / self.res[1]
             self.ky[layer] -= gy
     
+    def apply_periodic_boundary(self, k: Union[np.ndarray, float], axis: int):
+        """
+        Apply periodic boundary conditions to the wavevector component
+        `k` in the axis `axis`.
+
+        Parameters
+        ----------
+        k : np.ndarray or float
+            The wavevector component to apply periodic boundary
+            conditions to.
+        axis : int
+            The axis to apply periodic boundary conditions to.
+            0 for kx, 1 for ky, and 2 for kz.
+        
+        Returns
+        -------
+        np.ndarray or float
+            The wavevector component with periodic boundary conditions
+            applied.
+        """
+        axislen = np.pi / self.unit_cell[axis]
+        return (k+axislen) % (2*axislen) - axislen
+
     def calculate_mass(self):
         """
         Calculate the effective mass of the charge carries.
