@@ -237,8 +237,11 @@ class Conductivity:
         # Velocity hats over the segments themselves, used for the derivative
         # term. I call them the normals, because they are the normals to each
         # line segment of the discretization (i.e. each element).
-        self._normals = [(np.roll(vhat, -1, axis=0) + vhat) / 2
-                         for vhat in self._velocity_hats]
+        self._normals = [
+            np.column_stack((dkhat[:, 1], -dkhat[:, 0], vhat[:, 2]))
+            for dkhat, vhat in zip(self._delta_k_hat, self._velocity_hats)]
+        self._normals = [normal / np.linalg.norm(normal, axis=1)[:, None]
+                         for normal in self._normals]
         self._discretize_scattering()
         self._layer_thicknesses = self.band.apply_periodic_boundary(
             np.roll(self.band.kz, -1) - self.band.kz, 2) / angstrom
