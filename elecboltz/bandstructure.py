@@ -256,14 +256,10 @@ class BandStructure:
         # line segment lengths
         ds = np.linalg.norm(dk, axis=1)
         # parametrization of the curve, which is the length along the curve
-        # add back first point and remove last point to avoid duplication
-        s = np.concatenate(([0], np.cumsum(ds)[:-1]))
-        # remove last contour point to avoid duplication
-        contour = contour[:-1]
-        interpolated_s = np.linspace(0, s[-1], self.npoints)
-        interpolated_contour = np.empty((self.npoints, 2))
-        interpolated_contour[:, 0] = np.interp(
-            interpolated_s, s, contour[:, 0])
-        interpolated_contour[:, 1] = np.interp(
-            interpolated_s, s, contour[:, 1])
+        s = np.concatenate(([0], np.cumsum(ds)))
+        interpolated_s = np.linspace(0, s[-1], self.npoints + 1)
+        # remove last point to avoid duplication
+        interpolated_contour = np.column_stack((
+            np.interp(interpolated_s, s, contour[:, 0])[:-1],
+            np.interp(interpolated_s, s, contour[:, 1])[:-1]))
         return interpolated_contour
