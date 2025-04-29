@@ -1,5 +1,6 @@
 import numpy as np
 import sympy
+from matplotlib import pyplot as plt
 # marching squares
 from skimage.measure import find_contours
 # units
@@ -179,7 +180,7 @@ class BandStructure:
 
         # unit cell in reciprocal space, in angstrom^-1
         gx, gy, gz = [np.pi / a for a in self.unit_cell]
-        self._kgrid = np.ogrid[-gy:gy:self.res[0]*1j, -gx:gx:self.res[1]*1j]
+        self._kgrid = np.ogrid[-gy:gy:self.res[1]*1j, -gx:gx:self.res[0]*1j]
         self.kx = []
         self.ky = []
         self.kz = np.linspace(-self.atoms_per_cell*gz, self.atoms_per_cell*gz,
@@ -238,8 +239,8 @@ class BandStructure:
         while contours:
             contour = contours.pop(contour_idx)
             contour = self._interpolate_contour(contour)
-            self.kx[layer] = np.append(self.kx[layer], contour[:, 1])
-            self.ky[layer] = np.append(self.ky[layer], contour[:, 0])
+            self.kx[layer] = np.append(self.kx[layer], contour[:, 0])
+            self.ky[layer] = np.append(self.ky[layer], contour[:, 1])
             # Find closest contour
             min_distance_squared = np.inf
             for (i, neighboring_contour) in enumerate(contours):
