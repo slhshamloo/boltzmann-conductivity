@@ -320,7 +320,7 @@ class Conductivity:
         # (l_i / 6) delta_{i,j+1}
         overlap_lower = sp.csr_matrix((lengths / 6, (i, i_plus_one)))
         overlap = overlap_main + overlap_upper + overlap_lower
-        return overlap @ self.velocities[layer]
+        return overlap @ self._velocity_hats[layer]
     
     def _generate_out_scattering(self, layer):
         """Generates the out-scattering (Gamma) matrix for a given layer."""
