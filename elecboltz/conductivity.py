@@ -120,8 +120,12 @@ class Conductivity:
         
         if i is None:
             i = range(3)
+        elif isinstance(i, int):
+            i = [i]
         if j is None:
             j = range(3)
+        elif isinstance(j, int):
+            j = [j]
         sigma_result = np.zeros((len(i), len(j)))
     
         j_calc = []
