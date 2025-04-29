@@ -1,6 +1,5 @@
 import numpy as np
 import sympy
-from matplotlib import pyplot as plt
 # marching squares
 from skimage.measure import find_contours
 # units
