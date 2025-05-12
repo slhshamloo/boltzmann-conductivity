@@ -197,10 +197,11 @@ class BandStructure:
         float
             k2 - k1 with periodic boundary conditions applied.
         """
+        gvec = self.gvec[None, :] if broadcast else self.gvec
         kdiff = k2 - k1
-        kdiff += self.gvec
-        kdiff %= 2 * self.gvec
-        kdiff -= self.gvec
+        kdiff += gvec
+        kdiff %= 2 * gvec
+        kdiff -= gvec
         return kdiff
 
     def calculate_mass(self):
