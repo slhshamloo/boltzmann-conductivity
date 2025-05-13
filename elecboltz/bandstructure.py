@@ -7,6 +7,8 @@ from scipy.constants import hbar, eV, angstrom
 # type hinting
 from typing import Union
 from collections.abc import Collection
+# default dictionary for point hashing
+from collections import defaultdict
 # conversion from energy gradiennt units to m/s for velocity
 velocity_units = 1e-3 * eV * angstrom / hbar
 
@@ -84,9 +86,12 @@ class BandStructure:
         corresponds to a face in the form [i, j, k], where i, j,
         and k are the indices of the vertices of the face in the
         `kpoints` array.
-    kneighbors : list of numpy.ndarray
-        The indices of the neighboring k-points for each k-point
-        in the `kpoints` array.
+    kpoints_periodic : (N, 3) numpy.ndarray
+        The kpoints on the Fermi surface with the duplicate boundary
+        points removed.
+    kneighood: list[set[int]]
+        Sets containing the neighboring points and the point itself
+        for each k-point in the `kpoints_periodic` array.
     resolution : Tuple[int, int, int]
         The resolution of the grid used for approximating the Fermi
         surface using the marching cubes algorithm.
@@ -148,17 +153,24 @@ class BandStructure:
         """
         self.resolution = (resolution if resolution is not None
                            else self.resolution)
-        gx, gy, gz = (np.pi / a for a in self.unit_cell)
-        self.gvec = np.array([gx, gy, gz])
-        kgrid = np.mgrid[-gx:gx:self.resolution[0]*1j,
-                         -gy:gy:self.resolution[1]*1j,
-                         -gz:gz:self.resolution[2]*1j]
+        self._gvec = np.array([np.pi / a for a in self.unit_cell])
+        self._cell_size = 2 * self._gvec / np.array(self.resolution)
+        kgrid = np.mgrid[
+            -self._gvec[0] : self._gvec[0]+self._cell_size[0]
+                :(self.resolution[0]+1)*1j,
+            -self._gvec[1] : self._gvec[1]+self._cell_size[1]
+                :(self.resolution[1]+1)*1j,
+            -self._gvec[2] : self._gvec[2]+self._cell_size[2]
+                : (self.resolution[2]+1)*1j]
         self.kpoints, self.kfaces, _, _ = marching_cubes(
             self.energy_func(*kgrid), level=self.chemical_potential)
+        # convert back to angstrom^-1
+        self.kpoints *= self._cell_size
+        self.kpoints -= self._gvec
         self.velocities = np.column_stack(self.velocity_func(
             self.kpoints[:, 0], self.kpoints[:, 1], self.kpoints[:, 2]))
         self._find_neighboring_triangles()
-        self._stitch_periodic_boundaries(gx, gy, gz)
+        self._stitch_periodic_boundaries()
 
         # self._generate_point_cloud()
         # normals = np.column_stack(self.velocity_func(
@@ -197,7 +209,7 @@ class BandStructure:
         float
             k2 - k1 with periodic boundary conditions applied.
         """
-        gvec = self.gvec[None, :] if broadcast else self.gvec
+        gvec = self._gvec[None, :] if broadcast else self._gvec
         kdiff = k2 - k1
         kdiff += gvec
         kdiff %= 2 * gvec
@@ -248,48 +260,74 @@ class BandStructure:
         Generate _trianlge_list which contains every triangle
         containing a given vertex.
         """
-        self._triangle_list = [set() for _ in range(len(self.kpoints))]
+        self._triangle_list = [[] for _ in range(len(self.kpoints))]
         for triangle, (i, j, k) in enumerate(self.kfaces):
-            self._triangle_list[i].add(triangle)
-            self._triangle_list[j].add(triangle)
-            self._triangle_list[k].add(triangle)
+            self._triangle_list[i].append(triangle)
+            self._triangle_list[j].append(triangle)
+            self._triangle_list[k].append(triangle)
 
-    def _stitch_periodic_boundaries(self, gx, gy, gz):
+    def _stitch_periodic_boundaries(self, threshold=0.001):
         """
         Extend the _trianlge_list taking into account the periodic
-        boundaries of the unit cell.
+        boundaries of the unit cell. Threshold sets the fraction of
+        the resolution that we consider the points to be the same
+        if they are within that distance.
         """
-        cell_size = 2 * self.gvec / np.array(self.resolution)
-        is_near_lower_boundary = (self.kpoints
-                                  < -self.gvec + cell_size[None,:]/3)
-        is_near_upper_boundary = (self.kpoints
-                                  > self.gvec - cell_size[None,:]/3)
-        is_near_boundary = is_near_lower_boundary | is_near_upper_boundary
-        periodic_coordinates = ~is_near_boundary * self.kpoints
-        periodic_coordinates = np.round(
-            periodic_coordinates / (cell_size[None,:]/3))
-        point_bins = {}
-        for i in range(len(self.kpoints)):
-            point_bins[tuple(periodic_coordinates[i])] = self.kpoints[i]
-        for point_bin in point_bins:
-            num_neighbors = len(point_bins[point_bin])
+        cell_coordinates = np.round((self.kpoints+self._gvec[None,:])
+                                    / (threshold*self._cell_size[None,:]))
+        cell_coordinates %= np.round(
+            2*self._gvec / (threshold*self._cell_size))[None, :]
+        point_bins = defaultdict(list)
+        duplicate_points = dict()
+        for i, coordinates in enumerate(cell_coordinates):
+            point_bins[tuple(coordinates)].append(i)
+        for coordinates in point_bins:
+            point_bin = point_bins[coordinates]
+            num_neighbors = len(point_bin)
             if num_neighbors > 1:
-                for i in range(num_neighbors-1):
-                    for j in range(i+1, num_neighbors):
-                        self._triangle_list[point_bin[i]].add(
-                            self._triangle_list[point_bin[j]])
-                        self._triangle_list[point_bin[j]].add(
-                            self._triangle_list[point_bin[i]])
+                primary_point = point_bin[0]
+                for point in point_bin[1:]:
+                    duplicate_points[point] = primary_point
+                    self._triangle_list[primary_point].extend(
+                        self._triangle_list[point])
+        self._build_periodic_mesh(duplicate_points)
+    
+    def _build_periodic_mesh(self, duplicate_points):
+        """
+        Build the periodic kpoints and kfaces arrays by removing
+        duplicate points and reindexing.
+        """
+        duplicate_mask = np.full(len(self.kpoints), True)
+        duplicate_mask[list(duplicate_points.keys())] = False
+        self.kpoints_periodic = self.kpoints[duplicate_mask]
+        self.reindex_map = np.cumsum(duplicate_mask) - 1
+        kfaces_periodic = self.kfaces.copy()
+        for i, face in enumerate(self.kfaces):
+            for j, point in enumerate(face):
+                if point in duplicate_points:
+                    self.reindex_map[point] = self.reindex_map[
+                        duplicate_points[point]] 
+                kfaces_periodic[i, j] = self.reindex_map[point]
+        self.kneighborhood = [set() for _ in range(len(self.kpoints_periodic))]
+        for i, face in enumerate(kfaces_periodic):
+            for j, point in enumerate(face):
+                for k in range(3):
+                    self.kneighborhood[point].add(face[k])
 
     def _generate_point_cloud(self):
         """
         Generate a point cloud of the Fermi surface by detecting sign
         changes and applying simple interpolation.
         """
-        gx, gy, gz = (np.pi / a for a in self.unit_cell)
-        kgrid = np.mgrid[-gx:gx:self.resolution[0]*1j,
-                         -gy:gy:self.resolution[1]*1j,
-                         -gz:gz:self.resolution[2]*1j]
+        self._gvec = np.array([np.pi / a for a in self.unit_cell])
+        self._cell_size = 2 * self._gvec / np.array(self.resolution)
+        kgrid = np.mgrid[
+            -self._gvec[0] : self._gvec[0]+self._cell_size[0]
+                :(self.resolution[0]+1)*1j,
+            -self._gvec[1] : self._gvec[1]+self._cell_size[1]
+                :(self.resolution[1]+1)*1j,
+            -self._gvec[2] : self._gvec[2]+self._cell_size[2]
+                : (self.resolution[2]+1)*1j]
         energy_diff = self.energy_func(*kgrid) - self.chemical_potential
         
         kpoints = []
