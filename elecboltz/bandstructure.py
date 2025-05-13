@@ -167,8 +167,6 @@ class BandStructure:
         # convert back to angstrom^-1
         self.kpoints *= self._cell_size
         self.kpoints -= self._gvec
-        self.velocities = np.column_stack(self.velocity_func(
-            self.kpoints[:, 0], self.kpoints[:, 1], self.kpoints[:, 2]))
         self._find_neighboring_triangles()
         self._stitch_periodic_boundaries()
 
