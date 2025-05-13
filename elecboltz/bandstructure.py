@@ -91,19 +91,6 @@ class BandStructure:
         points removed.
     kfaces_periodic : (F, 3) numpy.ndarray of int
         Same as `kfaces`, but points to the unique points in kpoints_periodic.
-    kneighood: list[set[int]]
-        Sets containing the neighboring points and the point itself
-        for each k-point in the `kpoints_periodic` array.
-    triangle_list : list[list[int]]
-        Lists of triangles containing each vertex in the
-        `kpoints_periodic` array. The unique points also contain the
-        triangles connected through the periodic boundaries.
-    unique_mask : (N,) numpy.ndarray of bool
-        A boolean mask indicating which points in the `kpoints`
-        array are unique and not duplicates.
-    reindex_map : (N,) numpy.ndarray of int
-        A mapping from the original indices of the `kpoints` array
-        to the indices of the unique points in `kpoints_periodic`.
     resolution : Tuple[int, int, int]
         The resolution of the grid used for approximating the Fermi
         surface using the marching cubes algorithm.
@@ -179,7 +166,6 @@ class BandStructure:
         # convert back to angstrom^-1
         self.kpoints *= self._cell_size
         self.kpoints -= self._gvec
-        self._find_neighboring_triangles()
         self._stitch_periodic_boundaries()
 
         # self._generate_point_cloud()
@@ -264,17 +250,6 @@ class BandStructure:
         self.velocity_func = lambda kx, ky, kz: [
             vfunc(kx, ky, kz, *self.unit_cell, **self.bandparams)
             for vfunc in self._velocity_funcs_full]
-    
-    def _find_neighboring_triangles(self):
-        """
-        Generate _trianlge_list which contains every triangle
-        containing a given vertex.
-        """
-        self.triangle_list = [[] for _ in range(len(self.kpoints))]
-        for triangle, (i, j, k) in enumerate(self.kfaces):
-            self.triangle_list[i].append(triangle)
-            self.triangle_list[j].append(triangle)
-            self.triangle_list[k].append(triangle)
 
     def _stitch_periodic_boundaries(self, threshold=0.001):
         """
@@ -298,13 +273,6 @@ class BandStructure:
                 primary_point = point_bin[0]
                 for point in point_bin[1:]:
                     duplicate_points[point] = primary_point
-                    self.triangle_list[primary_point].extend(
-                        self.triangle_list[point])
-        new_triangle_list = []
-        for i in range(len(self.triangle_list)):
-            if i not in duplicate_points:
-                new_triangle_list.append(self.triangle_list[i])
-        self.triangle_list = new_triangle_list
         self._build_periodic_mesh(duplicate_points)
     
     def _build_periodic_mesh(self, duplicate_points):
@@ -312,22 +280,17 @@ class BandStructure:
         Build the periodic kpoints and kfaces arrays by removing
         duplicate points and reindexing.
         """
-        self.unique_mask = np.full(len(self.kpoints), True)
-        self.unique_mask[list(duplicate_points.keys())] = False
-        self.kpoints_periodic = self.kpoints[self.unique_mask]
-        self.reindex_map = np.cumsum(self.unique_mask) - 1
+        unique_mask = np.full(len(self.kpoints), True)
+        unique_mask[list(duplicate_points.keys())] = False
+        self.kpoints_periodic = self.kpoints[unique_mask]
+        reindex_map = np.cumsum(unique_mask) - 1
         self.kfaces_periodic = self.kfaces.copy()
         for i, face in enumerate(self.kfaces):
             for j, point in enumerate(face):
                 if point in duplicate_points:
-                    self.reindex_map[point] = self.reindex_map[
+                    reindex_map[point] = reindex_map[
                         duplicate_points[point]]
-                self.kfaces_periodic[i, j] = self.reindex_map[point]
-        self.kneighborhood = [set() for _ in range(len(self.kpoints_periodic))]
-        for i, face in enumerate(self.kfaces_periodic):
-            for j, point in enumerate(face):
-                for k in range(3):
-                    self.kneighborhood[point].add(face[k])
+                self.kfaces_periodic[i, j] = reindex_map[point]
 
     def _generate_point_cloud(self):
         """
