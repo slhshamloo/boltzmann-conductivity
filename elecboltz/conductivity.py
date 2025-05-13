@@ -24,13 +24,13 @@ class Conductivity:
         The (out-)scattering rate as a function of kx, ky, and kz, in
         units of THz. Can also be a constant value instead of a
         function. If None, it will be calculated from the scattering
-        kernel. The default is None.
+        kernel.
     scattering_kernel : Union[Callable, None]
         The scattering kernel as a function of a pair of coordinates
         (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
         coordinates are given to the function in order, so the function
         signature would be C(kx, ky, kz, kx', ky', kz'). If None, the
-        scattering rate should be specified instead. The default is None.
+        scattering rate should be specified instead.
     frequency : float
         The frequency of the applied field in units of THz.
         Default is `0.0`.
@@ -79,7 +79,6 @@ class Conductivity:
         self._are_elements_saved = False
         self._are_terms_saved = False
         self._is_solution_saved = False
-        self._is_covariant_velocity_saved = [False, False, False]
     
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
@@ -91,9 +90,9 @@ class Conductivity:
             super().__setattr__(name, np.array(value))
             self._is_solution_saved = False
 
-    def solve(self, i: Union[Collection[int], int, None] = None,
-              j: Union[Collection[int], int, None] = None
-              ) -> Union[np.ndarray, float]:
+    def calculate(self, i: Union[Collection[int], int, None] = None,
+                  j: Union[Collection[int], int, None] = None
+                  ) -> Union[np.ndarray, float]:
         """
         Calculate the conductivity tensor.
 
@@ -158,21 +157,20 @@ class Conductivity:
         ----------
         elements : bool, optional
             If True, erase the quantities for each element, like the
-            lengths and velocities. The default is `True`.
+            lengths and velocities.
         terms : bool, optional
             If True, erase the differential operator terms and the
             velocity projections (the terms in the final conductivity
-            calculation). The default is `True`.
+            calculation).
         """
         if elements:
-            self._lengths = None
-            self._delta_k_hat = None
-            self.velocities = None
-            self._velocity_magnitudes = None
-            self._velocity_hats = None
-            self._normals = None
-            self._inverse_scattering_length = None
-            self._layer_thicknesses = None
+            self._velocities = None
+            self._vmags = None
+            self._vhats = None
+            self._jacobians = None
+            self._jacobian_sums = None
+            self._derivative_components = None
+            self._derivatives = None
             self._are_elements_saved = False
         if terms:
             self._overlap = None
@@ -210,41 +208,20 @@ class Conductivity:
         # (v_a)_i (A^{-1} v_b)^i
         return dkz * v[:, i].T @ linear_solution
 
-    def _generate_elements(self):
+    def _build_elements(self):
         """
-        Generate the Finite Elements from the discretization of the
-        Fermi surface.
+        Build the arrays corresponding to the discretization of the
+        band structure.
         """
-        delta_kx = [self.band.apply_periodic_boundary(np.roll(kx,-1) - kx, 0)
-                    / angstrom for kx in self.band.kx]
-        delta_ky = [self.band.apply_periodic_boundary(np.roll(ky,-1) - ky, 1)
-                    / angstrom for ky in self.band.ky]
-        self._lengths = [np.sqrt(dx**2 + dy**2) for dx, dy
-                         in zip(delta_kx, delta_ky)]
-        self._delta_k_hat = [
-            np.column_stack((dkx, dky, np.zeros_like(dkx))) / k[:, None]
-            for dkx, dky, k in zip(delta_kx, delta_ky, self._lengths)]
-        velocity_lists = [self.band.velocity_func(kx, ky, kz)
-            for kx, ky, kz in zip(self.band.kx, self.band.ky, self.band.kz)]
-        self.velocities = [
-            np.array([vlist[0], vlist[1], [vlist[2]] * len(vlist[0])]).T
-            for vlist in velocity_lists]
-        self._velocity_magnitudes = [np.linalg.norm(v, axis=-1)
-                                     for v in self.velocities]
-        self._velocity_hats = [
-            v / vmag[:, None] for v, vmag
-            in zip(self.velocities, self._velocity_magnitudes)]
-        # Velocity hats over the segments themselves, used for the derivative
-        # term. I call them the normals, because they are the normals to each
-        # line segment of the discretization (i.e. each element).
-        self._normals = [
-            np.column_stack((dkhat[:, 1], -dkhat[:, 0], vhat[:, 2]))
-            for dkhat, vhat in zip(self._delta_k_hat, self._velocity_hats)]
-        self._normals = [normal / np.linalg.norm(normal, axis=1)[:, None]
-                         for normal in self._normals]
+        self._velocities = np.column_stack(self.band.velocity_func(
+            self.band.kpoints_periodic[:, 0], self.band.kpoints_periodic[:, 1],
+            self.band.kpoints_periodic[:, 2]))
+        self._vmags = np.linalg.norm(self._velocities, axis=1)
+        self._vhats = self._velocities / self._vmags[:, None]
         self._discretize_scattering()
-        self._layer_thicknesses = self.band.apply_periodic_boundary(
-            np.roll(self.band.kz, -1) - self.band.kz, 2) / angstrom
+        triangle_coordinates = self.band.kpoints[self.band.kfaces]
+        self._calculate_jacobian_sums(triangle_coordinates)
+        self._calculate_derivative_sums(triangle_coordinates)
         self._are_elements_saved = True
 
     def _discretize_scattering(self):
@@ -260,20 +237,55 @@ class Conductivity:
                 self.scattering_rate = self._generate_out_scattering()
 
         if isinstance(self.scattering_rate, Callable):
-            self._inverse_scattering_length = [
-                1e12 * self.scattering_rate(kx, ky, kz) / v for kx, ky, kz, v
-                in zip(self.band.kx, self.band.ky, self.band.kz,
-                       self._velocity_magnitudes)]
+            self._inverse_scattering_length = (
+                1e12 * self.scattering_rate(self.band.kpoints)
+                / self.band.velocities)
         elif self.frequency == 0.0:
-            self._inverse_scattering_length = [
-                1e12 * self.scattering_rate / vmag
-                for vmag in self._velocity_magnitudes]
+            self._inverse_scattering_length = (
+                1e12 * self.scattering_rate(self.band.kpoints)
+                / self.band.velocities)
         else:
-            self._inverse_scattering_length = [
-                1e12 * (self.scattering_rate - 2j*np.pi*self.frequency) / vmag
-                for vmag in self._velocity_magnitudes]
-    
+            self._inverse_scattering_length = (
+                1e12 * (self.scattering_rate(self.band.kpoints)
+                        - 2j*np.pi*self.frequency) / self.band.velocities)
         # TODO: discretize the scattering kernel
+    
+    def _calculate_jacobian_sums(self, triangle_coordinates):
+        """
+        Calculate the Jacobian sums for each point and point pair.
+        """
+        self._jacobians = np.linalg.norm(
+            np.cross(triangle_coordinates[:, 1] - triangle_coordinates[:, 0],
+                     triangle_coordinates[:, 2] - triangle_coordinates[:, 0]),
+            axis=-1)
+        # find the bandwidth of the banded matrices, which concerns the
+        # "pure", non-periodic neighbors
+        self._bandwidth = np.max(np.abs(
+            self.band.kfaces - np.roll(self.band.kfaces, 1)))
+        # build diagonal ordered matrices of the jacobian sums
+        self._jacobian_sums = np.zeros(
+            (2*self._bandwidth + 1, len(self.band.kpoints_periodic)))
+        # convert matrix indices to diagonal ordered form
+        # i,j -> bandwidth + i - j, j
+        i_idx = self.band.kfaces_periodic[:, :, None]
+        j_idx = self.band.kfaces_periodic[:, None, :]
+        self._jacobian_sums[self._bandwidth + i_idx - j_idx, j_idx] += \
+            self._jacobians[:, None, None]
+    
+    def _calculate_derivative_sums(self, triangle_coordinates):
+        """
+        Calculate the field-independent part of the derivative term.
+        """
+        self._derivatives = np.zeros(
+            (2*self._bandwidth + 1, len(self.band.kpoints_periodic)), 3)
+        self._derivative_components = (
+            triangle_coordinates - np.roll(triangle_coordinates, -2, axis=1))
+        i_idx = self.band.kfaces_periodic
+        j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
+        self._derivatives[self._bandwidth + i_idx - j_idx, j_idx] += \
+            self._derivative_components
+        self._derivatives[self._bandwidth + j_idx - i_idx, i_idx] -= \
+            self._derivative_components
 
     def _calculate_terms(self):
         """
