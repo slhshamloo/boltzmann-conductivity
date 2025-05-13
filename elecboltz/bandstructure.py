@@ -86,12 +86,24 @@ class BandStructure:
         corresponds to a face in the form [i, j, k], where i, j,
         and k are the indices of the vertices of the face in the
         `kpoints` array.
-    kpoints_periodic : (N, 3) numpy.ndarray
+    kpoints_periodic : (N, 3) numpy.ndarray of float
         The kpoints on the Fermi surface with the duplicate boundary
         points removed.
+    kfaces_periodic : (F, 3) numpy.ndarray of int
+        Same as `kfaces`, but points to the unique points in kpoints_periodic.
     kneighood: list[set[int]]
         Sets containing the neighboring points and the point itself
         for each k-point in the `kpoints_periodic` array.
+    triangle_list : list[list[int]]
+        Lists of triangles containing each vertex in the
+        `kpoints_periodic` array. The unique points also contain the
+        triangles connected through the periodic boundaries.
+    unique_mask : (N,) numpy.ndarray of bool
+        A boolean mask indicating which points in the `kpoints`
+        array are unique and not duplicates.
+    reindex_map : (N,) numpy.ndarray of int
+        A mapping from the original indices of the `kpoints` array
+        to the indices of the unique points in `kpoints_periodic`.
     resolution : Tuple[int, int, int]
         The resolution of the grid used for approximating the Fermi
         surface using the marching cubes algorithm.
@@ -258,18 +270,18 @@ class BandStructure:
         Generate _trianlge_list which contains every triangle
         containing a given vertex.
         """
-        self._triangle_list = [[] for _ in range(len(self.kpoints))]
+        self.triangle_list = [[] for _ in range(len(self.kpoints))]
         for triangle, (i, j, k) in enumerate(self.kfaces):
-            self._triangle_list[i].append(triangle)
-            self._triangle_list[j].append(triangle)
-            self._triangle_list[k].append(triangle)
+            self.triangle_list[i].append(triangle)
+            self.triangle_list[j].append(triangle)
+            self.triangle_list[k].append(triangle)
 
     def _stitch_periodic_boundaries(self, threshold=0.001):
         """
-        Extend the _trianlge_list taking into account the periodic
-        boundaries of the unit cell. Threshold sets the fraction of
-        the resolution that we consider the points to be the same
-        if they are within that distance.
+        Find duplicate points on the periodic boundaries, then make the
+        periodic mesh arrays. Threshold sets the fraction of the
+        resolution that we consider the points to be the same if they
+        are within that distance.
         """
         cell_coordinates = np.round((self.kpoints+self._gvec[None,:])
                                     / (threshold*self._cell_size[None,:]))
@@ -286,8 +298,13 @@ class BandStructure:
                 primary_point = point_bin[0]
                 for point in point_bin[1:]:
                     duplicate_points[point] = primary_point
-                    self._triangle_list[primary_point].extend(
-                        self._triangle_list[point])
+                    self.triangle_list[primary_point].extend(
+                        self.triangle_list[point])
+        new_triangle_list = []
+        for i in range(len(self.triangle_list)):
+            if i not in duplicate_points:
+                new_triangle_list.append(self.triangle_list[i])
+        self.triangle_list = new_triangle_list
         self._build_periodic_mesh(duplicate_points)
     
     def _build_periodic_mesh(self, duplicate_points):
@@ -295,19 +312,19 @@ class BandStructure:
         Build the periodic kpoints and kfaces arrays by removing
         duplicate points and reindexing.
         """
-        duplicate_mask = np.full(len(self.kpoints), True)
-        duplicate_mask[list(duplicate_points.keys())] = False
-        self.kpoints_periodic = self.kpoints[duplicate_mask]
-        self.reindex_map = np.cumsum(duplicate_mask) - 1
-        kfaces_periodic = self.kfaces.copy()
+        self.unique_mask = np.full(len(self.kpoints), True)
+        self.unique_mask[list(duplicate_points.keys())] = False
+        self.kpoints_periodic = self.kpoints[self.unique_mask]
+        self.reindex_map = np.cumsum(self.unique_mask) - 1
+        self.kfaces_periodic = self.kfaces.copy()
         for i, face in enumerate(self.kfaces):
             for j, point in enumerate(face):
                 if point in duplicate_points:
                     self.reindex_map[point] = self.reindex_map[
-                        duplicate_points[point]] 
-                kfaces_periodic[i, j] = self.reindex_map[point]
+                        duplicate_points[point]]
+                self.kfaces_periodic[i, j] = self.reindex_map[point]
         self.kneighborhood = [set() for _ in range(len(self.kpoints_periodic))]
-        for i, face in enumerate(kfaces_periodic):
+        for i, face in enumerate(self.kfaces_periodic):
             for j, point in enumerate(face):
                 for k in range(3):
                     self.kneighborhood[point].add(face[k])
