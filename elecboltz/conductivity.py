@@ -356,14 +356,23 @@ class Conductivity:
                 self.jacobian_sums[self._bandwidth - shift]
                 * (self._inverse_scattering_length
                    + np.roll(self._inverse_scattering_length, shift))
-                ) / 120
-        # alpha_{ij} * (gamma^i+gamma^j) / 60 + alpha(i,j,k) * gamma^k / 120
-        i_idx = self.band.kfaces_periodic[:, :, None, None]
-        j_idx = self.band.kfaces_periodic[:, None, :, None]
-        k_idx = self.band.kfaces_periodic[:, None, None, :]
+                ) / 60
+        # alpha(i,j,k) * gamma^k / 120
+        i_idx = self.band.kfaces_periodic[:, 0]
+        j_idx = self.band.kfaces_periodic[:, 1]
+        k_idx = self.band.kfaces_periodic[:, 2]
         self._out_scattering[(self._bandwidth+i_idx-j_idx) % n, j_idx] += (
-            self._jacobians[:, None, None, None]
-            * self._inverse_scattering_length[k_idx]) / 120
+            self._jacobians * self._inverse_scattering_length[k_idx]) / 120
+        self._out_scattering[(self._bandwidth+j_idx-i_idx) % n, i_idx] += (
+            self._jacobians * self._inverse_scattering_length[k_idx]) / 120
+        self._out_scattering[(self._bandwidth+k_idx-i_idx) % n, i_idx] += (
+            self._jacobians * self._inverse_scattering_length[j_idx]) / 120
+        self._out_scattering[(self._bandwidth+i_idx-k_idx) % n, k_idx] += (
+            self._jacobians * self._inverse_scattering_length[j_idx]) / 120
+        self._out_scattering[(self._bandwidth+k_idx-j_idx) % n, j_idx] += (
+            self._jacobians * self._inverse_scattering_length[i_idx]) / 120
+        self._out_scattering[(self._bandwidth+j_idx-k_idx) % n, k_idx] += (
+            self._jacobians * self._inverse_scattering_length[i_idx]) / 120
 
     def _build_derivative_matrix(self):
         """Calculate the derivative matrix (D)"""
