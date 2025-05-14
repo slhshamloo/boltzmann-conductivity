@@ -5,7 +5,6 @@ from skimage.measure import marching_cubes
 # units
 from scipy.constants import hbar, eV, angstrom
 # type hinting
-from typing import Union
 from collections.abc import Collection
 # default dictionary for point hashing
 from collections import defaultdict
