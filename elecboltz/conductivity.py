@@ -282,9 +282,9 @@ class Conductivity:
             triangle_coordinates - np.roll(triangle_coordinates, -2, axis=1))
         i_idx = self.band.kfaces_periodic
         j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
-        self._derivatives[self._bandwidth + (i_idx - j_idx) % n, j_idx] += \
+        self._derivatives[(self._bandwidth+i_idx-j_idx) % n, j_idx] += \
             self._derivative_components
-        self._derivatives[self._bandwidth + (j_idx - i_idx) % n, i_idx] -= \
+        self._derivatives[(self._bandwidth+j_idx-i_idx) % n, i_idx] -= \
             self._derivative_components
 
     def _calculate_terms(self):
