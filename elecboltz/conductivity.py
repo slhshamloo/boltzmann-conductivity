@@ -1,6 +1,4 @@
 import numpy as np
-import scipy.sparse as sp
-import opt_einsum
 # units
 from scipy.constants import e, hbar, angstrom
 # type hinting
