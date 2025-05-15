@@ -78,7 +78,7 @@ class Conductivity:
     -----
     """
     def __init__(self, band: BandStructure, field: Collection[float] = None,
-                 field_magnitude: float = 1.0,
+                 field_magnitude: float | None = None,
                  field_direction: Collection[float] = None,
                  scattering_rate: Callable | float | None = None,
                  scattering_kernel: Callable | None = None,
@@ -121,7 +121,14 @@ class Conductivity:
                               derivative=True)
         if name in ['field_magnitude', 'field_direction']:
             if self._derivative_term is not None:
-                self._derivative_term *= value / self.field_magnitude
+                if self.field_magnitude is not None:
+                    self._derivative_term *= value / self.field_magnitude
+                elif self.field is not None:
+                    self._derivative_term *= \
+                        value / np.linalg.norm(np.array(self.field))
+                else:
+                    raise ValueError(
+                        "Either field or field_magnitude must be set.")
         super().__setattr__(name, value)
 
     def calculate(self, i: Collection[int] | int | None = None,
