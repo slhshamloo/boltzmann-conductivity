@@ -262,7 +262,7 @@ class Conductivity:
         # find the bandwidth of the banded matrices, which concerns the
         # "pure", non-periodic neighbors
         self._bandwidth = np.max(np.abs(
-            self.band.kfaces - np.roll(self.band.kfaces, 1)))
+            self.band.kfaces - np.roll(self.band.kfaces, 1, axis=1)))
         # build diagonal ordered matrices of the jacobian sums
         n = len(self.band.kpoints_periodic)
         self._jacobian_sums = np.zeros((2*self._bandwidth + 1, n))
