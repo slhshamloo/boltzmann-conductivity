@@ -103,7 +103,7 @@ class Conductivity:
         self._derivative_components = None
         self._derivatives = None
         self._inverse_scattering_length = None
-        self._out_scattering_term = None
+        self._out_scattering = None
         self._derivative_term = None
         self._differential_operator = None
         self._are_elements_saved = False
@@ -145,14 +145,14 @@ class Conductivity:
             The conductivity tensor component(s) as an ixj matrix.
         """
         if not self._are_elements_saved:
-            self._generate_elements()
+            self._build_elements()
         if self._differential_operator is None:
             self._build_differential_operator()
         
         i, j, j_calc = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
         linear_solution = solve_cyclic_banded(
-            self._differential_operator, self._projected_velocities[:, j_calc])
+            self._differential_operator, self._velocity_projections[:, j_calc])
         # reuse previously calculated solutions
         for col in j:
             if col in j_calc:
@@ -163,7 +163,7 @@ class Conductivity:
                 linear_solution = np.insert(
                     linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
-        sigma_result = self._projected_velocities[:, i].T @ linear_solution
+        sigma_result = self._velocity_projections[:, i].T @ linear_solution
         sigma_result *= angstrom**2 * e**2 / (4 * np.pi**3 * hbar)
 
         for idx_row, row in enumerate(i):
@@ -205,7 +205,7 @@ class Conductivity:
             self._are_elements_saved = False
         if scattering:
             self._inverse_scattering_length = None
-            self._out_scattering_term = None
+            self._out_scattering = None
             self._is_scattering_saved = False
         if derivative:
             self._derivative_term = None
@@ -286,7 +286,7 @@ class Conductivity:
             (len(self.band.kpoints_periodic), 3))
         for shift in range(self._bandwidth, -self._bandwidth - 1, -1):
             self._velocity_projections += (
-                self.jacobian_sums[self._bandwidth - shift][:, None]
+                self._jacobian_sums[self._bandwidth - shift][:, None]
                 * np.roll(self._velocities, shift, axis=0)) / 24
 
     def _build_differential_operator(self):
@@ -302,7 +302,7 @@ class Conductivity:
         if self._derivative_term is None:
             self._build_derivative_matrix()
         self._differential_operator = (
-            self._out_scattering_term - e/hbar*angstrom*self._derivative_term)
+            self._out_scattering - e/hbar*angstrom*self._derivative_term)
             # - self._in_scattering_term when implemented
 
     def _discretize_scattering(self):
@@ -318,15 +318,16 @@ class Conductivity:
                 self._calculate_out_scattering_from_kernel()
 
         if isinstance(self.scattering_rate, Callable):
-            self._inverse_scattering_length = (
-                1e12 * self.scattering_rate(self.band.kpoints) / self._vmags)
-        elif self.frequency == 0.0:
-            self._inverse_scattering_length = (
-                1e12 * self.scattering_rate(self.band.kpoints) / self._vmags)
+            scattering = self.scattering_rate(self.band.kpoints)
         else:
-            self._inverse_scattering_length = (
-                1e12 * (self.scattering_rate(self.band.kpoints)
-                        - 2j*np.pi*self.frequency) / self._vmags)
+            scattering = self.scattering_rate
+        # separate the optical conductivity case to avoid making
+        # the number complex when it is not needed
+        if self.frequency == 0.0:
+            self._inverse_scattering_length = 1e12 * scattering / self._vmags
+        else:
+            self._inverse_scattering_length = \
+                1e12 * (scattering - 2j*np.pi*self.frequency) / self._vmags
         # TODO: discretize the scattering kernel
 
     def _calculate_out_scattering_from_kernel(self):
@@ -344,12 +345,12 @@ class Conductivity:
         for shift in range(self._bandwidth, -self._bandwidth - 1, -1):
             # alpha_{ik} * gamma^k / 60
             self._out_scattering[self._bandwidth] += (
-                self.jacobian_sums[self._bandwidth - shift]
+                self._jacobian_sums[self._bandwidth - shift]
                 * np.roll(self._inverse_scattering_length, shift)
                 ) / 60
             # alpha_{ij} * (gamma^i+gamma^j) / 60
             self._out_scattering[self._bandwidth - shift] += (
-                self.jacobian_sums[self._bandwidth - shift]
+                self._jacobian_sums[self._bandwidth - shift]
                 * (self._inverse_scattering_length
                    + np.roll(self._inverse_scattering_length, shift))
                 ) / 60
