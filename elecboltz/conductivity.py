@@ -320,17 +320,14 @@ class Conductivity:
 
         if isinstance(self.scattering_rate, Callable):
             self._inverse_scattering_length = (
-                1e12 * self.scattering_rate(self.band.kpoints)
-                / self.band.velocities)
+                1e12 * self.scattering_rate(self.band.kpoints) / self._vmags)
         elif self.frequency == 0.0:
             self._inverse_scattering_length = (
-                1e12 * self.scattering_rate(self.band.kpoints)
-                / self.band.velocities)
+                1e12 * self.scattering_rate(self.band.kpoints) / self._vmags)
         else:
             self._inverse_scattering_length = (
                 1e12 * (self.scattering_rate(self.band.kpoints)
-                        - 2j*np.pi*self.frequency)
-                / self.band.velocities)
+                        - 2j*np.pi*self.frequency) / self._vmags)
         # TODO: discretize the scattering kernel
 
     def _calculate_out_scattering_from_kernel(self):
