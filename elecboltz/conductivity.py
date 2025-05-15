@@ -7,6 +7,7 @@ from collections.abc import Collection
 from .bandstructure import BandStructure
 from .solve import solve_cyclic_banded
 
+
 class Conductivity:
     """
     Calculates the conductivity of a material solving the Boltzmann
@@ -163,7 +164,7 @@ class Conductivity:
                     linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
         sigma_result = self._projected_velocities[:, i].T @ linear_solution
-        sigma_result *= e**2 / (4 * np.pi**3 * hbar)
+        sigma_result *= angstrom**2 * e**2 / (4 * np.pi**3 * hbar)
 
         for idx_row, row in enumerate(i):
             for idx_col, col in enumerate(j):
@@ -301,7 +302,7 @@ class Conductivity:
         if self._derivative_term is None:
             self._build_derivative_matrix()
         self._differential_operator = (
-            self._out_scattering_term - e / hbar * self._derivative_term)
+            self._out_scattering_term - e/hbar*angstrom*self._derivative_term)
             # - self._in_scattering_term when implemented
 
     def _discretize_scattering(self):
