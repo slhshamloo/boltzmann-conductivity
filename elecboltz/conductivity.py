@@ -96,7 +96,7 @@ class Conductivity:
         self._velocities = None
         self._vmags = None
         self._vhats = None
-        self._velocity_projections = None
+        self._vhat_projections = None
         self._bandwidth = None
         self._jacobians = None
         self._jacobian_sums = None
@@ -159,7 +159,7 @@ class Conductivity:
         i, j, j_calc = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
         linear_solution = solve_cyclic_banded(
-            self._differential_operator, self._velocity_projections[:, j_calc])
+            self._differential_operator, self._vhat_projections[:, j_calc])
         # reuse previously calculated solutions
         for col in j:
             if col in j_calc:
@@ -170,7 +170,7 @@ class Conductivity:
                 linear_solution = np.insert(
                     linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
-        sigma_result = self._velocity_projections[:, i].T @ linear_solution
+        sigma_result = self._vhat_projections[:, i].T @ linear_solution
         sigma_result *= e**2 / (4 * np.pi**3 * hbar)
 
         for idx_row, row in enumerate(i):
@@ -208,7 +208,7 @@ class Conductivity:
             self._jacobian_sums = None
             self._derivative_components = None
             self._derivatives = None
-            self._velocity_projections = None
+            self._vhat_projections = None
             self._are_elements_saved = False
         if scattering:
             self._inverse_scattering_length = None
@@ -289,16 +289,14 @@ class Conductivity:
             self._derivative_components / angstrom
 
     def _calculate_velocity_projections(self):
-        self._velocity_projections = np.zeros(
-            (len(self.band.kpoints_periodic), 3))
+        self._vhat_projections = np.zeros((len(self.band.kpoints_periodic), 3))
         for shift in range(-self._bandwidth, self._bandwidth + 1):
-            self._velocity_projections += np.roll(
+            self._vhat_projections += np.roll(
                 self._jacobian_sums[self._bandwidth + shift][:, None]
-                * self._velocities / 24, shift, axis=0)
+                * self._vhats / 24, shift, axis=0)
         # alpha_i * v^i / 24
-        self._velocity_projections += (
-            self._jacobian_sums[self._bandwidth][:, None]
-            * self._velocities / 24)
+        self._vhat_projections += (
+            self._jacobian_sums[self._bandwidth][:, None] * self._vhats / 24)
 
     def _build_differential_operator(self):
         """
