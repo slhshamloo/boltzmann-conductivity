@@ -171,7 +171,7 @@ class Conductivity:
                     linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
         sigma_result = self._velocity_projections[:, i].T @ linear_solution
-        sigma_result *= angstrom**2 * e**2 / (4 * np.pi**3 * hbar)
+        sigma_result *= e**2 / (4 * np.pi**3 * hbar)
 
         for idx_row, row in enumerate(i):
             for idx_col, col in enumerate(j):
@@ -246,6 +246,10 @@ class Conductivity:
         self._vmags = np.linalg.norm(self._velocities, axis=1)
         self._vhats = self._velocities / self._vmags[:, None]
         triangle_coordinates = self.band.kpoints[self.band.kfaces]
+        # find the bandwidth of the banded matrices, which concerns the
+        # "pure", non-periodic neighbors
+        self._bandwidth = np.max(np.abs(
+            self.band.kfaces - np.roll(self.band.kfaces, 1, axis=1)))
         self._calculate_jacobian_sums(triangle_coordinates)
         self._calculate_derivative_sums(triangle_coordinates)
         self._calculate_velocity_projections()
@@ -258,11 +262,7 @@ class Conductivity:
         self._jacobians = np.linalg.norm(
             np.cross(triangle_coordinates[:, 1] - triangle_coordinates[:, 0],
                      triangle_coordinates[:, 2] - triangle_coordinates[:, 0]),
-            axis=-1)
-        # find the bandwidth of the banded matrices, which concerns the
-        # "pure", non-periodic neighbors
-        self._bandwidth = np.max(np.abs(
-            self.band.kfaces - np.roll(self.band.kfaces, 1, axis=1)))
+            axis=-1) / angstrom**2
         # build diagonal ordered matrices of the jacobian sums
         n = len(self.band.kpoints_periodic)
         self._jacobian_sums = np.zeros((2*self._bandwidth + 1, n))
@@ -284,17 +284,21 @@ class Conductivity:
         i_idx = self.band.kfaces_periodic
         j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
         self._derivatives[(self._bandwidth+i_idx-j_idx) % n, j_idx] += \
-            self._derivative_components
+            self._derivative_components / angstrom
         self._derivatives[(self._bandwidth+j_idx-i_idx) % n, i_idx] -= \
-            self._derivative_components
+            self._derivative_components / angstrom
 
     def _calculate_velocity_projections(self):
         self._velocity_projections = np.zeros(
             (len(self.band.kpoints_periodic), 3))
-        for shift in range(self._bandwidth, -self._bandwidth - 1, -1):
-            self._velocity_projections += (
-                self._jacobian_sums[self._bandwidth - shift][:, None]
-                * np.roll(self._velocities, shift, axis=0)) / 24
+        for shift in range(-self._bandwidth, self._bandwidth + 1):
+            self._velocity_projections += np.roll(
+                self._jacobian_sums[self._bandwidth + shift][:, None]
+                * self._velocities / 24, shift, axis=0)
+        # alpha_i * v^i / 24
+        self._velocity_projections += (
+            self._jacobian_sums[self._bandwidth][:, None]
+            * self._velocities / 24)
 
     def _build_differential_operator(self):
         """
@@ -309,7 +313,7 @@ class Conductivity:
         if self._derivative_term is None:
             self._build_derivative_matrix()
         self._differential_operator = (
-            self._out_scattering - e/hbar*angstrom*self._derivative_term)
+            self._out_scattering - e/hbar*self._derivative_term)
             # - self._in_scattering_term when implemented
 
     def _discretize_scattering(self):
@@ -349,18 +353,23 @@ class Conductivity:
         """Calculate the out-scattering matrix (Gamma)"""
         n = len(self.band.kpoints_periodic)
         self._out_scattering = np.zeros((2*self._bandwidth + 1, n))
-        for shift in range(self._bandwidth, -self._bandwidth - 1, -1):
-            # alpha_{ik} * gamma^k / 60
-            self._out_scattering[self._bandwidth] += (
-                self._jacobian_sums[self._bandwidth - shift]
-                * np.roll(self._inverse_scattering_length, shift)
-                ) / 60
-            # alpha_{ij} * (gamma^i+gamma^j) / 60
-            self._out_scattering[self._bandwidth - shift] += (
-                self._jacobian_sums[self._bandwidth - shift]
-                * (self._inverse_scattering_length
-                   + np.roll(self._inverse_scattering_length, shift))
-                ) / 60
+        # alpha_{ij} * gamma^j / 60 delta_{<ij>}
+        self._out_scattering += \
+            self._jacobian_sums * self._inverse_scattering_length[None, :] / 60
+        for shift in range(-self._bandwidth, self._bandwidth + 1):
+            # sum_k alpha_{ik} * gamma^k / 60 delta_{ij}
+            # each element is multiplied by the corresponding gamma,
+            # then it is shifted to match the i of each element in
+            # the main diagonal, which is the same as the j of the element
+            self._out_scattering[self._bandwidth] += np.roll(
+                self._jacobian_sums[self._bandwidth + shift]
+                * self._inverse_scattering_length / 60, shift)
+            # alpha_{ij} * gamma^i / 60 delta_{<ij>}
+            # before multiplication, a shift is done to match the
+            # corresponding i instead of j
+            self._out_scattering[self._bandwidth + shift] += (
+                self._jacobian_sums[self._bandwidth + shift]
+                * np.roll(self._inverse_scattering_length, -shift)) / 60
         # alpha(i,j,k) * gamma^k / 120
         i_idx = self.band.kfaces_periodic[:, 0]
         j_idx = self.band.kfaces_periodic[:, 1]
