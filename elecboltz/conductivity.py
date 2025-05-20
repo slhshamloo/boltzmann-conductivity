@@ -231,7 +231,6 @@ class Conductivity:
         j_calc = []
         for col in j:
             if self._saved_solutions[col] is None:
-                self._saved_solutions[col] = []
                 j_calc.append(col)
         return i, j, j_calc
 
@@ -268,10 +267,12 @@ class Conductivity:
         self._jacobian_sums = np.zeros((2*self._bandwidth + 1, n))
         # convert matrix indices to diagonal ordered form
         # i,j -> bandwidth + i - j, j
-        i_idx = self.band.kfaces_periodic[:, :, None]
-        j_idx = self.band.kfaces_periodic[:, None, :]
-        self._jacobian_sums[(self._bandwidth+i_idx-j_idx) % n, j_idx] += \
-            self._jacobians[:, None, None]
+        i_idx = self.band.kfaces_periodic[:, 0]
+        j_idx = self.band.kfaces_periodic[:, 1]
+        k_idx = self.band.kfaces_periodic[:, 2]
+        self._add_to_banded(self._jacobian_sums, i_idx, j_idx, k_idx,
+                            self._jacobians, self._jacobians, self._jacobians,
+                            self._jacobians, self._jacobians, self._jacobians)
     
     def _calculate_derivative_sums(self, triangle_coordinates):
         """
@@ -283,10 +284,12 @@ class Conductivity:
             triangle_coordinates - np.roll(triangle_coordinates, -2, axis=1))
         i_idx = self.band.kfaces_periodic
         j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
-        self._derivatives[(self._bandwidth+i_idx-j_idx) % n, j_idx] += \
-            self._derivative_components / angstrom
-        self._derivatives[(self._bandwidth+j_idx-i_idx) % n, i_idx] -= \
-            self._derivative_components / angstrom
+        np.add.at(
+            self._derivatives, ((self._bandwidth+i_idx-j_idx) % n, j_idx),
+            self._derivative_components)
+        np.add.at(
+            self._derivatives, ((self._bandwidth+j_idx-i_idx) % n, i_idx),
+            -self._derivative_components)
 
     def _calculate_velocity_projections(self):
         self._vhat_projections = np.zeros((len(self.band.kpoints_periodic), 3))
@@ -349,8 +352,8 @@ class Conductivity:
 
     def _build_out_scattering_matrix(self):
         """Calculate the out-scattering matrix (Gamma)"""
-        n = len(self.band.kpoints_periodic)
-        self._out_scattering = np.zeros((2*self._bandwidth + 1, n))
+        self._out_scattering = np.zeros((2*self._bandwidth + 1, 
+                                         self.band.kpoints_periodic.shape[0]))
         # alpha_{ij} * gamma^j / 60 delta_{<ij>}
         self._out_scattering += \
             self._jacobian_sums * self._inverse_scattering_length[None, :] / 60
@@ -372,18 +375,11 @@ class Conductivity:
         i_idx = self.band.kfaces_periodic[:, 0]
         j_idx = self.band.kfaces_periodic[:, 1]
         k_idx = self.band.kfaces_periodic[:, 2]
-        self._out_scattering[(self._bandwidth+i_idx-j_idx) % n, j_idx] += (
-            self._jacobians * self._inverse_scattering_length[k_idx]) / 120
-        self._out_scattering[(self._bandwidth+j_idx-i_idx) % n, i_idx] += (
-            self._jacobians * self._inverse_scattering_length[k_idx]) / 120
-        self._out_scattering[(self._bandwidth+k_idx-i_idx) % n, i_idx] += (
-            self._jacobians * self._inverse_scattering_length[j_idx]) / 120
-        self._out_scattering[(self._bandwidth+i_idx-k_idx) % n, k_idx] += (
-            self._jacobians * self._inverse_scattering_length[j_idx]) / 120
-        self._out_scattering[(self._bandwidth+k_idx-j_idx) % n, j_idx] += (
-            self._jacobians * self._inverse_scattering_length[i_idx]) / 120
-        self._out_scattering[(self._bandwidth+j_idx-k_idx) % n, k_idx] += (
-            self._jacobians * self._inverse_scattering_length[i_idx]) / 120
+        self._add_to_banded(
+            self._out_scattering, i_idx, j_idx, k_idx,
+            add_ij=self._jacobians*self._inverse_scattering_length[k_idx]/120,
+            add_jk=self._jacobians*self._inverse_scattering_length[i_idx]/120,
+            add_ik=self._jacobians*self._inverse_scattering_length[j_idx]/120)
 
     def _build_derivative_matrix(self):
         """Calculate the derivative matrix (D)"""
@@ -397,3 +393,29 @@ class Conductivity:
                     self._derivatives, self.field_direction)
         else:
             self._derivative_term = np.dot(self._derivatives, self.field) / 6
+    
+    def _add_to_banded(self, banded_matrix, i_idx, j_idx, k_idx,
+                       add_ii=None, add_jj=None, add_kk=None,
+                       add_ij=None, add_jk=None, add_ik=None):
+        n = self.band.kpoints_periodic.shape[0]
+        if add_ii is not None:
+            np.add.at(banded_matrix,(self._bandwidth, i_idx), add_ii)
+        if add_jj is not None:
+            np.add.at(banded_matrix,(self._bandwidth, j_idx), add_jj)
+        if add_kk is not None:
+            np.add.at(banded_matrix,(self._bandwidth, k_idx), add_kk)
+        if add_ij is not None:
+            np.add.at(banded_matrix,
+                    ((self._bandwidth+i_idx-j_idx) % n, j_idx), add_ij)
+            np.add.at(banded_matrix,
+                    ((self._bandwidth+j_idx-i_idx) % n, i_idx), add_ij)
+        if add_jk is not None:
+            np.add.at(banded_matrix,
+                    ((self._bandwidth+j_idx-k_idx) % n, k_idx), add_jk)
+            np.add.at(banded_matrix,
+                    ((self._bandwidth+k_idx-j_idx) % n, j_idx), add_jk)
+        if add_ik is not None:
+            np.add.at(banded_matrix,
+                    ((self._bandwidth+i_idx-k_idx) % n, k_idx), add_ik)
+            np.add.at(banded_matrix,
+                    ((self._bandwidth+k_idx-i_idx) % n, i_idx), add_ik)
