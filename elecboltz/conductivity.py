@@ -244,7 +244,7 @@ class Conductivity:
             self.band.kpoints_periodic[:, 2]))
         self._vmags = np.linalg.norm(self._velocities, axis=1)
         self._vhats = self._velocities / self._vmags[:, None]
-        triangle_coordinates = self.band.kpoints[self.band.kfaces]
+        triangle_coordinates = self.band.kpoints[self.band.kfaces] / angstrom
         # find the bandwidth of the banded matrices, which concerns the
         # "pure", non-periodic neighbors
         self._bandwidth = np.max(np.abs(
@@ -261,7 +261,7 @@ class Conductivity:
         self._jacobians = np.linalg.norm(
             np.cross(triangle_coordinates[:, 1] - triangle_coordinates[:, 0],
                      triangle_coordinates[:, 2] - triangle_coordinates[:, 0]),
-            axis=-1) / angstrom**2
+            axis=-1)
         # build diagonal ordered matrices of the jacobian sums
         n = len(self.band.kpoints_periodic)
         self._jacobian_sums = np.zeros((2*self._bandwidth + 1, n))
@@ -280,8 +280,8 @@ class Conductivity:
         """
         n = len(self.band.kpoints_periodic)
         self._derivatives = np.zeros((2*self._bandwidth + 1, n, 3))
-        self._derivative_components = (
-            triangle_coordinates - np.roll(triangle_coordinates, -2, axis=1))
+        self._derivative_components = \
+            triangle_coordinates - np.roll(triangle_coordinates, -2, axis=1)
         i_idx = self.band.kfaces_periodic
         j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
         np.add.at(
