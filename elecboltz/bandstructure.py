@@ -1,12 +1,13 @@
 import numpy as np
 import sympy
-# marching squares
-from skimage.measure import find_contours
+import pymeshlab
+from skimage.measure import marching_cubes
 # units
 from scipy.constants import hbar, eV, angstrom
 # type hinting
-from typing import Union
 from collections.abc import Collection
+# default dictionary for point hashing
+from collections import defaultdict
 # conversion from energy gradiennt units to m/s for velocity
 velocity_units = 1e-3 * eV * angstrom / hbar
 
@@ -30,36 +31,28 @@ class BandStructure:
         The chemical potential in milli eV.
     unit_cell : Collection[float]
         The dimensions of the unit cell in angstrom.
-    atoms_per_cell : int
+    atoms_per_cell : int, optional
         The number of atoms in the specified unit cell. This is not
         necessarily the exact number of atoms; it should be the number
         of conducting units in the cell. So, for example, this is equal
         to 2 for LSCO, which has the cuprate atoms in a BCC cell.
-        The default is 1.
     bandparams : dict, optional
         The parameters of the dispersion relation. Energy units are
-        milli eV and distance units are angstrom. The default is {}.
+        milli eV and distance units are angstrom.
     axis_names : str or Collection[str], optional
         The names of the unit cell axes. Must be parsable by
-        `sympy.symbols`. The default is ['a', 'b', 'c'].
+        `sympy.symbols`.
     wavevector_names : str or Collection[str], optional
         The names of the wavevector components. Must be parsable by
-        `sympy.symbols`. The default is ['kx', 'ky', 'kz'].
-    res : int or collection of int, optional
-        The "resolution" of the grid (side-length) used for
-        approximating each 2D layer of the Fermi surface using the
-        marching squares algorithm. If a single integer is given, it
-        is taken as the resolution for both axes in k-space. If a
-        collection of integers is given, each integer indicates the
-        resolution for each axis in k-space. Can be set later when
-        discretizing the Fermi surface. The default is 50.
-    npoints : int, optional
-        The number of points used for approximating each 2D layer of
-        the Fermi surface. The default is 100.
-    nlayers : int, optional
-        The number of 2D layers for approximating the 3D Fermi
-        surface. Can be set later when discretizing the Fermi
-        surface. The default is 10.
+        `sympy.symbols`.
+    resolution : int or collection of int, optional
+        The "resolution" (side-length) of the grid in k-space used for
+        approximating the Fermi surface using the marching cubes
+        algorithm. If a single integer is given, it is taken as the
+        resolution for every axis of the k-space. If a collection of
+        integers is given, each integer indicates the resolution for
+        each axis in k-space. Can be set later when discretizing the
+        Fermi surface.
 
     Attributes
     ----------
@@ -84,27 +77,22 @@ class BandStructure:
         The velocity function for the dispersion relation. Takes
         kx, ky, and kz in angstrome^-1 as arguments and returns
         the velocity vector as a list [vx, vy, vz] in units of m/s.
-    res : Tuple[int, int]
-        The resolution of the grid (side-length of each dimension) used
-        for approximating each 2D layer of the Fermi surface using the
-        marching squares algorithm. Updating this will automatically
-        erase the current Fermi surface discretization.
-    npoints : int, optional
-        The number of points used for approximating each 2D layer of
-        the Fermi surface. The number of points is enforced by
-        interpolating the contours found by marching squares.
-        Updating this will automatically erase the current Fermi
-        surface discretization.
-    nlayers : int
-        The number of 2D layers for approximating the 3D Fermi surface.
-        updating this will automatically erase the current Fermi
-        surface discretization.
-    kx : list[numpy.ndarray]
-        The x coordinates of the Fermi surface points for each layer.
-    ky : list[numpy.ndarray]
-        The y coordinates of the Fermi surface points for each layer.
-    kz : numpy.ndarray
-        The z coordinates of each layer of the Fermi surface.
+    kpoints : (N, 3) numpy.ndarray
+        The discretized k-points on the Fermi surface. Each row
+        corresponds to a k-point in the form [kx, ky, kz].
+    kfaces : (F, 3) numpy.ndarray
+        The faces of the triangulated surface in k-space. Each row
+        corresponds to a face in the form [i, j, k], where i, j,
+        and k are the indices of the vertices of the face in the
+        `kpoints` array.
+    kpoints_periodic : (N, 3) numpy.ndarray of float
+        The kpoints on the Fermi surface with the duplicate boundary
+        points removed.
+    kfaces_periodic : (F, 3) numpy.ndarray of int
+        Same as `kfaces`, but points to the unique points in kpoints_periodic.
+    resolution : Tuple[int, int, int]
+        The resolution of the grid used for approximating the Fermi
+        surface using the marching cubes algorithm.
     axis_names : str or Collection[str]
         The names of the unit cell axes.
     wavevector_names : str or Collection[str]
@@ -114,10 +102,9 @@ class BandStructure:
             self, dispersion: str, chemical_potential: float,
             unit_cell: Collection[float], atoms_per_cell: int = 1,
             bandparams: dict = {},
-            axis_names: Union[Collection[str], str] = ['a', 'b', 'c'],
-            wavevector_names: Union[Collection[str], str] = ['kx', 'ky', 'kz'],
-            res: Union[int, Collection[int]] = 100,
-            npoints: int = 100, nlayers: int = 10, **kwargs):
+            axis_names: Collection[str] | str = ['a', 'b', 'c'],
+            wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
+            resolution: int | Collection[int] = 20, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('bandparams', bandparams)
@@ -126,104 +113,103 @@ class BandStructure:
         self.atoms_per_cell = atoms_per_cell
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
-        self.res = res
-        self.nlayers = nlayers
-        self.npoints = npoints
+        self.resolution = resolution
         self._parse_dispersion()
-        self.kx = []
-        self.ky = []
-        self.kz = np.empty(0)
+        self.kpoints = np.empty((0, 3))
 
     def __setattr__(self, name, value):
-        if name == 'res':
+        if name == 'resolution':
             if isinstance(value, int):
-                value = (value, value)
-            elif isinstance(value, tuple) and len(value) == 2:
+                value = (value, value, value)
+            elif isinstance(value, Collection) and len(value) == 3:
                 pass
             else:
-                raise ValueError("res must be an int or a tuple of two ints")
+                raise ValueError("resolution must either be an int "
+                                 "or a collection of three ints")
         elif name == 'dispersion' or name == 'bandparams':
             super().__setattr__(name, value)
             self._parse_dispersion()
-        if name in ['chemical_potential', 'unit_cell',
-                    'res', 'npoints', 'nlayers']:
-            self.kx = []
-            self.ky = []
-            self.kz = np.empty(0)
+        if name in ['chemical_potential', 'unit_cell', 'resolution']:
+            self.kpoints = np.empty((0, 3))
         super().__setattr__(name, value)
     
-    def discretize(self, res: Union[int, Collection[int], None] = None,
-                   nlayers: Union[int, None] = None):
+    def discretize(self, resolution: int | Collection[int] | None = None):
         """
-        Discretize the Fermi surface based on the specified number
-        of points aThe "resolution" of the grid (side-length) used for
-        approximating each 2D layer of the Fermi surface using the
-        marching squares algorithm.nd layers.
+        Discretize the Fermi surface using the marching cubes algorithm.
 
         Parameters
         ----------
         res : int, optional
-            The "resolution" of the grid (side-length) used for
-            approximating each 2D layer of the Fermi surface using the
-            marching squares algorithm. If a single integer is given, it
-            is taken as the resolution for both axes in k-space. If a
-            collection of integers is given, each integer indicates the
-            resolution for each axis in k-space. If not provided, takes
+            The "resolution" (side-length) of the grid in k-space used for
+            approximating the Fermi surface using the marching cubes
+            algorithm. If a single integer is given, it is taken as the
+            resolution for every axis of the k-space. If a collection of
+            integers is given, each integer indicates the resolution for
+            each axis in k-space. Can be set later when discretizing the
+            Fermi surface. If not provided, takes
             the value from the class attribute.
-        nlayers : int, optional
-            The number of 2D layers for approximating the 3D Fermi surface.
-            If not provided, takes the value from the class attribute.
         """
-        self.res = res if res is not None else self.res
-        self.nlayers = nlayers if nlayers is not None else self.nlayers
+        self.resolution = (resolution if resolution is not None
+                           else self.resolution)
+        self._gvec = np.array([np.pi / a for a in self.unit_cell])
+        self._cell_size = 2 * self._gvec / np.array(self.resolution)
+        kgrid = np.mgrid[
+            -self._gvec[0] : self._gvec[0]+self._cell_size[0]
+                :(self.resolution[0]+1)*1j,
+            -self._gvec[1] : self._gvec[1]+self._cell_size[1]
+                :(self.resolution[1]+1)*1j,
+            -self._gvec[2] : self._gvec[2]+self._cell_size[2]
+                : (self.resolution[2]+1)*1j]
+        self.kpoints, self.kfaces, _, _ = marching_cubes(
+            self.energy_func(*kgrid), level=self.chemical_potential)
+        # convert back to angstrom^-1
+        self.kpoints *= self._cell_size
+        self.kpoints -= self._gvec
+        self._stitch_periodic_boundaries()
 
-        # unit cell in reciprocal space, in angstrom^-1
-        gx, gy, gz = [np.pi / a for a in self.unit_cell]
-        self._kgrid = np.ogrid[-gy:gy:self.res[1]*1j, -gx:gx:self.res[0]*1j]
-        self.kx = []
-        self.ky = []
-        self.kz = np.linspace(-self.atoms_per_cell*gz, self.atoms_per_cell*gz,
-                              self.nlayers, endpoint=False)
-        # shift kz to make it centered around zero
-        self.kz += (self.kz[1] - self.kz[0]) / 2
-
-        for layer in range(self.nlayers):
-            self.kx.append(np.empty(0))
-            self.ky.append(np.empty(0))
-            # find fermi surface contours using marching squares
-            contours = find_contours(self.energy_func(
-                self._kgrid[1], self._kgrid[0], self.kz[layer]),
-                self.chemical_potential)
-            # TODO: handle the case where no contours are found
-            self._add_contours_in_order(contours, layer)
-            # convert back into angstrom^-1
-            self.kx[layer] *= 2 * gx / self.res[0]
-            self.kx[layer] -= gx
-            self.ky[layer] *= 2 * gy / self.res[1]
-            self.ky[layer] -= gy
+        # self._generate_point_cloud()
+        # normals = np.column_stack(self.velocity_func(
+        #     self.kpoints[:, 0], self.kpoints[:, 1], self.kpoints[:, 2]))
+        # normals /= np.linalg.norm(normals, axis=1)[:, np.newaxis]
+        # ms = pymeshlab.MeshSet()
+        # ms.add_mesh(pymeshlab.Mesh(
+        #     vertex_matrix=self.kpoints, v_normals_matrix=normals))
+        # ms.apply_filter("generate_surface_reconstruction_screened_poisson",
+        #                 depth=4)
+        # ms.apply_filter("generate_sampling_poisson_disk", samplenum=1000)
+        # ms.apply_filter("generate_surface_reconstruction_screened_poisson",
+        #                 depth=4)
+        # self.kpoints = ms.current_mesh().vertex_matrix()
+        # self.kfaces = ms.current_mesh().face_matrix()
     
-    def apply_periodic_boundary(self, k: Union[np.ndarray, float], axis: int):
+    def periodic_distance(self, k1: np.ndarray, k2: np.ndarray,
+                          broadcast: bool = False) -> np.ndarray:
         """
-        Apply periodic boundary conditions to the wavevector component
-        `k` in the axis `axis`.
+        Calculate the periodic distance between two k-points.
 
         Parameters
         ----------
-        k : np.ndarray or float
-            The wavevector component to apply periodic boundary
-            conditions to.
-        axis : int
-            The axis to apply periodic boundary conditions to.
-            0 for kx, 1 for ky, and 2 for kz.
-        
+        k1 : np.ndarray
+            The first k-point.
+        k2 : np.ndarray
+            The second k-point.
+        broadcast : bool, optional
+            If True, assumes that k1 and k2 are 2D arrays containing
+            multiple k-points and broadcasts the calculation
+            accordingly. If False, assumes that k1 and k2 are 1D
+            arrays containing a single k-point.
+
         Returns
         -------
-        np.ndarray or float
-            The wavevector component with periodic boundary conditions
-            applied.
+        float
+            k2 - k1 with periodic boundary conditions applied.
         """
-        axislen = np.pi / self.unit_cell[axis]
-        return (k+axislen) % (2*axislen) - axislen
+        gvec = self._gvec[None, :] if broadcast else self._gvec
+        kdiff = k2 - k1
+        kdiff += gvec
+        kdiff %= 2 * gvec
+        kdiff -= gvec
+        return kdiff
 
     def calculate_mass(self):
         """
@@ -243,53 +229,101 @@ class BandStructure:
         Parse the dispersion relation and extract the necessary
         information for further calculations.
         """
-        all_symbols = (sympy.symbols(self.wavevector_names)
-                       + sympy.symbols(self.axis_names)
+        ksymbols = sympy.symbols(self.wavevector_names)
+        all_symbols = (ksymbols + sympy.symbols(self.axis_names)
                        + sympy.symbols(list(self.bandparams.keys())))
         self._energy_sympy = sympy.sympify(self.dispersion)
         self._velocities_sympy = [
             sympy.diff(self._energy_sympy, k) * velocity_units
             for k in sympy.symbols(self.wavevector_names)]
+        for i, v in enumerate(self._velocities_sympy):
+            if v == 0:
+                self._velocities_sympy[i] = f"numpy.zeros_like({ksymbols[i]})"
         self._energy_func_full = sympy.lambdify(
             all_symbols, self._energy_sympy)
-        self._velocity_funcs_full = [sympy.lambdify(all_symbols, vexpr)
-                                     for vexpr in self._velocities_sympy]
+        self._velocity_funcs_full = [
+            sympy.lambdify(all_symbols, vexpr, 'numpy')
+            for vexpr in self._velocities_sympy]
         self.energy_func = lambda kx, ky, kz: self._energy_func_full(
             kx, ky, kz, *self.unit_cell, **self.bandparams)
         self.velocity_func = lambda kx, ky, kz: [
             vfunc(kx, ky, kz, *self.unit_cell, **self.bandparams)
             for vfunc in self._velocity_funcs_full]
-    
-    def _add_contours_in_order(self, contours, layer):
-        """Add contours to the kx and ky lists in order."""
-        contour_idx = 0
-        while contours:
-            contour = contours.pop(contour_idx)
-            contour = self._interpolate_contour(contour)
-            self.kx[layer] = np.append(self.kx[layer], contour[:, 0])
-            self.ky[layer] = np.append(self.ky[layer], contour[:, 1])
-            # Find closest contour
-            min_distance_squared = np.inf
-            for (i, neighboring_contour) in enumerate(contours):
-                delta_k = np.abs(contour[-1,:] - neighboring_contour[0,:])
-                # periodic boundary conditions, in array units
-                delta_k[0] %= self.res[0]
-                delta_k[1] %= self.res[1]
-                distance_squared = delta_k[0]**2 + delta_k[1]**2
-                if distance_squared < min_distance_squared:
-                    min_distance_squared = distance_squared
-                    contour_idx = i
 
-    def _interpolate_contour(self, contour):
-        """Interpolate the contour to a fixed number of points `npoints`"""
-        dk = np.diff(contour, axis=0)
-        # line segment lengths
-        ds = np.linalg.norm(dk, axis=1)
-        # parametrization of the curve, which is the length along the curve
-        s = np.concatenate(([0], np.cumsum(ds)))
-        interpolated_s = np.linspace(0, s[-1], self.npoints + 1)
-        # remove last point to avoid duplication
-        interpolated_contour = np.column_stack((
-            np.interp(interpolated_s, s, contour[:, 0])[:-1],
-            np.interp(interpolated_s, s, contour[:, 1])[:-1]))
-        return interpolated_contour
+    def _stitch_periodic_boundaries(self, threshold=0.001):
+        """
+        Find duplicate points on the periodic boundaries, then make the
+        periodic mesh arrays. Threshold sets the fraction of the
+        resolution that we consider the points to be the same if they
+        are within that distance.
+        """
+        cell_coordinates = np.round((self.kpoints+self._gvec[None,:])
+                                    / (threshold*self._cell_size[None,:]))
+        cell_coordinates %= np.round(
+            2*self._gvec / (threshold*self._cell_size))[None, :]
+        point_bins = defaultdict(list)
+        duplicate_points = dict()
+        for i, coordinates in enumerate(cell_coordinates):
+            point_bins[tuple(coordinates)].append(i)
+        for coordinates in point_bins:
+            point_bin = point_bins[coordinates]
+            num_neighbors = len(point_bin)
+            if num_neighbors > 1:
+                primary_point = point_bin[0]
+                for point in point_bin[1:]:
+                    duplicate_points[point] = primary_point
+        self._build_periodic_mesh(duplicate_points)
+    
+    def _build_periodic_mesh(self, duplicate_points):
+        """
+        Build the periodic kpoints and kfaces arrays by removing
+        duplicate points and reindexing.
+        """
+        unique_mask = np.full(len(self.kpoints), True)
+        unique_mask[list(duplicate_points.keys())] = False
+        self.kpoints_periodic = self.kpoints[unique_mask]
+        reindex_map = np.cumsum(unique_mask) - 1
+        self.kfaces_periodic = self.kfaces.copy()
+        for i, face in enumerate(self.kfaces):
+            for j, point in enumerate(face):
+                if point in duplicate_points:
+                    reindex_map[point] = reindex_map[
+                        duplicate_points[point]]
+                self.kfaces_periodic[i, j] = reindex_map[point]
+
+    def _generate_point_cloud(self):
+        """
+        Generate a point cloud of the Fermi surface by detecting sign
+        changes and applying simple interpolation.
+        """
+        self._gvec = np.array([np.pi / a for a in self.unit_cell])
+        self._cell_size = 2 * self._gvec / np.array(self.resolution)
+        kgrid = np.mgrid[
+            -self._gvec[0] : self._gvec[0]+self._cell_size[0]
+                :(self.resolution[0]+1)*1j,
+            -self._gvec[1] : self._gvec[1]+self._cell_size[1]
+                :(self.resolution[1]+1)*1j,
+            -self._gvec[2] : self._gvec[2]+self._cell_size[2]
+                : (self.resolution[2]+1)*1j]
+        energy_diff = self.energy_func(*kgrid) - self.chemical_potential
+        
+        kpoints = []
+        for axis in range(3):
+            energy_diff_shifted = np.roll(energy_diff, -1, axis=axis)
+            mask = (energy_diff * energy_diff_shifted < 0)
+
+            indexer = [slice(None)] * 3
+            indexer[axis] = slice(-1, None)
+            mask[tuple(indexer)] = False
+
+            k1 = [kgrid[i][mask] for i in range(3)]
+            k2 = [np.roll(kgrid[i], -1, axis=axis)[mask] for i in range(3)]
+            f1 = energy_diff[mask]
+            f2 = energy_diff_shifted[mask]
+
+            alpha = f1 / (f1 - f2)  # interpolation weight
+            interpolated = [k1[i] + alpha * (k2[i] - k1[i]) for i in range(3)]
+
+            kpoints.append(np.stack(interpolated, axis=-1))
+
+        self.kpoints = np.concatenate(kpoints, axis=0)   

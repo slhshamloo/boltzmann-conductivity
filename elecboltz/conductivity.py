@@ -1,13 +1,12 @@
 import numpy as np
-import scipy.sparse as sp
-import opt_einsum
 # units
 from scipy.constants import e, hbar, angstrom
 # type hinting
-from typing import Union, Callable
+from typing import Callable
 from collections.abc import Collection
 from .bandstructure import BandStructure
-from .solve import solve_cyclic_tridiagonal
+from .solve import solve_cyclic_banded
+
 
 class Conductivity:
     """
@@ -19,18 +18,26 @@ class Conductivity:
     band : BandStructure
         The class holding band structure information of the material.
     field : Collection[float]
-        The magnetic field in the x, y, and z directions.
-    scattering_rate : Union[Callable, float, None]
+        The magnetic field in the x, y, and z directions in units of
+        Tesla. Either this or `field_direction` and `field_magnitude`
+        must be set.
+    field_magnitude : float
+        The magnitude of the magnetic field in units of Tesla. Either
+        this and `field_direction` or `field` must be set.
+    field_direction : Collection[float]
+        The unit vector in the direction of the magnetic field. Either
+        this and `field_magnitude` or `field` must be set.
+    scattering_rate : Callable or float or None
         The (out-)scattering rate as a function of kx, ky, and kz, in
         units of THz. Can also be a constant value instead of a
         function. If None, it will be calculated from the scattering
-        kernel. The default is None.
-    scattering_kernel : Union[Callable, None]
+        kernel.
+    scattering_kernel : Callable or None
         The scattering kernel as a function of a pair of coordinates
         (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
         coordinates are given to the function in order, so the function
         signature would be C(kx, ky, kz, kx', ky', kz'). If None, the
-        scattering rate should be specified instead. The default is None.
+        scattering rate should be specified instead.
     frequency : float
         The frequency of the applied field in units of THz.
         Default is `0.0`.
@@ -39,14 +46,19 @@ class Conductivity:
     ----------
     band : BandStructure
         The class holding band structure information of the material.
-    field : Collection[float]
-        The magnetic field in the x, y, and z directions.
-    scattering_rate : Union[Callable, float, Collection[float], None]
+    field : Collection[float] or None
+        The magnetic field in the x, y, and z directions in units of
+        Tesla.
+    field_magnitude : float
+        The magnitude of the magnetic field in units of Tesla.
+    field_direction : Collection[float]
+        The unit vector in the direction of the magnetic field.
+    scattering_rate : Callable or float or Collection[float] or None
         The (out-)scattering rate as a function of kx, ky, and kz. Can
         also be a constant value instead of a function. If initialized
         as None, it will be calculated from the scattering kernel upon
         the next calculation.
-    scattering_kernel : Union[Callable, None]
+    scattering_kernel : Callable or None
         The scattering kernel as a function of a pair of coordinates
         (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
         coordinates are given to the function in order, so the function
@@ -65,35 +77,63 @@ class Conductivity:
     Notes
     -----
     """
-    def __init__(self, band: BandStructure, field: Collection[float],
-                 scattering_rate: Union[Callable, float, None] = None,
-                 scattering_kernel: Union[Callable, None] = None,
+    def __init__(self, band: BandStructure, field: Collection[float] = None,
+                 field_magnitude: float | None = None,
+                 field_direction: Collection[float] = None,
+                 scattering_rate: Callable | float | None = None,
+                 scattering_kernel: Callable | None = None,
                  frequency: float = 0.0):
-        self.band = band
-        self.field = field
-        self.scattering_rate = scattering_rate
-        self.scattering_kernel = scattering_kernel
-        self.frequency = frequency
+        # avoid triggering setattr in the constructor
+        super().__setattr__('band', band)
+        super().__setattr__('field_magnitude', field_magnitude)
+        super().__setattr__('field_direction', field_direction)
+        super().__setattr__('field', field)
+        super().__setattr__('scattering_rate', scattering_rate)
+        super().__setattr__('scattering_kernel', scattering_kernel)
+        super().__setattr__('frequency', frequency)
         self.sigma = np.zeros((3, 3))
         self._saved_solutions = [None, None, None]
+        self._velocities = None
+        self._vmags = None
+        self._vhats = None
+        self._vhat_projections = None
+        self._bandwidth = None
+        self._jacobians = None
+        self._jacobian_sums = None
+        self._derivative_components = None
+        self._derivatives = None
+        self._inverse_scattering_length = None
+        self._out_scattering = None
+        self._derivative_term = None
+        self._differential_operator = None
         self._are_elements_saved = False
-        self._are_terms_saved = False
-        self._is_solution_saved = False
-        self._is_covariant_velocity_saved = [False, False, False]
-    
-    def __setattr__(self, name, value):
-        super().__setattr__(name, value)
-        if name in ["band", "scattering_rate", "scattering_kernel"]:
-            self.erase_memory()
-        if name == "frequency" and self._are_terms_saved:
-            self.erase_memory(elements=False)
-        if name == "field":
-            super().__setattr__(name, np.array(value))
-            self._is_solution_saved = False
+        self._is_scattering_saved = False
+        self._saved_solutions = [None, None, None]
 
-    def solve(self, i: Union[Collection[int], int, None] = None,
-              j: Union[Collection[int], int, None] = None
-              ) -> Union[np.ndarray, float]:
+    def __setattr__(self, name, value):
+        if name == 'band':
+            self.erase_memory()
+        if name in ['frequency', 'scattering_rate', 'scattering_kernel']:
+            self.erase_memory(elements=False, scattering=True,
+                              derivative=False)
+        if name in ['field_magnitude', 'field_direction']:
+            self.erase_memory(elements=False, scattering=False,
+                              derivative=True)
+        if name in ['field_magnitude', 'field_direction']:
+            if self._derivative_term is not None:
+                if self.field_magnitude is not None:
+                    self._derivative_term *= value / self.field_magnitude
+                elif self.field is not None:
+                    self._derivative_term *= \
+                        value / np.linalg.norm(np.array(self.field))
+                else:
+                    raise ValueError(
+                        "Either field or field_magnitude must be set.")
+        super().__setattr__(name, value)
+
+    def calculate(self, i: Collection[int] | int | None = None,
+                  j: Collection[int] | int | None = None
+                  ) -> np.ndarray | float:
         """
         Calculate the conductivity tensor.
 
@@ -112,31 +152,25 @@ class Conductivity:
             The conductivity tensor component(s) as an ixj matrix.
         """
         if not self._are_elements_saved:
-            self._generate_elements()
-        if not self._are_terms_saved:
-            self._calculate_terms()
-        if not self._is_solution_saved:
-            self._generate_differential_operator()
+            self._build_elements()
+        if self._differential_operator is None:
+            self._build_differential_operator()
         
-        if i is None:
-            i = range(3)
-        elif isinstance(i, int):
-            i = [i]
-        if j is None:
-            j = range(3)
-        elif isinstance(j, int):
-            j = [j]
-        sigma_result = np.zeros((len(i), len(j)))
-    
-        j_calc = []
+        i, j, j_calc = self._get_calculation_indices(i, j)
+        # (A^{-1})^{ij} (v_b)_j
+        linear_solution = solve_cyclic_banded(
+            self._differential_operator, self._vhat_projections[:, j_calc])
+        # reuse previously calculated solutions
         for col in j:
-            if self._saved_solutions[col] is None:
-                self._saved_solutions[col] = []
-                j_calc.append(col)
-
-        for layer in range(self.band.nlayers):
-            sigma_result += self._calculate_layer_conductivity(
-                layer, i, j, j_calc)
+            if col in j_calc:
+                # save solution for potential reuse
+                self._saved_solutions[col] = \
+                    linear_solution[:, j_calc.index(col)]
+            else:
+                linear_solution = np.insert(
+                    linear_solution, col, self._saved_solutions[col], axis=1)
+        # (v_a)_i (A^{-1} v_b)^i
+        sigma_result = self._vhat_projections[:, i].T @ linear_solution
         sigma_result *= e**2 / (4 * np.pi**3 * hbar)
 
         for idx_row, row in enumerate(i):
@@ -144,7 +178,8 @@ class Conductivity:
                 self.sigma[row, col] = sigma_result[idx_row, idx_col]
         return sigma_result
 
-    def erase_memory(self, elements: bool = True, terms: bool = True):
+    def erase_memory(self, elements: bool = True, scattering: bool = True,
+                     derivative: bool = True):
         """
         Erase saved calculations to free memory.
 
@@ -158,94 +193,132 @@ class Conductivity:
         ----------
         elements : bool, optional
             If True, erase the quantities for each element, like the
-            lengths and velocities. The default is `True`.
-        terms : bool, optional
-            If True, erase the differential operator terms and the
-            velocity projections (the terms in the final conductivity
-            calculation). The default is `True`.
+            lengths and velocities.
+        scattering : bool, optional
+            If True, erase the out-scattering and in-scattering terms.
+        derivative : bool, optional
+            If True, erase the derivative term.
         """
         if elements:
-            self._lengths = None
-            self._delta_k_hat = None
-            self.velocities = None
-            self._velocity_magnitudes = None
-            self._velocity_hats = None
-            self._normals = None
-            self._inverse_scattering_length = None
-            self._layer_thicknesses = None
+            self._velocities = None
+            self._vmags = None
+            self._vhats = None
+            self._bandwidth = None
+            self._jacobians = None
+            self._jacobian_sums = None
+            self._derivative_components = None
+            self._derivatives = None
+            self._vhat_projections = None
             self._are_elements_saved = False
-        if terms:
-            self._overlap = None
+        if scattering:
+            self._inverse_scattering_length = None
             self._out_scattering = None
-            self._are_terms_saved = False
+            self._is_scattering_saved = False
+        if derivative:
+            self._derivative_term = None
         self._differential_operator = None
         self._saved_solutions = [None, None, None]
-        self._is_solution_saved = False
-    
-    def _calculate_out_scattering_from_kernel(self):
-        """
-        Calculate the scattering rate by integrating over
-        the scattering kernel.
-        """
-        # TODO: implement this
-        pass
 
-    def _calculate_layer_conductivity(self, layer, i, j, j_calc):
-        """Calculate the conductivity for a single layer"""
-        A = self._differential_operator[layer]
-        v = self._velocity_projections[layer]
-        dkz = self._layer_thicknesses[layer]
-        # (A^{-1})^{ij} (v_b)_j
-        linear_solution = solve_cyclic_tridiagonal(A, v[:, j_calc])
-        # reuse previously calculated solutions
+    def _get_calculation_indices(self, i, j):
+        if i is None:
+            i = range(3)
+        elif isinstance(i, int):
+            i = [i]
+        if j is None:
+            j = range(3)
+        elif isinstance(j, int):
+            j = [j]
+        j_calc = []
         for col in j:
-            if col in j_calc:
-                # save solution for potential reuse
-                self._saved_solutions[col].append(
-                    linear_solution[:, j_calc.index(col)])
-            else:
-                linear_solution = np.insert(
-                    linear_solution, col,
-                    self._saved_solutions[col][layer], axis=1)
-        # (v_a)_i (A^{-1} v_b)^i
-        return dkz * v[:, i].T @ linear_solution
+            if self._saved_solutions[col] is None:
+                j_calc.append(col)
+        return i, j, j_calc
 
-    def _generate_elements(self):
+    def _build_elements(self):
         """
-        Generate the Finite Elements from the discretization of the
-        Fermi surface.
+        Build the arrays corresponding to the discretization of the
+        band structure.
         """
-        delta_kx = [self.band.apply_periodic_boundary(np.roll(kx,-1) - kx, 0)
-                    / angstrom for kx in self.band.kx]
-        delta_ky = [self.band.apply_periodic_boundary(np.roll(ky,-1) - ky, 1)
-                    / angstrom for ky in self.band.ky]
-        self._lengths = [np.sqrt(dx**2 + dy**2) for dx, dy
-                         in zip(delta_kx, delta_ky)]
-        self._delta_k_hat = [
-            np.column_stack((dkx, dky, np.zeros_like(dkx))) / k[:, None]
-            for dkx, dky, k in zip(delta_kx, delta_ky, self._lengths)]
-        velocity_lists = [self.band.velocity_func(kx, ky, kz)
-            for kx, ky, kz in zip(self.band.kx, self.band.ky, self.band.kz)]
-        self.velocities = [
-            np.array([vlist[0], vlist[1], [vlist[2]] * len(vlist[0])]).T
-            for vlist in velocity_lists]
-        self._velocity_magnitudes = [np.linalg.norm(v, axis=-1)
-                                     for v in self.velocities]
-        self._velocity_hats = [
-            v / vmag[:, None] for v, vmag
-            in zip(self.velocities, self._velocity_magnitudes)]
-        # Velocity hats over the segments themselves, used for the derivative
-        # term. I call them the normals, because they are the normals to each
-        # line segment of the discretization (i.e. each element).
-        self._normals = [
-            np.column_stack((dkhat[:, 1], -dkhat[:, 0], vhat[:, 2]))
-            for dkhat, vhat in zip(self._delta_k_hat, self._velocity_hats)]
-        self._normals = [normal / np.linalg.norm(normal, axis=1)[:, None]
-                         for normal in self._normals]
-        self._discretize_scattering()
-        self._layer_thicknesses = self.band.apply_periodic_boundary(
-            np.roll(self.band.kz, -1) - self.band.kz, 2) / angstrom
+        self._velocities = np.column_stack(self.band.velocity_func(
+            self.band.kpoints_periodic[:, 0], self.band.kpoints_periodic[:, 1],
+            self.band.kpoints_periodic[:, 2]))
+        self._vmags = np.linalg.norm(self._velocities, axis=1)
+        self._vhats = self._velocities / self._vmags[:, None]
+        triangle_coordinates = self.band.kpoints[self.band.kfaces] / angstrom
+        # find the bandwidth of the banded matrices, which concerns the
+        # "pure", non-periodic neighbors
+        self._bandwidth = np.max(np.abs(
+            self.band.kfaces - np.roll(self.band.kfaces, 1, axis=1)))
+        self._calculate_jacobian_sums(triangle_coordinates)
+        self._calculate_derivative_sums(triangle_coordinates)
+        self._calculate_velocity_projections()
         self._are_elements_saved = True
+
+    def _calculate_jacobian_sums(self, triangle_coordinates):
+        """
+        Calculate the Jacobian sums for each point and point pair.
+        """
+        self._jacobians = np.linalg.norm(
+            np.cross(triangle_coordinates[:, 1] - triangle_coordinates[:, 0],
+                     triangle_coordinates[:, 2] - triangle_coordinates[:, 0]),
+            axis=-1)
+        # build diagonal ordered matrices of the jacobian sums
+        n = len(self.band.kpoints_periodic)
+        self._jacobian_sums = np.zeros((2*self._bandwidth + 1, n))
+        # convert matrix indices to diagonal ordered form
+        # i,j -> bandwidth + i - j, j
+        i_idx = self.band.kfaces_periodic[:, 0]
+        j_idx = self.band.kfaces_periodic[:, 1]
+        k_idx = self.band.kfaces_periodic[:, 2]
+        self._add_to_banded(self._jacobian_sums, i_idx, j_idx, k_idx,
+                            self._jacobians, self._jacobians, self._jacobians,
+                            self._jacobians, self._jacobians, self._jacobians)
+    
+    def _calculate_derivative_sums(self, triangle_coordinates):
+        """
+        Calculate the field-independent part of the derivative term.
+        """
+        self._derivatives = np.zeros(
+            (2*self._bandwidth + 1, self.band.kpoints_periodic.shape[0], 3))
+        self._derivative_components = \
+            triangle_coordinates - np.roll(triangle_coordinates, -2, axis=1)
+        i_idx = self.band.kfaces_periodic
+        j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
+        k_idx = np.roll(self.band.kfaces_periodic, -2, axis=1)
+        n = max(self.band.kpoints_periodic.shape[0],
+                self._derivatives.shape[0])
+        np.add.at(
+            self._derivatives, ((self._bandwidth+i_idx-j_idx) % n, j_idx),
+            self._derivative_components)
+        np.add.at(
+            self._derivatives, ((self._bandwidth+k_idx-j_idx) % n, j_idx),
+            self._derivative_components)
+
+    def _calculate_velocity_projections(self):
+        self._vhat_projections = np.zeros((len(self.band.kpoints_periodic), 3))
+        for shift in range(-self._bandwidth, self._bandwidth + 1):
+            self._vhat_projections += np.roll(
+                self._jacobian_sums[self._bandwidth + shift][:, None]
+                * self._vhats / 24, shift, axis=0)
+        # alpha_i * v^i / 24
+        self._vhat_projections += (
+            self._jacobian_sums[self._bandwidth][:, None] * self._vhats / 24)
+
+    def _build_differential_operator(self):
+        """
+        Build the differential operator from the elements of the
+        band structure and the conductivity information.
+        """
+        if not self._is_scattering_saved:
+            self._discretize_scattering()
+            self._build_out_scattering_matrix()
+            # TODO: calculate the in-scattering matrix
+            self._is_scattering_saved = True
+        if self._derivative_term is None:
+            self._build_derivative_matrix()
+        self._differential_operator = (
+            self._out_scattering - e/hbar*self._derivative_term)
+            # - self._in_scattering_term when implemented
 
     def _discretize_scattering(self):
         """
@@ -257,89 +330,95 @@ class Conductivity:
                 raise ValueError(
                     "Either scattering_rate or scattering_kernel must be set.")
             else:
-                self.scattering_rate = self._generate_out_scattering()
+                self._calculate_out_scattering_from_kernel()
 
         if isinstance(self.scattering_rate, Callable):
-            self._inverse_scattering_length = [
-                1e12 * self.scattering_rate(kx, ky, kz) / v for kx, ky, kz, v
-                in zip(self.band.kx, self.band.ky, self.band.kz,
-                       self._velocity_magnitudes)]
-        elif self.frequency == 0.0:
-            self._inverse_scattering_length = [
-                1e12 * self.scattering_rate / vmag
-                for vmag in self._velocity_magnitudes]
+            scattering = self.scattering_rate(self.band.kpoints)
         else:
-            self._inverse_scattering_length = [
-                1e12 * (self.scattering_rate - 2j*np.pi*self.frequency) / vmag
-                for vmag in self._velocity_magnitudes]
-    
+            scattering = self.scattering_rate
+        # separate the optical conductivity case to avoid making
+        # the number complex when it is not needed
+        if self.frequency == 0.0:
+            self._inverse_scattering_length = 1e12 * scattering / self._vmags
+        else:
+            self._inverse_scattering_length = \
+                1e12 * (scattering - 2j*np.pi*self.frequency) / self._vmags
         # TODO: discretize the scattering kernel
 
-    def _calculate_terms(self):
+    def _calculate_out_scattering_from_kernel(self):
         """
-        Calculate the terms needed to make the differential operator
-        and calculate the conductivity solving the Boltzmann transport
-        equation using an FEM. Note that all matrices are stored in
-        diagonal ordered form.
+        Calculate the scattering rate by integrating over
+        the scattering kernel.
         """
-        self._out_scattering = [self._generate_out_scattering(layer)
-                                for layer in range(self.band.nlayers)]
-        self._velocity_projections = [
-            self._generate_velocity_projections(layer)
-            for layer in range(self.band.nlayers)]
-        # TODO: calculate the in-scattering matrix
-        self._are_terms_saved = True
-    
-    def _generate_differential_operator(self):
-        """
-        Generates the differential operator form the comprising
-        matrices and the normals.
-        """
-        # vhat x B
-        derivative_directions = [
-            np.cross(nhat, self.field) for nhat in self._normals]
-        # vhat x B . dkhat
-        derivative_component = [
-            opt_einsum.contract('ij,ij->i', u, dkhat)
-            for u, dkhat in zip(derivative_directions, self._delta_k_hat)]
-        # (vhat x B . dkhat) (delta_{i,j+1} - delta_{i+1,j}) / 2
-        derivative_matrix = [dcomp[None, :] * np.array([[0.5], [0.0], [-0.5]])
-                             for dcomp in derivative_component]
-        self._differential_operator = [
-            out_scattering - e/hbar*derivative for out_scattering, derivative
-            in zip(self._out_scattering, derivative_matrix)]
-        # TODO: also add the in-scattering term
+        # TODO: implement this
+        pass
 
-    def _generate_velocity_projections(self, layer):
-        """
-        Generates the velocity projections v_i for v in every direction
-        from velocity vectors v^i and the overlap matrix M
-        for a given layer.
-        """
-        i = np.arange(len(self._lengths[layer]))
-        i_plus_one = np.roll(i, -1)
-        lengths = self._lengths[layer]
-        # (l_i + l_{i+1} / 3) delta_{ij}
-        overlap_main = sp.csr_matrix(
-            ((lengths + np.roll(lengths, 1)) / 3, (i, i)))
-        # (l_i / 6) delta_{i+1,j}
-        overlap_upper = sp.csr_matrix((lengths / 6, (i_plus_one, i)))
-        # (l_i / 6) delta_{i,j+1}
-        overlap_lower = sp.csr_matrix((lengths / 6, (i, i_plus_one)))
-        overlap = overlap_main + overlap_upper + overlap_lower
-        return overlap @ self._velocity_hats[layer]
+    def _build_out_scattering_matrix(self):
+        """Calculate the out-scattering matrix (Gamma)"""
+        self._out_scattering = np.zeros((2*self._bandwidth + 1, 
+                                         self.band.kpoints_periodic.shape[0]))
+        # alpha_{ij} * gamma^j / 60 delta_{<ij>}
+        self._out_scattering += \
+            self._jacobian_sums * self._inverse_scattering_length[None, :] / 60
+        for shift in range(-self._bandwidth, self._bandwidth + 1):
+            # sum_k alpha_{ik} * gamma^k / 60 delta_{ij}
+            # each element is multiplied by the corresponding gamma,
+            # then it is shifted to match the i of each element in
+            # the main diagonal, which is the same as the j of the element
+            self._out_scattering[self._bandwidth] += np.roll(
+                self._jacobian_sums[self._bandwidth + shift]
+                * self._inverse_scattering_length / 60, shift)
+            # alpha_{ij} * gamma^i / 60 delta_{<ij>}
+            # before multiplication, a shift is done to match the
+            # corresponding i instead of j
+            self._out_scattering[self._bandwidth + shift] += (
+                self._jacobian_sums[self._bandwidth + shift]
+                * np.roll(self._inverse_scattering_length, -shift)) / 60
+        # alpha(i,j,k) * gamma^k / 120
+        i_idx = self.band.kfaces_periodic[:, 0]
+        j_idx = self.band.kfaces_periodic[:, 1]
+        k_idx = self.band.kfaces_periodic[:, 2]
+        self._add_to_banded(
+            self._out_scattering, i_idx, j_idx, k_idx,
+            add_ij=self._jacobians*self._inverse_scattering_length[k_idx]/120,
+            add_jk=self._jacobians*self._inverse_scattering_length[i_idx]/120,
+            add_ik=self._jacobians*self._inverse_scattering_length[j_idx]/120)
+
+    def _build_derivative_matrix(self):
+        """Calculate the derivative matrix (D)"""
+        if self.field is None:
+            if self.field_direction is None or self.field_magnitude is None:
+                raise ValueError(
+                    "Either field or field_direction "
+                    "and field_magnitude must be set.")
+            else:
+                self._derivative_term = self.field_magnitude / 6 * np.dot(
+                    self._derivatives, self.field_direction)
+        else:
+            self._derivative_term = np.dot(self._derivatives, self.field) / 6
     
-    def _generate_out_scattering(self, layer):
-        """Generates the out-scattering (Gamma) matrix for a given layer."""
-        lengths = self._lengths[layer]
-        gamma = self._inverse_scattering_length[layer]
-        gamma_plus_one = np.roll(gamma, -1)
-        gamma_minus_one = np.roll(gamma, 1)
-        # Gamma matrix
-        minor_diagonal_term = lengths / 12 * (gamma + gamma_plus_one)
-        major_diagonal_term = (
-            (np.roll(lengths, 1) + lengths) * gamma / 4
-            + lengths * gamma_plus_one / 12
-            + np.roll(lengths, 1) * gamma_minus_one / 12)
-        return np.vstack(
-            [minor_diagonal_term, major_diagonal_term, minor_diagonal_term])
+    def _add_to_banded(self, banded_matrix, i_idx, j_idx, k_idx,
+                       add_ii=None, add_jj=None, add_kk=None,
+                       add_ij=None, add_jk=None, add_ik=None):
+        n = max(self.band.kpoints_periodic.shape[0], banded_matrix.shape[0])
+        if add_ii is not None:
+            np.add.at(banded_matrix, (self._bandwidth, i_idx), add_ii)
+        if add_jj is not None:
+            np.add.at(banded_matrix, (self._bandwidth, j_idx), add_jj)
+        if add_kk is not None:
+            np.add.at(banded_matrix, (self._bandwidth, k_idx), add_kk)
+        if add_ij is not None:
+            np.add.at(banded_matrix,
+                      ((self._bandwidth+i_idx-j_idx) % n, j_idx), add_ij)
+            np.add.at(banded_matrix,
+                      ((self._bandwidth+j_idx-i_idx) % n, i_idx), add_ij)
+        if add_jk is not None:
+            np.add.at(banded_matrix,
+                      ((self._bandwidth+j_idx-k_idx) % n, k_idx), add_jk)
+            np.add.at(banded_matrix,
+                      ((self._bandwidth+k_idx-j_idx) % n, j_idx), add_jk)
+        if add_ik is not None:
+            np.add.at(banded_matrix,
+                      ((self._bandwidth+i_idx-k_idx) % n, k_idx), add_ik)
+            np.add.at(banded_matrix,
+                      ((self._bandwidth+k_idx-i_idx) % n, i_idx), add_ik)

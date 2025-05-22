@@ -11,7 +11,7 @@
 
 \title{FEM for Boltzmann Conductivity: An Introduction}
 \author{Saleh Shamloo Ahmadi}
-\date{April 18, 2025}
+\date{May 9, 2025}
 
 \begin{document}
 \maketitle
@@ -311,10 +311,56 @@ components are the values of $\hat{v}_a$ and $\hat{v}_b$ at the discrete points 
 space.  Afterwards, all that will be left to do is two matrix multiplications $M\hat{v}$, one linear
 system solution $A^{-1}(M\hat{v}_b)$, and one dot product $(M\hat{v}_a)\vdot(A^{-1}M\hat{v}_b)$.
 
+\subsection{Differential Operator Terms}
+Splitting $A$ into the comprising terms using \eqref{eq:operator} and \eqref{eq:matrix_elements},
+we have
+\begin{align}
+A_{ij} &= \begin{aligned}[t]
+    &\int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau(\vb{k})})
+        \frac{\psi_i(\vb{k})\psi_j(\vb{k})}{v(\vb{k})} \\
+    &-\int\dd{\vb{k}} \psi_i(\vb{k})\frac{e\qty(\vu{v}(\vb{k})\cross\vb{B})}{\hbar}
+        \vdot\grad_{\vb{k}}\psi_j(\vb{k}) \\
+    &- \int\dd{\vb{k}} \int\dd{\vb{k'}}
+    \psi_i(\vb{k}) \frac{C(\vb{k},\vb{k'})}{v(\vb{k})} \psi_j(\vb{k'})
+\end{aligned} \\
+&\equiv \Gamma_{ij} - \frac{eB}{\hbar} \qty(D_{\vu{v}\cross\vu{B}})_{ij} - S_{ij}.
+\end{align}
+The matrices $\Gamma_{ij}$, $D_{\vu{v}\cross\vu{B}}$ and $S_{ij}$ are called the
+\emph{out-scattering}, \emph{derivative} and \emph{in-scattering} matrices respectively.
+
+Expanding the $k$-dependence in terms of the basis functions for the out-scattering
+matrix $\Gamma_{ij}$ gives
+\begin{equation}
+    \Gamma_{ij} = \sum_k \int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau_k})
+    \frac{\psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k})}{v_k}.
+\end{equation}
+Let us define the tensor $\Pi_{ijk}$ and the vector $\gamma^k$, such that
+\begin{empheq}[left={\Gamma_{ij}=\sum_k\Pi_{ijk}\gamma^k\implies\empheqlbrace}]{align}
+    \Pi_{ijk} &= \int\dd{\vb{k}} \psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k}), \\
+    \gamma^k &= -\frac{i\omega}{v_k} + \frac{1}{v_k\tau_k}.
+\end{empheq}
+So, for any given basis, we have to calculate the $\Pi_{ijk}$ tensor. The $\gamma^k$ vector
+is given by the velocity, frequency, and scattering kernel (or possibly the scattering rate
+$1/\tau$ defined ``by hand'' when ignoring in-scattering).
+
+Expanding the $k$-dependence in terms of the basis functions for the in-scattering matrix $S_{ij}$
+gives
+\begin{equation}
+    S_{ij} = \sum_{mn} \int\dd{\vb{k}} \int\dd{\vb{k'}} \psi_i(\vb{k})\psi_m(\vb{k})
+    \frac{C_{mn}}{v_m}\psi_n(\vb{k'})\psi_j(\vb{k'}).
+\end{equation}
+Let us define the tensor $\Xi_{ijmn}$ and the matrix $s^{mn}$, such that
+\begin{empheq}[left={S_{ij}=\sum_{mn}\Xi_{ijmn}s^{mn}\implies\empheqlbrace}]{align}
+    \Xi_{ijmn} &= \int\dd{\vb{k}} \int\dd{\vb{k'}} \psi_i(\vb{k})\psi_j(\vb{k'})
+    \psi_m(\vb{k})\psi_n(\vb{k'}), \\
+    s^{mn} &= \frac{C_{mn}}{v_m}.
+\end{empheq}
+So, for any given basis, we have to calculate the $\Xi_{ijmn}$ tensor and the $s^{mn}$ matrix
+is given from the scattering kernel.
+
 \subsection{Piecewise Linear Basis for 2D Fermi Surfaces}
-For quasi-2D materials, it is more efficient to calculate the conductivity layer by layer in 2D and
-then sum over the layers. It is also simpler than the full 3D case. So, we will analyze the 2D
-case here.
+The 2D case is a bit simpler and can help you gain a better understanding before moving to the
+full 3D case.
 
 We choose $n$ points on $\vb{k}_i$ to represent the Fermi surface. Then, the discretization of the
 Fermi surface would be the line segments $I_i$ connecting these points. These line segments are also
@@ -333,9 +379,9 @@ parametrization of each line segment $I_i$ as
 \end{equation}
 then the basis functions can be defined as
 \begin{empheq}[left={\psi_i(\vb{k})=\empheqlbrace}]{align}
-    &x, &k \in I_{i-1}; \\
-    &1-x, &k \in I_i; \\
-    &0, &k \in I_j,\ j\notin \{i-1,i\}.
+    &x,& &\vb{k} \in I_{i-1}; \\
+    &1-x,& &\vb{k} \in I_i; \\
+    &0,& &\vb{k} \in I_j,\ j\notin \{i-1,i\}.
 \end{empheq}
 
 We can now calculate the matrices $M_{ij}$ and $A_{ij}$ in this basis. It is easy to see that, because
@@ -345,8 +391,10 @@ nonzero when $i$ and $j$ are associated with the same point or neighboring point
 For the overlap matrix,
 \begin{equation}
 \begin{aligned}
-    M_{ii} &= \int\dd{k}\psi_i(\vb{k})\psi_i(\vb{k}) = \int_{I_{i-1}} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 + \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2 \\
-    &= \int_0^1 \dd{x} x^2 \ell_{i-1} + \int_0^1 \dd{x} (1-x)^2 \ell_i = \frac{\ell_{i-1} + \ell_i}{3},
+    M_{ii} &= \int\dd{k}\psi_i(\vb{k})\psi_i(\vb{k}) = \int_{I_{i-1}} \dd{\vb{k}}
+    \qty[\psi_i(\vb{k})]^2 + \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2\\
+    &= \int_0^1 \dd{x} x^2 \ell_{i-1} + \int_0^1 \dd{x} (1-x)^2 \ell_i
+    = \frac{\ell_{i-1} + \ell_i}{3},
 \end{aligned}
 \end{equation}
 \begin{equation}
@@ -355,62 +403,8 @@ For the overlap matrix,
 \end{equation}
 Therefore, the full overlap matrix is
 \begin{equation}
-    M_{ij} = \frac{\ell_{i-1} + \ell_i}{3}\delta_{ij} + \frac{\ell_i}{6}\qty(\delta_{i+1,j} + \delta_{i,j+1}).
-\end{equation}
-
-For the matrix $A_{ij}$, using \eqref{eq:operator} and \eqref{eq:matrix_elements},
-\begin{align}
-A_{ij} &= \begin{aligned}[t]
-    &\int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau(\vb{k})})
-        \frac{\psi_i(\vb{k})\psi_j(\vb{k})}{v(\vb{k})} \\
-    &-\int\dd{\vb{k}} \psi_i(\vb{k})\frac{e\qty(\vu{v}(\vb{k})\cross\vb{B})}{\hbar}
-        \vdot\grad_{\vb{k}}\psi_j(\vb{k}) \\
-    &- \int\dd{\vb{k}} \int\dd{\vb{k'}}
-    \psi_i(\vb{k}) \frac{C(\vb{k},\vb{k'})}{v(\vb{k})} \psi_j(\vb{k'})
-\end{aligned} \\
-&\equiv \Gamma_{ij} - \frac{eB}{\hbar} \qty(D_{\vu{v}\cross\vu{B}})_{ij} - S_{ij}.
-\end{align}
-Now we will calculate each of these terms separately.
-
-For the out-scattering term $\Gamma_{ij}$, we first need to expand the $k$-dependent terms.
-This gives
-\begin{equation}
-    \Gamma_{ij} = \sum_k \int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau_k})
-    \frac{\psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k})}{v_k}
-\end{equation}
-let us define the tensor $\Pi_{ijk}$ and the vector $\gamma^k$, such that
-\begin{empheq}[left={\Gamma_{ij}=\sum_k\Pi_{ijk}\gamma^k\implies\empheqlbrace}]{align}
-    \Pi_{ijk} &= \int\dd{\vb{k}} \psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k}), \\
-    \gamma^k &= -\frac{i\omega}{v_k} + \frac{1}{v_k\tau_k}.
-\end{empheq}
-Only the terms where $i$, $j$ and $k$ are all associated with the same point or neighboring points.
-\begin{equation}
-    \Pi_{iii} = \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 + \int_{I_{i-1}}
-        \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3
-    = \int_0^1 \dd{x} x^3 \ell_i + \int_0^1 \dd{x} (1-x)^3 \ell_{i-1} = \frac{\ell_i + \ell_{i-1}}{4},
-\end{equation}
-\begin{equation}
-    \Pi_{i+1,i,i} = \Pi_{i,i+1,i} = \Pi_{i,i,i+1} = \int_{I_i} \dd{\vb{k}}
-    \qty[\psi_i(\vb{k})]^2\psi_{i+1}(\vb{k}) = \int_0^1 \dd{x} (1-x)^2 x \ell_i = \frac{\ell_i}{12},
-\end{equation}
-\begin{equation}
-    \Pi_{i,i+1,i+1} = \Pi_{i+1,i,i+1} = \Pi_{i+1,i+1,i} = \int_{I_i} \dd{\vb{k}}
-    \psi_i(\vb{k})\qty[\psi_{i+1}(\vb{k})]^2 = \int_0^1 \dd{x} x(1-x)^2 \ell_i = \frac{\ell_i}{12},
-\end{equation}
-\begin{equation}
-    \Pi_{ijk} = \frac{\ell_{i-1} + \ell_i}{4}\delta_{ijk}
-    + \frac{\ell_i}{12}\qty(\delta_{i+1,j,k} + \delta_{i,j-1,k})
-    + \frac{\ell_j}{12}\qty(\delta_{i,j+1,k} + \delta_{i,j,k-1})
-    + \frac{\ell_k}{12}\qty(\delta_{i,j,k+1} + \delta_{i-1,j,k})
-\end{equation}
-Multiplying this tensor by $\gamma^k$, we get the full $\Gamma_{ij}$ matrix.
-\begin{equation}
-\begin{aligned}
-    \Gamma_{ij} = \qty(\frac{\ell_{i-1} + \ell_i}{4}\gamma^i + \frac{\ell_i}{12}\gamma^{i+1}
-        + \frac{\ell_{i-1}}{12}\gamma^{i-1})\delta_{ij}
-    &+ \frac{\ell_i}{12}\qty(\gamma^i + \gamma^{i+1})\delta_{i+1,j} \\
-    &+ \frac{\ell_j}{12}\qty(\gamma^j + \gamma^{j+1})\delta_{i,j+1}
-\end{aligned}
+    M_{ij} = \frac{\ell_{i-1} + \ell_i}{3}\delta_{ij}
+    + \frac{\ell_i}{6}\qty(\delta_{i+1,j} + \delta_{i,j+1}).
 \end{equation}
 
 For the derivative term $D_{\vu{v}\cross\vu{B}}$, note that the part
@@ -439,8 +433,187 @@ So, the full matrix is
     \qty(\frac{\delta_{i,j+1} - \delta_{i+1,j}}{2}).
 \end{equation}
 
-Finally, for the in-scattering term $S_{ij}$, we must expand the $k$-dependent terms again.
+For the out-scattering term $\Gamma_{ij}=\sum_k\Pi_{ijk}\gamma^k$, only the elements where $i$, $j$ and $k$ are all
+associated with the same point or neighboring points are nonzero.
+\begin{equation}
+    \Pi_{iii} = \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 + \int_{I_{i-1}}
+        \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3
+    = \int_0^1 \dd{x} x^3 \ell_i + \int_0^1 \dd{x} (1-x)^3 \ell_{i-1}
+    = \frac{\ell_i + \ell_{i-1}}{4},
+\end{equation}
+\begin{equation}
+    \Pi_{i+1,i,i} = \Pi_{i,i+1,i} = \Pi_{i,i,i+1} = \int_{I_i} \dd{\vb{k}}
+    \qty[\psi_i(\vb{k})]^2\psi_{i+1}(\vb{k}) = \int_0^1 \dd{x} (1-x)^2 x \ell_i = \frac{\ell_i}{12},
+\end{equation}
+\begin{equation}
+    \Pi_{i,i+1,i+1} = \Pi_{i+1,i,i+1} = \Pi_{i+1,i+1,i} = \int_{I_i} \dd{\vb{k}}
+    \psi_i(\vb{k})\qty[\psi_{i+1}(\vb{k})]^2 = \int_0^1 \dd{x} x(1-x)^2 \ell_i = \frac{\ell_i}{12},
+\end{equation}
+\begin{equation}
+    \Pi_{ijk} = \frac{\ell_{i-1} + \ell_i}{4}\delta_{ijk}
+    + \frac{\ell_i}{12}\qty(\delta_{i+1,j,k} + \delta_{i,j-1,k})
+    + \frac{\ell_j}{12}\qty(\delta_{i,j+1,k} + \delta_{i,j,k-1})
+    + \frac{\ell_k}{12}\qty(\delta_{i,j,k+1} + \delta_{i-1,j,k})
+\end{equation}
+Multiplying this tensor by $\gamma^k$, we get the full $\Gamma_{ij}$ matrix.
+\begin{equation}
+\begin{aligned}
+    \Gamma_{ij} = \qty(\frac{\ell_{i-1} + \ell_i}{4}\gamma^i + \frac{\ell_i}{12}\gamma^{i+1}
+        + \frac{\ell_{i-1}}{12}\gamma^{i-1})\delta_{ij}
+    &+ \frac{\ell_i}{12}\qty(\gamma^i + \gamma^{i+1})\delta_{i+1,j} \\
+    &+ \frac{\ell_j}{12}\qty(\gamma^j + \gamma^{j+1})\delta_{i,j+1}
+\end{aligned}
+\end{equation}
+
+Finally, for the in-scattering term $S_{ij}=\sum_{mn}\Xi_{ijmn}s^{mn}$, only the elements where
+$i$, $j$, $m$, and $n$ are all associated with the same point or neighboring points are nonzero. 
 \textcolor{red}{TODO: Chaitanya did not calculate this. I'll do it later.}
+
+\subsection{Piecewise Linear Basis for 3D Fermi Surfaces}
+The discretization procedure for the 3D case can be a bit more complicated. In addition to points,
+we also need to define some connecting surface for sets of points. In 2D, this was easy because we
+could just connect pairs of points with line segments. In 3D, to make the elements as simple as
+possible, we use triangles.
+
+We define the Fermi surface by a set of points $\vb{k}_i$ and triangles $T(i,j,k)$ connecting the
+points $\vb{k}_i$, $\vb{k}_j$ and $\vb{k}_k$. Also, we define $T_i$ as the set of triangles
+containing the point $\vb{k}_i$. Then, defining piecewise linear basis functions, the basis function
+$\psi_i$ peaks with value 1 at the point $\vb{k}_i$, is linear on $T_i$, and is 0 everywhere else.
+
+Each triangle is parametrized as
+\begin{equation}
+    (x, y): T(i,j,k) \mapsto \{(x, y);\; x\in[0, 1],\, y\in[0, 1-x] \},
+\end{equation}
+so that each triangle is mapped to a unit right-angled triangle.
+With this mapping, the basis functions can be defined as
+\begin{empheq}[left={\psi_i(\vb{k})=\empheqlbrace}]{align}
+    &1 - x - y,& &\vb{k} \in T_i, (x, y)_{\max(\psi_i)} = (0, 0); \\
+    &x,& &\vb{k} \in T_i, (x, y)_{\max(\psi_i)} = (1, 0); \\
+    &y,& &\vb{k} \in T_i, (x, y)_{\max(\psi_i)} = (0, 1); \\
+    &0,& &\vb{k} \notin T_i.
+\end{empheq}
+To compute integrals with this parametrization, we can just use the Jacobian of the transformation.
+Here, the Jacobian is the ratio of the area of the triangle $T(i,j,k)$ to the area of the unit
+right-angled triangle. Let us define it as
+\begin{equation}
+    \alpha(i,j,k)=\norm{(\vb{k}_j - \vb{k}_i) \times (\vb{k}_k - \vb{k}_i)}.
+\end{equation}
+Then, the integrals are transformed as
+\begin{equation}
+    \int_{T(i,j,k)} \dd{\vb{k}} = \alpha(i,j,k)\int_0^1\dd{x}\int_0^{1-x}\dd{y}
+    \equiv \alpha(i,j,k)\int_T\dd{x}\dd{y}.
+\end{equation}
+
+Now, for calculating each term, note that only the elements where the indices are the same or belong
+to the same triangle have nonzero overlap. \textcolor{red}{TODO: insert a figure showing this. Maybe
+the same one used by Chaitanya?} Here are all the nonzero terms in the matrices:
+\begin{align}
+M_{ii} &= \int\dd{\vb{k}}\psi_i(\vb{k})\psi_i(\vb{k})
+    = \sum_{(i,j,k) \in T_i} \int_{T(i,j,k)} \dd{\vb{k}} (\psi_i(\vb{k}))^2 \\
+    &= \sum_{(i,j,k) \in T_i} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)^2
+    = \frac{1}{12} \sum_{(i,j,k) \in T_i} \alpha(i,j,k), \notag \\
+M_{ij} &= \int\dd{\vb{k}}\psi_i(\vb{k})\psi_j(\vb{k})
+    = \sum_{(i,j,k) \in T_i \cap T_j} \int_{T(i,j,k)} \dd{\vb{k}} \psi_i(\vb{k}) \psi_j(\vb{k}) \\
+    &= \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)x
+    = \frac{1}{24} \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k) \notag \\
+    \left(\vphantom{\sum_{(i)}}\right. &=\left.\sum_{(i,j,k) \in T_i \cap T_j}
+    \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)y \right) \notag
+\end{align}
+\begin{align}
+\Pi_{iii} &= \int\dd{\vb{k}}\psi_i(\vb{k})\psi_i(\vb{k})\psi_i(\vb{k})
+    = \sum_{(i,j,k) \in T_i} \int_{T(i,j,k)} \dd{\vb{k}} (\psi_i(\vb{k}))^3 \\
+    &= \sum_{(i,j,k) \in T_i} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)^3
+    = \frac{1}{20} \sum_{(i,j,k) \in T_i} \alpha(i,j,k), \notag \\
+\Pi_{iij} &= \Pi_{iji} = \Pi_{jii} = \int\dd{\vb{k}}\psi_i(\vb{k})\psi_i(\vb{k})\psi_j(\vb{k})
+    = \sum_{(i,j,k) \in T_i \cap T_j} \int_{T(i,j,k)} \dd{\vb{k}}
+        (\psi_i(\vb{k}))^2 \psi_j(\vb{k}) \\
+    &= \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)^2 x
+    = \frac{1}{60} \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k), \notag\\
+\Pi_{ijk} &= \int_{T(i,j,k)} \dd{\vb{k}}\, \psi_i(\vb{k}) \psi_j(\vb{k}) \psi_k(\vb{k})
+= \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)xy = \frac{1}{120} \alpha(i,j,k).
+\end{align}
+
+For the derivative term, first, we approximate $\hat{\vb{v}}(\vb{k})$ as a piecewise constant
+unit vector field normal to each triangle. That is,
+\begin{equation}
+\hat{\vb{v}}(\vb{k}) = \text{sgn}(i,j,k) \vu{n}(i,j,k); \quad
+\vb{n}(i,j,k) \equiv (\vb{k}_j - \vb{k}_i) \times (\vb{k}_k - \vb{k}_i),
+\end{equation}
+where $\hat{\vb{n}} = \vb{n}/\norm{\vb{n}}$ and $\text{sgn}(i,j,k) = \pm1$ is chosen such that
+the normals always point outwards from the surface.
+Also note that $\norm{\vb{n}(i,j,k)} = \alpha(i,j,k)$. The other term we need is gradient of
+$\psi_j$ on triangle $T(i,j,k)$. Since $\psi_j$ is linear on this triangle and peaks at $j$,
+its gradient is a constant vector pointing to $j$ and perpendicular to the opposite edge
+$\vb{k}_k - \vb{k}_i$.
+\begin{equation}
+\grad_{\vb{k}} \psi_j(\vb{k}) = \frac{\vb{u}_j(i,j,k)}{u^2_j(i,j,k)};
+\end{equation}
+where $u_j(i,j,k) = \norm{\vb{u}_j(i,j,k)}$ and
+\begin{equation}
+\vb{u}_j(i,j,k) = (\vb{k}_j - \vb{k}_i)
+- \frac{(\vb{k}_j-\vb{k}_i)\vdot(\vb{k}_k-\vb{k}_i)}{\abs{\vb{k}_k - \vb{k}_i}^2}
+(\vb{k}_k - \vb{k}_i).
+\end{equation}
+The vector $\vb{u}_j(i,j,k)$ is obtained by projecting the vector $\vb{k}_j - \vb{k}_i$ onto the
+direction perpendicular to the edge $\vb{k}_k - \vb{k}_i$. This is done by subtracting the component
+in the direction of $\vb{k}_k - \vb{k}_i$ from $\vb{k}_j - \vb{k}_i$. Using these calculations, we
+can finally compute the derivative term.
+\begin{equation}
+    \qty(\hat{\vb{v}}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\psi_j
+    = \qty(\grad_{\vb{k}}\psi_j\cross\hat{\vb{v}}(\vb{k}))\vdot\vu{B}
+    = \text{sgn}(i,j,k)\qty(\frac{\vb{u}_j(i,j,k)\cross\vu{n}(i,j,k)}{u^2_j(i,j,k)})\vdot\vu{B}.
+\end{equation}
+You can simplify this expression by hand. But, using a bit of geometrical thinking, since $\vb{u}_j$
+perpendicular to $\vb{k}_i - \vb{k}_k$ and $\vu{n}$ is perpendicualr to the plane of the triangle
+such that it is generated by counterclockwise ("right-handed") cross products of vectors on the
+plane, $\vb{u}_j\cross\vu{n}$ must be in the direction of $\vb{k}_i - \vb{k}_k$. This means
+\begin{equation}
+    \vb{u}_j(i,j,k)\cross\vu{n}(i,j,k) = u_j(i,j,k)
+    \frac{\vb{k}_i-\vb{k}_k}{\norm{\vb{k}_i-\vb{k}_k}}.
+\end{equation}
+Furthermore, $u_j(i,j,k)$ and $\vb{k}_i - \vb{k}_k$ can be taken as the high and the base of
+the triangle $T(i,j,k)$ respectively, so the product of their norms is twice the area of the
+triangle, which is the same as the Jacobian $\alpha(i,j,k)$. Putting it all together, we have
+\begin{equation}
+    \qty(\hat{\vb{v}}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\psi_j
+    = \frac{\text{sgn}(i,j,k)}{\alpha(i,j,k)}(\vb{k}_i-\vb{k}_k)\vdot\vu{B}.
+\end{equation}
+Using this, we can compute the derivative matrix.
+\begin{align}
+    (D_{\vu{v}\cross\vu{B}})_{ij} &= \int\dd{\vb{k}}\psi_i(\vb{k})
+    \qty(\vu{v}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\psi_j(\vb{k}) \\
+    &= \sum_{(i,j,k) \in T_i \cap T_j}\alpha(i,j,k) \int_T\dd{x}\dd{y}(1-x-y)
+    \frac{\text{sgn}(i,j,k)}{\alpha(i,j,k)}(\vb{k}_i - \vb{k}_k)\vdot\vu{B} \notag \\
+    &= \frac{1}{6} \sum_{(i,j,k) \in T_i \cap T_j}\text{sgn}(i,j,k)(\vb{k}_i-\vb{k}_k)\vdot\vu{B}.
+    \notag
+\end{align}
+Note that this matrix is antisymmetric and the elements on the main diagonal are equal to zero.
+The antisymmetry is apparent from the $\text{sgn}(i,j,k)$ term. The diagonal being zero is a bit
+more subtle. Think about what the sum means when $i=j$. We are summing the edges not containing
+the point $i$ over all triangles containing $i$. But, for any point inside a closed surface, this
+just means going around the point $i$ in a closed loop. So, since we are concerned with closed
+surfaces, this is always zero.
+
+In summary, defining
+\begin{empheq}[left=\empheqlbrace]{align}
+    \alpha_i &= \sum_{(i,j,k) \in T_i} \alpha(i,j,k), \\
+    \alpha_{ij} &= \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k), \\
+    \vb{d}_{ij} &= \sum_{(i,j,k) \in T_i \cap T_j} \text{sgn}(i,j,k)(\vb{k}_i - \vb{k}_k),
+\end{empheq}
+the different matrices can be expressed as
+\begin{gather}
+    M_{ij} = \frac{\alpha_i}{12}\delta_{ij} + \frac{\alpha_{ij}}{24}\delta_{\expval{ij}}, \\
+    \Gamma_{ij} = \qty(\frac{\alpha_i\gamma^i}{20}
+        + \sum_k\frac{\alpha_{ik}\gamma^k}{60}\delta_{\expval{ik}})\delta_{ij}
+        + \qty(\frac{\alpha_{ij}}{60}(\gamma^i+\gamma^j) + \sum_k\frac{\alpha(i,j,k)\gamma^k}{120}
+            \delta_{\expval{ik}}\delta_{\expval{jk}})\delta_{\expval{ij}}\\
+    (D_{\vu{v}\cross\vu{B}})_{ij} = \frac{1}{6}\vu{B}\vdot\vb{d}_{ij}\delta_{\expval{ij}}.
+\end{gather}
+$\delta_{\expval{ij}}$ is equal to 1 if $i$ and $j$ are neighboring points, and 0 otherwise.
+Technically, due to the definitions, it is not really needed, but I include it to make things
+a bit clearer.
+
+\textcolor{red}{TODO: I need to calculate the in-scattering term for the 3D case too.}
 
 \section{Implementation Details}
 Luckily, the matrices in FEM are sparse, since there is only overlap between neighboring elements.
@@ -448,7 +621,12 @@ Even better, they are nearly \emph{banded}, meaning that the non-zero elements a
 diagonal and the minor diagonals surrounding it. I say nearly, because there are also extra corner
 terms which we can handle separately. This greatly speeds up the calculations and simplifies the
 storage of the matrices. We store these matrices in a format called \emph{diagonal ordered form}.
-For example, the $n+1$ by $n+1$ matrix
+
+First, let us consider the 2D case which is simpler. Since every element only interacts with its two
+neighbors, only the main diagonal and the two minor diagonals next to it are nonzero, with two extra
+elements in the corner for the interaction of the last element with the first element (since the
+curve is closed and there are periodic boundary conditions). This gives, for example, some $n+1$ by
+$n+1$ matrix
 \begin{equation}
     \mqty(b_0 & a_0 & 0 & 0 & 0 & \dots & c_0 \\
           c_1 & b_1 & a_1 & 0 & 0 & \dots & 0 \\
@@ -458,7 +636,7 @@ For example, the $n+1$ by $n+1$ matrix
           0 & 0 & 0 & \dots & c_{n-1} & b_{n-1} & a_{n-1} \\
           a_n & 0 & 0 & \dots & 0 & c_n & b_n \\)
 \end{equation}
-can be stored as
+which can be stored as
 \begin{equation}
     \mqty(a_n & a_0 & \dots & a_{n-2} & a_{n-1} \\
         b_0 & b_1 & \dots & b_{n-1} & b_n \\
@@ -469,12 +647,15 @@ extra corner terms, and the convention is made to make sense for that ($a_n$ and
 missing in that case).
 
 There is an annoying little detail with our matrices: since we are dealing with closed surfaces,
-we have periodic boundary conditions and the corner elements of the matrices are also nonzero. This
-means our matrices are not purely banded. While this does not pose a problem for storing them (we
-just use the corner terms usually unused by others), but it means the inversion algorithms made for
-banded matrices will not work out of the box. To fix this, we can utilize the Sherman--Morrison
-formula. It states that, given the banded matrix $B$ and a rank-1 update $uv^T$, the inverse of the
-full matrix is
+we have periodic boundary conditions. So, in addition to the diagonals, some elements near the
+corners of the matrices are also nonzero. This means our matrices are not purely banded. This
+does not pose a problem for storing them (we just use the corner terms usually unused by others),
+but it means the inversion algorithms made for banded matrices will not work out of the box. To fix
+this, we can utilize the Sherman--Morrison--Woodbury formula. First, let us consider the simpler 2D
+case, where there are only two extra nonzero elements exactly in the corners. So, our matrices are
+the sum of a banded matrix and a rank-1 update. The simpler Sherman--Morrison formula states that,
+given some matrix $B$ (here, the banded portion) and a rank-1 update $uv^T$, the inverse of the full
+matrix is
 \begin{equation}
     A^{-1} = (B + uv^T)^{-1} = B^{-1} - \frac{B^{-1}uv^TB^{-1}}{1 + v^TB^{-1}u}.
 \end{equation}
