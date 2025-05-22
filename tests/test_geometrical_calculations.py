@@ -1,0 +1,119 @@
+import unittest
+import numpy as np
+
+import os, sys
+sys.path.append(os.path.dirname(os.path.relpath(__file__)) + "/..")
+import elecboltz
+
+class TestGeometricalCalculations(unittest.TestCase):
+    def setUp(self):
+        # make dummy bandstructure and conductivity objects to inject
+        # testing coordinates into them later for just testing the 
+        # jacobian calculations
+        self.band = elecboltz.BandStructure(
+            "Ef * (kx^2 + ky^2 + kz^2)", 1.0, [np.pi, np.pi, np.pi],
+            bandparams={'Ef': 1.0})
+        self.cond = elecboltz.Conductivity(
+            self.band, field=[0.0, 0.0, 0.0], scattering_rate=1.0)
+    
+    def test_regular_octahedron_jacobian(self):
+        self.set_up_regular_octahedron()
+        self.cond._calculate_jacobian_sums(self.triangle_coordinates)
+        for i in range(6):
+            for j in range(6):
+                error_msg = f"Regular octahedron Jacobian sum at ({i}, {j})"\
+                            " is incorrect"
+                if i == j:
+                    self.assertAlmostEqual(
+                        self.cond._jacobian_sums[self.cond._bandwidth][j],
+                        4 * np.sqrt(3), 4, error_msg)
+                else:
+                    for face in self.band.kfaces:
+                        if i in face and j in face:
+                            self.assertAlmostEqual(
+                                self.cond._jacobian_sums[
+                                    self.cond._bandwidth+i-j][j],
+                                2 * np.sqrt(3), 4, error_msg)
+
+    def test_regular_octahedron_derivative(self):
+        self.set_up_regular_octahedron()
+        self.cond._calculate_derivative_sums(self.triangle_coordinates)
+        derivative_sums = np.zeros((6, 6, 3))
+        derivative_sums[0, 1, 2] = -2
+        derivative_sums[1, 0, 2] = 2
+        derivative_sums[1, 2, 2] = -2
+        derivative_sums[2, 1, 2] = 2
+        derivative_sums[2, 3, 2] = -2
+        derivative_sums[3, 2, 2] = 2
+        derivative_sums[3, 0, 2] = -2
+        derivative_sums[0, 3, 2] = 2
+        derivative_sums[0, 4, 0] = 2
+        derivative_sums[4, 0, 0] = -2
+        derivative_sums[1, 4, 1] = 2
+        derivative_sums[4, 1, 1] = -2
+        derivative_sums[2, 4, 0] = -2
+        derivative_sums[4, 2, 0] = 2
+        derivative_sums[3, 4, 1] = -2
+        derivative_sums[4, 3, 1] = 2
+        derivative_sums[0, 5, 0] = -2
+        derivative_sums[5, 0, 0] = 2
+        derivative_sums[1, 5, 1] = -2
+        derivative_sums[5, 1, 1] = 2
+        derivative_sums[2, 5, 0] = 2
+        derivative_sums[5, 2, 0] = -2
+        derivative_sums[3, 5, 1] = 2
+        derivative_sums[5, 3, 1] = -2
+        for i in range(6):
+            for j in range(6):
+                for k in range(3):
+                    self.assertEqual(
+                        self.cond._derivatives[self.cond._bandwidth+i-j, j, k],
+                        derivative_sums[i, j, k],
+                        "Regular octahedron derivative sum at"
+                        f" ({i}, {j}) is incorrect on axis {k}")
+
+    @unittest.skip("Irregular octahedron test is not implemented")
+    def test_irregular_octahedron_jacobian(self):
+        self.set_up_irregular_octahedron()
+        self.cond._calculate_jacobian_sums()
+
+    @unittest.skip("Irregular octahedron test is not implemented")
+    def test_irregular_octahedron_derivative(self):
+        self.set_up_irregular_octahedron()
+        self.cond._calculate_derivative_sums()
+
+    def set_up_regular_octahedron(self):
+        vertices = np.array(
+            [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
+             [-1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 0.0, -1.0]])
+        faces = np.array([
+            [0, 1, 4], [0, 5, 1], [1, 2, 4], [1, 5, 2],
+            [2, 3, 4], [2, 5, 3], [3, 0, 4], [3, 5, 0]])
+        self.set_up_geometry(vertices, faces)
+
+    def set_up_irregular_octahedron(self):
+        randnums = np.random.random((6, 3))
+        vertices = np.array(
+            [[randnums[0, 0], -randnums[0, 1], 0.0],
+             [randnums[1, 0], randnums[1, 1], 0.0],
+             [-randnums[2, 0], randnums[2, 1], 0.0],
+             [-randnums[3, 0], -randnums[3, 1], 0.0],
+             [randnums[4, 0], randnums[4, 1], randnums[4, 2]],
+             [-randnums[5, 0], -randnums[5, 1], -randnums[5, 2]]])
+        faces = np.array([
+            [0, 1, 4], [0, 5, 1], [1, 2, 4], [1, 5, 2],
+            [2, 3, 4], [2, 5, 3], [3, 0, 4], [3, 5, 0]])
+        self.set_up_geometry(vertices, faces)
+
+    def set_up_geometry(self, vertices, faces):
+        self.band.kpoints = vertices
+        self.band.kpoints_periodic = vertices.copy()
+        self.band.kfaces = faces
+        self.band.kfaces_periodic = faces.copy()
+        self.triangle_coordinates = self.band.kpoints[self.band.kfaces]
+        self.cond._bandwidth = np.max(np.abs(
+            self.band.kfaces - np.roll(self.band.kfaces, 1, axis=1)))
+
+
+if __name__ == "__main__":
+    unittest.main()
