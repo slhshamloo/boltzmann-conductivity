@@ -19,14 +19,7 @@ class Conductivity:
         The class holding band structure information of the material.
     field : Collection[float]
         The magnetic field in the x, y, and z directions in units of
-        Tesla. Either this or `field_direction` and `field_magnitude`
-        must be set.
-    field_magnitude : float
-        The magnitude of the magnetic field in units of Tesla. Either
-        this and `field_direction` or `field` must be set.
-    field_direction : Collection[float]
-        The unit vector in the direction of the magnetic field. Either
-        this and `field_magnitude` or `field` must be set.
+        Tesla.
     scattering_rate : Callable or float or None
         The (out-)scattering rate as a function of kx, ky, and kz, in
         units of THz. Can also be a constant value instead of a
@@ -49,10 +42,6 @@ class Conductivity:
     field : Collection[float] or None
         The magnetic field in the x, y, and z directions in units of
         Tesla.
-    field_magnitude : float
-        The magnitude of the magnetic field in units of Tesla.
-    field_direction : Collection[float]
-        The unit vector in the direction of the magnetic field.
     scattering_rate : Callable or float or Collection[float] or None
         The (out-)scattering rate as a function of kx, ky, and kz. Can
         also be a constant value instead of a function. If initialized
@@ -77,20 +66,22 @@ class Conductivity:
     Notes
     -----
     """
-    def __init__(self, band: BandStructure, field: Collection[float] = None,
-                 field_magnitude: float | None = None,
-                 field_direction: Collection[float] = None,
+    def __init__(self, band: BandStructure,
+                 field: Collection[float] = np.zeros(3),
                  scattering_rate: Callable | float | None = None,
                  scattering_kernel: Callable | None = None,
                  frequency: float = 0.0):
         # avoid triggering setattr in the constructor
         super().__setattr__('band', band)
-        super().__setattr__('field_magnitude', field_magnitude)
-        super().__setattr__('field_direction', field_direction)
-        super().__setattr__('field', field)
         super().__setattr__('scattering_rate', scattering_rate)
         super().__setattr__('scattering_kernel', scattering_kernel)
         super().__setattr__('frequency', frequency)
+        super().__setattr__('field', np.array(field))
+        self._field_magnitude = np.linalg.norm(field)
+        if self._field_magnitude != 0:
+            self._field_direction = field / self._field_magnitude
+        else:
+            self._field_direction = np.zeros(3)
         self.sigma = np.zeros((3, 3))
         self._saved_solutions = [None, None, None]
         self._velocities = None
@@ -116,20 +107,31 @@ class Conductivity:
         if name in ['frequency', 'scattering_rate', 'scattering_kernel']:
             self.erase_memory(elements=False, scattering=True,
                               derivative=False)
-        if name in ['field_magnitude', 'field_direction']:
+        if name == 'field' and value is not None:
+            self.set_field(value)
+        super().__setattr__(name, value)
+    
+    def set_field(self, field):
+        field = np.array(field)
+        new_magnitude = np.linalg.norm(field)
+        if new_magnitude != 0:
+            new_direction = field / new_magnitude
+        else:
+            new_direction = np.zeros(3)
+        if np.all(self._field_direction == new_direction):
+            if self._derivative_term is not None:
+                self._derivative_term *= \
+                    new_magnitude / self._field_magnitude
+            if self._differential_operator is not None:
+                self._differential_operator = \
+                    self._out_scattering - e/hbar*self._derivative_term
+                self._saved_solutions = [None, None, None]
+        else:
             self.erase_memory(elements=False, scattering=False,
                               derivative=True)
-        if name in ['field_magnitude', 'field_direction']:
-            if self._derivative_term is not None:
-                if self.field_magnitude is not None:
-                    self._derivative_term *= value / self.field_magnitude
-                elif self.field is not None:
-                    self._derivative_term *= \
-                        value / np.linalg.norm(np.array(self.field))
-                else:
-                    raise ValueError(
-                        "Either field or field_magnitude must be set.")
-        super().__setattr__(name, value)
+        self._field_magnitude = new_magnitude
+        self._field_direction = new_direction
+        super().__setattr__('field', field)
 
     def calculate(self, i: Collection[int] | int | None = None,
                   j: Collection[int] | int | None = None
@@ -315,7 +317,7 @@ class Conductivity:
             # TODO: calculate the in-scattering matrix
             self._is_scattering_saved = True
         if self._derivative_term is None:
-            self._build_derivative_matrix()
+            self._derivative_term = np.dot(self._derivatives, self.field) / 6
         self._differential_operator = (
             self._out_scattering - e/hbar*self._derivative_term)
             # - self._in_scattering_term when implemented
@@ -383,19 +385,6 @@ class Conductivity:
             add_ij=self._jacobians*self._inverse_scattering_length[k_idx]/120,
             add_jk=self._jacobians*self._inverse_scattering_length[i_idx]/120,
             add_ik=self._jacobians*self._inverse_scattering_length[j_idx]/120)
-
-    def _build_derivative_matrix(self):
-        """Calculate the derivative matrix (D)"""
-        if self.field is None:
-            if self.field_direction is None or self.field_magnitude is None:
-                raise ValueError(
-                    "Either field or field_direction "
-                    "and field_magnitude must be set.")
-            else:
-                self._derivative_term = self.field_magnitude / 6 * np.dot(
-                    self._derivatives, self.field_direction)
-        else:
-            self._derivative_term = np.dot(self._derivatives, self.field) / 6
     
     def _add_to_banded(self, banded_matrix, i_idx, j_idx, k_idx,
                        add_ii=None, add_jj=None, add_kk=None,
