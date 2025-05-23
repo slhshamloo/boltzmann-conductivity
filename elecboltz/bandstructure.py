@@ -134,7 +134,7 @@ class BandStructure:
         "stitch" the open ends of the surface together.
         """
         self._gvec = np.array([np.pi / a for a in self.unit_cell])
-        self._voxel_size = 2 * self._gvec / np.array(self.resolution)
+        self._voxel_size = 2 * self._gvec / self.resolution
 
         self._generate_point_cloud()
         normals = np.column_stack(self.velocity_func(
@@ -148,7 +148,6 @@ class BandStructure:
         ms.apply_filter("meshing_close_holes")
         self.kpoints = ms.current_mesh().vertex_matrix()
         self.kfaces = ms.current_mesh().face_matrix()
-        self.kpoints = self.kpoints[np.unique(self.kfaces)]
         self._stitch_periodic_boundaries()
     
     def periodic_distance(self, k1: np.ndarray, k2: np.ndarray,
@@ -265,9 +264,10 @@ class BandStructure:
         Generate a point cloud of the Fermi surface by detecting sign
         changes and applying simple interpolation.
         """
-        kgrid = np.mgrid[-self._gvec[0]:self._gvec[0]:1j*self.resolution,
-                         -self._gvec[1]:self._gvec[1]:1j*self.resolution,
-                         -self._gvec[2]:self._gvec[2]:1j*self.resolution]
+        upscaled_resolution = round(1.5 * self.resolution)
+        kgrid = np.mgrid[-self._gvec[0]:self._gvec[0]:1j*upscaled_resolution,
+                         -self._gvec[1]:self._gvec[1]:1j*upscaled_resolution,
+                         -self._gvec[2]:self._gvec[2]:1j*upscaled_resolution]
         energy_diff = self.energy_func(*kgrid) - self.chemical_potential
         
         kpoints = []
