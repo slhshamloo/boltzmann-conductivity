@@ -143,14 +143,16 @@ class BandStructure:
         """
         self._gvec = np.array([np.pi / a for a in self.unit_cell])
         self._voxel_size = 2 * self._gvec / (self.resolution-1)
+        # Make resolution even to ensure symmetry in the grid
+        resolution = self.resolution + self.resolution % 2
 
         self.kpoints, self.kfaces, _, _ = marching_cubes(
             self.energy_func(*np.mgrid[
-                -self._gvec[0]:self._gvec[0]:1j*self.resolution,
-                -self._gvec[1]:self._gvec[1]:1j*self.resolution,
-                -self._gvec[2]:self._gvec[2]:1j*self.resolution]),
+                -self._gvec[0]:self._gvec[0]:1j*resolution,
+                -self._gvec[1]:self._gvec[1]:1j*resolution,
+                -self._gvec[2]:self._gvec[2]:1j*resolution]),
             level=self.chemical_potential)
-        self.kpoints *= 2 * self._gvec[None, :] / (self.resolution-1)
+        self.kpoints *= 2 * self._gvec[None, :] / (resolution-1)
         self.kpoints -= self._gvec[None, :]
 
         for _ in range(self.correction_steps):
