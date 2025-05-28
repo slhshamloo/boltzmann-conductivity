@@ -287,8 +287,7 @@ class Conductivity:
         i_idx = self.band.kfaces_periodic
         j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
         k_idx = np.roll(self.band.kfaces_periodic, -2, axis=1)
-        n = max(self.band.kpoints_periodic.shape[0],
-                self._derivatives.shape[0])
+        n = self._derivatives.shape[0]
         np.add.at(
             self._derivatives, ((self._bandwidth+i_idx-j_idx) % n, j_idx),
             self._derivative_components)
@@ -389,7 +388,7 @@ class Conductivity:
     def _add_to_banded(self, banded_matrix, i_idx, j_idx, k_idx,
                        add_ii=None, add_jj=None, add_kk=None,
                        add_ij=None, add_jk=None, add_ik=None):
-        n = max(self.band.kpoints_periodic.shape[0], banded_matrix.shape[0])
+        n = banded_matrix.shape[0]
         if add_ii is not None:
             np.add.at(banded_matrix, (self._bandwidth, i_idx), add_ii)
         if add_jj is not None:
