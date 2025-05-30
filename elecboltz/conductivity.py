@@ -287,13 +287,10 @@ class Conductivity:
         i_idx = self.band.kfaces_periodic
         j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
         k_idx = np.roll(self.band.kfaces_periodic, -2, axis=1)
-        n = self._derivatives.shape[0]
-        np.add.at(
-            self._derivatives, ((self._bandwidth+i_idx-j_idx) % n, j_idx),
-            self._derivative_components)
-        np.add.at(
-            self._derivatives, ((self._bandwidth+k_idx-j_idx) % n, j_idx),
-            self._derivative_components)
+        np.add.at(self._derivatives, (self._bcol(i_idx, j_idx), j_idx),
+                  self._derivative_components)
+        np.add.at(self._derivatives, (self._bcol(k_idx, j_idx), j_idx),
+                  self._derivative_components)
 
     def _calculate_velocity_projections(self):
         self._vhat_projections = np.zeros((len(self.band.kpoints_periodic), 3))
@@ -388,7 +385,6 @@ class Conductivity:
     def _add_to_banded(self, banded_matrix, i_idx, j_idx, k_idx,
                        add_ii=None, add_jj=None, add_kk=None,
                        add_ij=None, add_jk=None, add_ik=None):
-        n = banded_matrix.shape[0]
         if add_ii is not None:
             np.add.at(banded_matrix, (self._bandwidth, i_idx), add_ii)
         if add_jj is not None:
@@ -396,17 +392,20 @@ class Conductivity:
         if add_kk is not None:
             np.add.at(banded_matrix, (self._bandwidth, k_idx), add_kk)
         if add_ij is not None:
-            np.add.at(banded_matrix,
-                      ((self._bandwidth+i_idx-j_idx) % n, j_idx), add_ij)
-            np.add.at(banded_matrix,
-                      ((self._bandwidth+j_idx-i_idx) % n, i_idx), add_ij)
+            np.add.at(banded_matrix, (self._bcol(i_idx, j_idx), j_idx), add_ij)
+            np.add.at(banded_matrix, (self._bcol(j_idx, i_idx), i_idx), add_ij)
         if add_jk is not None:
-            np.add.at(banded_matrix,
-                      ((self._bandwidth+j_idx-k_idx) % n, k_idx), add_jk)
-            np.add.at(banded_matrix,
-                      ((self._bandwidth+k_idx-j_idx) % n, j_idx), add_jk)
+            np.add.at(banded_matrix, (self._bcol(j_idx, k_idx), k_idx), add_jk)
+            np.add.at(banded_matrix, (self._bcol(k_idx, j_idx), j_idx), add_jk)
         if add_ik is not None:
-            np.add.at(banded_matrix,
-                      ((self._bandwidth+i_idx-k_idx) % n, k_idx), add_ik)
-            np.add.at(banded_matrix,
-                      ((self._bandwidth+k_idx-i_idx) % n, i_idx), add_ik)
+            np.add.at(banded_matrix, (self._bcol(i_idx, k_idx), k_idx), add_ik)
+            np.add.at(banded_matrix, (self._bcol(k_idx, i_idx), i_idx), add_ik)
+
+    def _bcol(self, i, j):
+        """Get the column index in the diagonal ordered form."""
+        n = len(self.band.kpoints_periodic)
+        is_boundary = np.abs(i-j) > self._bandwidth
+        is_upper = j > i
+        band_idx = i - j + is_boundary * (
+            is_upper*n - np.bitwise_not(is_upper)*n)
+        return self._bandwidth + band_idx
