@@ -72,16 +72,6 @@ class TestGeometricalCalculations(unittest.TestCase):
                         "Regular octahedron derivative sum at"
                         f" ({i}, {j}) is incorrect on axis {k}")
 
-    @unittest.skip("Irregular octahedron test is not implemented")
-    def test_irregular_octahedron_jacobian(self):
-        self.set_up_irregular_octahedron()
-        self.cond._calculate_jacobian_sums()
-
-    @unittest.skip("Irregular octahedron test is not implemented")
-    def test_irregular_octahedron_derivative(self):
-        self.set_up_irregular_octahedron()
-        self.cond._calculate_derivative_sums()
-
     def set_up_regular_octahedron(self):
         vertices = np.array(
             [[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0],
