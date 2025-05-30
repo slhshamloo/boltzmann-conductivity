@@ -5,7 +5,7 @@ from scipy.constants import e, hbar, angstrom
 from typing import Callable
 from collections.abc import Collection
 from .bandstructure import BandStructure
-from .solve import solve_cyclic_banded
+from .banded import solve_cyclic_banded, banded_column
 
 
 class Conductivity:
@@ -403,9 +403,5 @@ class Conductivity:
 
     def _bcol(self, i, j):
         """Get the column index in the diagonal ordered form."""
-        n = len(self.band.kpoints_periodic)
-        is_boundary = np.abs(i-j) > self._bandwidth
-        is_upper = j > i
-        band_idx = i - j + is_boundary * (
-            is_upper*n - np.bitwise_not(is_upper)*n)
-        return self._bandwidth + band_idx
+        return banded_column(i, j, self._bandwidth,
+                             self.band.kpoints_periodic.shape[0])
