@@ -94,32 +94,27 @@ def solve_cyclic_banded(A: np.ndarray, b: np.ndarray) -> np.ndarray:
         U2[large_idx, small_idx] = A[ndiag, :bandwidth-ndiag]
         V2[small_idx, large_idx] = A[A.shape[0]-ndiag-1, ndiag-bandwidth:]
     U2 = U2 @ np.linalg.inv(V1)
+    U = np.vstack((U1, np.zeros((A.shape[1] - 2*bandwidth, bandwidth)), U2))
     # construct B
     B = A.copy()
+    for ndiag in range(1, bandwidth+1):
+        B[bandwidth+ndiag, -ndiag:] = 0
+        B[bandwidth-ndiag, :ndiag] = 0
     idx = np.arange(bandwidth)
     i_idx = idx[:, None]
     j_idx = idx[None, :]
-    B[bandwidth + i_idx - j_idx, j_idx] -= V1 # U1 @ V1 but U1 is I
-    i_idx = A.shape[1] - 1 - idx[:, None]
-    j_idx = A.shape[1] - 1 - idx[None, :]
-    B[bandwidth + i_idx - j_idx, j_idx] -= (U2 @ V2)[
-        A.shape[1]-1-i_idx, A.shape[1]-1-j_idx]
+    # U1 @ V1 = V1 since U1 = I
+    B[banded_column(i_idx, j_idx, bandwidth, B.shape[1]), j_idx] -= V1
+    i_idx = A.shape[1] - bandwidth + idx[:, None]
+    j_idx = A.shape[1] - bandwidth + idx[None, :]
+    B[banded_column(i_idx, j_idx, bandwidth, B.shape[1]), j_idx] -= (U2 @ V2)[
+        i_idx - A.shape[1] + bandwidth, j_idx - A.shape[1] + bandwidth]
     # calculate banded solutions
-    BinvU1 = scipy.linalg.solve_banded((bandwidth, bandwidth),
-                                       B[:, :bandwidth], U1)
-    BinvU2 = scipy.linalg.solve_banded((bandwidth, bandwidth),
-                                       B[:, -bandwidth:], U2)
+    BinvU = scipy.linalg.solve_banded((bandwidth, bandwidth), B, U)
     solution = scipy.linalg.solve_banded((bandwidth, bandwidth), B, b)
     # apply the correction
-    dense_inversion = np.linalg.inv(I + V1@BinvU1 + V2@BinvU2)
-    V1Binv = V1 @ solution[:bandwidth]
-    V2Binv = V2 @ solution[-bandwidth:]
-    BinvU1 @= dense_inversion
-    BinvU2 @= dense_inversion
-    solution[:bandwidth] -= BinvU1 @ V1Binv
-    solution[:bandwidth] -= BinvU1 @ V2Binv
-    solution[-bandwidth:] -= BinvU2 @ V1Binv
-    solution[-bandwidth:] -= BinvU2 @ V2Binv
+    dense_inversion = np.linalg.inv(
+        I + V1@BinvU[:bandwidth] + V2@BinvU[-bandwidth:])
+    VdotBinv = V1@solution[:bandwidth] + V2@solution[-bandwidth:]
+    solution -= np.linalg.multi_dot((BinvU, dense_inversion, VdotBinv))
     return solution
-    # bandwidth = (A.shape[0] - 1) // 2
-    # return scipy.linalg.solve_banded((bandwidth, bandwidth), A, b)
