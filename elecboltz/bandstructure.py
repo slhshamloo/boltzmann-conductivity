@@ -111,8 +111,6 @@ class BandStructure:
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('bandparams', bandparams)
-        # to avoid AttributeError in unit_cell setter
-        super().__setattr__('resolution', None)
         self.unit_cell = unit_cell
         self.chemical_potential = chemical_potential
         self.atoms_per_cell = atoms_per_cell
@@ -130,16 +128,14 @@ class BandStructure:
         if name in ['chemical_potential', 'unit_cell', 'resolution']:
             if name == 'unit_cell':
                 self._gvec = np.array([np.pi / a for a in value])
-                if self.resolution is not None:
-                    self._voxel_size = 2 * self._gvec / (self.resolution-1)
             elif name == 'resolution':
-                self._voxel_size = 2 * self._gvec / (value-1)
+                super().__setattr__('resolution', value + value % 2)
             self.kpoints = None
             self.kfaces = None
             self.kpoints_periodic = None
             self.kfaces_periodic = None
     
-    def discretize(self):
+    def discretize(self, sort_axis: int | None = None):
         """
         Discretize the Fermi surface.
 
@@ -150,23 +146,30 @@ class BandStructure:
         applied to the output of marching cubes. Finally, after the
         surface construction, periodic boundary conditions are applied
         to "stitch" the open ends of the surface together.
-        """
-        self._gvec = np.array([np.pi / a for a in self.unit_cell])
-        self._voxel_size = 2 * self._gvec / (self.resolution-1)
-        # Make resolution even to ensure symmetry in the grid
-        resolution = self.resolution + self.resolution % 2
 
+        Parameters
+        ----------
+        sort_axis : int, optional
+            The axis along which to sort the points after
+            triangulation. If None, the points are sorted in a way to
+            have the minimum index difference between the furthest
+            neighbors in the triangulation.
+        """
         self.kpoints, self.kfaces, _, _ = marching_cubes(
             self.energy_func(*np.mgrid[
-                -self._gvec[0]:self._gvec[0]:1j*resolution,
-                -self._gvec[1]:self._gvec[1]:1j*resolution,
-                -self._gvec[2]:self._gvec[2]:1j*resolution]),
+                -self._gvec[0]:self._gvec[0]:1j*self.resolution,
+                -self._gvec[1]:self._gvec[1]:1j*self.resolution,
+                -self._gvec[2]:self._gvec[2]:1j*self.resolution]),
             level=self.chemical_potential)
-        self.kpoints *= 2 * self._gvec[None, :] / (resolution-1)
+        self.kpoints *= 2 * self._gvec[None, :] / (self.resolution-1)
         self.kpoints -= self._gvec[None, :]
-
         for _ in range(self.correction_steps):
             self._apply_newton_correction()
+        
+        if sort_axis is None:
+            self._optimally_reindex()
+        else:
+            self._sort_and_reindex(sort_axis)
         self._stitch_periodic_boundaries()
 
     def periodic_distance(self, k1: np.ndarray, k2: np.ndarray,
@@ -197,7 +200,7 @@ class BandStructure:
         kdiff %= 2 * gvec
         kdiff -= gvec
         return kdiff
-    
+
     def calculate_electron_density(self) -> float:
         """
         Calculate the electron density n_e of the material.
@@ -263,6 +266,29 @@ class BandStructure:
         self.velocity_func = lambda kx, ky, kz: [
             vfunc(kx, ky, kz, *self.unit_cell, **self.bandparams)
             for vfunc in self._velocity_funcs_full]
+    
+    def _optimally_reindex(self):
+        best_order_axis = 0
+        best_furtherst_neighbors = np.inf
+        for axis in range(3):
+            _, new_faces = self._generate_reindex(axis)
+            furtherst_neighbors = np.max(
+                np.abs(np.roll(new_faces, 1, axis=1) - new_faces))
+            if furtherst_neighbors < best_furtherst_neighbors:
+                best_furtherst_neighbors = furtherst_neighbors
+                best_order_axis = axis
+        self._sort_and_reindex(best_order_axis)
+    
+    def _sort_and_reindex(self, sort_axis):
+        new_order, self.kfaces = self._generate_reindex(sort_axis)
+        self.kpoints = self.kpoints[new_order]
+    
+    def _generate_reindex(self, sort_axis):
+        new_order = np.argsort(self.kpoints[:, sort_axis])
+        old_to_new_map = np.empty(len(new_order), dtype=int)
+        old_to_new_map[new_order] = np.arange(len(new_order))
+        return new_order, old_to_new_map[self.kfaces]
+
 
     def _stitch_periodic_boundaries(self, threshold=1e-5):
         """
