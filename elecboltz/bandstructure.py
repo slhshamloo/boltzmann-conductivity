@@ -111,8 +111,10 @@ class BandStructure:
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('bandparams', bandparams)
-        self.chemical_potential = chemical_potential
+        # to avoid AttributeError in unit_cell setter
+        super().__setattr__('resolution', None)
         self.unit_cell = unit_cell
+        self.chemical_potential = chemical_potential
         self.atoms_per_cell = atoms_per_cell
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
@@ -122,12 +124,20 @@ class BandStructure:
         self.kpoints = np.empty((0, 3))
 
     def __setattr__(self, name, value):
+        super().__setattr__(name, value)
         if name == 'dispersion' or name == 'bandparams':
-            super().__setattr__(name, value)
             self._parse_dispersion()
         if name in ['chemical_potential', 'unit_cell', 'resolution']:
-            self.kpoints = np.empty((0, 3))
-        super().__setattr__(name, value)
+            if name == 'unit_cell':
+                self._gvec = np.array([np.pi / a for a in value])
+                if self.resolution is not None:
+                    self._voxel_size = 2 * self._gvec / (self.resolution-1)
+            elif name == 'resolution':
+                self._voxel_size = 2 * self._gvec / (value-1)
+            self.kpoints = None
+            self.kfaces = None
+            self.kpoints_periodic = None
+            self.kfaces_periodic = None
     
     def discretize(self):
         """
@@ -187,6 +197,33 @@ class BandStructure:
         kdiff %= 2 * gvec
         kdiff -= gvec
         return kdiff
+    
+    def calculate_electron_density(self) -> float:
+        """
+        Calculate the electron density n_e of the material.
+
+        Note that the surface needs to be discretized before calling
+        this method. The electron density is calculated by dividing
+        the volume enclosed by the triangulated Fermi surface by the
+        volume of the unit cell in the reciprocal space to find the
+        filling fraction, then multiplying by the number of atoms
+        and dividing by the volume of the unit cell in real space to
+        get the electron density in SI units.
+
+        Returns
+        -------
+        float
+            The electron density n_e of the material in SI units.
+        """
+        triangle_coordinates = self.kpoints[self.kfaces]
+        base_surface_area = np.cross(
+            triangle_coordinates[:, 0], triangle_coordinates[:, 1], axis=-1)
+        fermi_surface_volume = np.sum(np.einsum(
+            'ij,ij->i', base_surface_area, triangle_coordinates[:, 2]) / 6)
+        filling_fraction = fermi_surface_volume / np.prod(self._gvec) / 8
+        # the extra factor of 2 is the spin degeneracy
+        return (2 * self.atoms_per_cell * filling_fraction
+                / np.prod(self.unit_cell) / angstrom**3)
 
     def calculate_mass(self):
         """
