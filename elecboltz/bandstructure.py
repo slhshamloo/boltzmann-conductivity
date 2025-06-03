@@ -293,25 +293,21 @@ class BandStructure:
     def _stitch_periodic_boundaries(self, threshold=1e-5):
         """
         Find duplicate points on the periodic boundaries, then make the
-        periodic mesh arrays. Threshold sets the fraction of the
-        resolution that we consider the points to be the same if they
-        are within that distance.
+        periodic mesh arrays. Threshold sets the periodic distance below
+        which points are considered duplicates.
         """
-        voxel_coordinates = np.round((self.kpoints+self._gvec[None,:])
-                                     / (threshold*self._voxel_size[None,:]))
-        voxel_coordinates %= np.round(
-            2*self._gvec / (threshold*self._voxel_size))[None, :]
-        point_bins = defaultdict(list)
+        high_border = np.argwhere(np.any(
+            self.kpoints - self._gvec[None, :] > -threshold, axis=1)).ravel()
+        low_border = np.argwhere(np.any(
+            self.kpoints + self._gvec[None, :] < threshold, axis=1)).ravel()
         duplicate_points = dict()
-        for i, coordinates in enumerate(voxel_coordinates):
-            point_bins[tuple(coordinates)].append(i)
-        for coordinates in point_bins:
-            point_bin = point_bins[coordinates]
-            num_neighbors = len(point_bin)
-            if num_neighbors > 1:
-                primary_point = point_bin[0]
-                for point in point_bin[1:]:
-                    duplicate_points[point] = primary_point
+        for low in low_border:
+            for high in high_border:
+                if low != high:
+                    if np.linalg.norm(self.periodic_distance(
+                            self.kpoints[low], self.kpoints[high])
+                            ) < threshold:
+                        duplicate_points[int(high)] = int(low)
         self._build_periodic_mesh(duplicate_points)
     
     def _build_periodic_mesh(self, duplicate_points):
