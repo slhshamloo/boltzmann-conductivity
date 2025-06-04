@@ -7,6 +7,7 @@ from scipy.constants import hbar, eV, angstrom
 from collections.abc import Collection
 # default dictionary for point hashing
 from collections import defaultdict
+from .integrate import adaptive_octree_integrate
 # conversion from energy gradient units to m/s for velocity
 velocity_units = 1e-3 * eV * angstrom / hbar
 
@@ -210,29 +211,30 @@ class BandStructure:
         kdiff -= gvec
         return kdiff
 
-    def calculate_electron_density(self) -> float:
+    def calculate_electron_density(self, depth: int = 8) -> float:
         """
         Calculate the electron density n_e of the material.
 
         Note that the surface needs to be discretized before calling
-        this method. The electron density is calculated by dividing
-        the volume enclosed by the triangulated Fermi surface by the
-        volume of the unit cell in the reciprocal space to find the
-        filling fraction, then multiplying by the number of atoms
-        and dividing by the volume of the unit cell in real space to
-        get the electron density in SI units.
+        this method. First, the filling fraction is calculated by
+        calculating the volume containing energy bellow the Fermi level
+        (calculated by an adaptive octree integration method) and then
+        dividing by the volume of the unit cell in the reciprocal space.
+        Then, the electron density is obtained by multiplying the
+        filling fraction by the number of atoms and dividing by the
+        volume of the unit cell in real space.
 
         Returns
         -------
         float
             The electron density n_e of the material in SI units.
         """
-        triangle_coordinates = self.kpoints[self.kfaces]
-        base_surface_area = np.cross(
-            triangle_coordinates[:, 0], triangle_coordinates[:, 1], axis=-1)
-        fermi_surface_volume = np.sum(np.einsum(
-            'ij,ij->i', base_surface_area, triangle_coordinates[:, 2]) / 6)
-        filling_fraction = fermi_surface_volume / np.prod(self._gvec) / 8
+        filling_fraction = adaptive_octree_integrate(
+            lambda kx, ky, kz: (self.energy_func(kx, ky, kz)
+                                < self.chemical_potential),
+            (-self._gvec[0], self._gvec[0], -self._gvec[1], self._gvec[1],
+             -self._gvec[2], self._gvec[2]), depth
+             ) / 8 / np.prod(self._gvec)
         # the extra factor of 2 is the spin degeneracy
         return (2 * self.atoms_per_cell * filling_fraction
                 / np.prod(self.unit_cell) / angstrom**3)
