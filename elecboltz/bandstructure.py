@@ -35,6 +35,8 @@ class BandStructure:
         necessarily the exact number of atoms; it should be the number
         of conducting units in the cell. So, for example, this is equal
         to 2 for LSCO, which has the cuprate atoms in a BCC cell.
+    periodic : bool
+        Whether to consider periodic boundary conditions.
     bandparams : dict, optional
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
@@ -65,6 +67,8 @@ class BandStructure:
     atoms_per_cell : int
         The number of atoms (more precisely, the number of conducting
         units) in the specified unit cell.
+    periodic : bool
+        Whether periodic boundary conditions are applied or not.
     bandparams : dict
         The parameters of the dispersion relation. Updating this 
         will automatically update `energy_func` and `velocity_func`.
@@ -86,10 +90,12 @@ class BandStructure:
         `kpoints` array.
     kpoints_periodic : (N, 3) numpy.ndarray of float
         The kpoints on the Fermi surface with the duplicate boundary
-        points removed.
+        points removed. Is only different from `kpoints` if `periodic`
+        is True.
     kfaces_periodic : (F, 3) numpy.ndarray of int
         Same as `kfaces`, but points to the unique points in
-        kpoints_periodic.
+        `kpoints_periodic`. is only different from `kfaces` if
+        `periodic` is True.
     resolution : int or Collection[int]
         The resolution of the grids used for approximating the Fermi
         surface geometry with the marching cubes algorithm.
@@ -104,36 +110,35 @@ class BandStructure:
     def __init__(
             self, dispersion: str, chemical_potential: float,
             unit_cell: Collection[float], atoms_per_cell: int = 1,
-            bandparams: dict = {},
+            periodic=True, bandparams: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
             resolution: int = 20, ncorrect=2, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('bandparams', bandparams)
-        self.unit_cell = unit_cell
         self.chemical_potential = chemical_potential
+        self.unit_cell = unit_cell
+        self.periodic = periodic
         self.atoms_per_cell = atoms_per_cell
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
         self.resolution = resolution
         self.correction_steps = ncorrect
         self._parse_dispersion()
-        self.kpoints = np.empty((0, 3))
+        self.kpoints = None
+        self.kfaces = None
+        self.kpoints_periodic = None
+        self.kfaces_periodic = None
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
         if name == 'dispersion' or name == 'bandparams':
             self._parse_dispersion()
-        if name in ['chemical_potential', 'unit_cell', 'resolution']:
-            if name == 'unit_cell':
-                self._gvec = np.array([np.pi / a for a in value])
-            elif name == 'resolution':
-                super().__setattr__('resolution', value + value % 2)
-            self.kpoints = None
-            self.kfaces = None
-            self.kpoints_periodic = None
-            self.kfaces_periodic = None
+        if name == 'unit_cell':
+            self._gvec = np.array([np.pi / a for a in value])
+        elif name == 'resolution':
+            super().__setattr__('resolution', value + value % 2)
     
     def discretize(self, sort_axis: int | None = None):
         """
@@ -170,7 +175,11 @@ class BandStructure:
             self._optimally_reindex()
         else:
             self._sort_and_reindex(sort_axis)
-        self._stitch_periodic_boundaries()
+        if self.periodic:
+            self._stitch_periodic_boundaries()
+        else:
+            self.kpoints_periodic = self.kpoints
+            self.kfaces_periodic = self.kfaces
 
     def periodic_distance(self, k1: np.ndarray, k2: np.ndarray,
                           broadcast: bool = False) -> np.ndarray:

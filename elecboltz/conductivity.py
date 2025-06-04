@@ -1,11 +1,12 @@
 import numpy as np
-# units
-from scipy.constants import e, hbar, angstrom
 # type hinting
 from typing import Callable
 from collections.abc import Collection
-from .bandstructure import BandStructure
+# units
+from scipy.constants import e, hbar, angstrom
+from scipy.linalg import solve_banded
 from .banded import solve_banded_iterative, banded_column
+from .bandstructure import BandStructure
 
 
 class Conductivity:
@@ -160,8 +161,13 @@ class Conductivity:
         
         i, j, j_calc = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
-        linear_solution = solve_banded_iterative(
-            self._differential_operator, self._vhat_projections[:, j_calc])
+        if self.band.periodic:
+            linear_solution = solve_banded_iterative(
+                self._differential_operator, self._vhat_projections[:, j_calc])
+        else:
+            linear_solution = solve_banded(
+                (self._bandwidth, self._bandwidth),
+                self._differential_operator, self._vhat_projections[:, j_calc])
         # reuse previously calculated solutions
         for col in j:
             if col in j_calc:
