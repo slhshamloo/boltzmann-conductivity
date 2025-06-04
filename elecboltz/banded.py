@@ -42,7 +42,7 @@ def solve_cyclic_banded(A: np.ndarray, b: np.ndarray) -> np.ndarray:
     Returns
     -------
     numpy.ndarray
-        The solution vector x.
+        The solution vector (or matrix) x.
     
     Notes
     -----
@@ -129,8 +129,35 @@ def solve_cyclic_banded(A: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 
 def solve_banded_iterative(
-        A: np.ndarray, b: np.ndarray, preconditioner='banded',
-        init_guess='banded') -> np.ndarray:
+        A: np.ndarray, b: np.ndarray, atol=0.0, rtol=1e-3,
+        preconditioner='banded', init_guess='banded') -> np.ndarray:
+    """
+    Solve the system of equations Ax = b using an iterative method.
+
+    Parameters
+    ----------
+    A : np.ndarray
+        A matrix in diagonal ordered form.
+    b : np.ndarray
+        The right-hand side (can be a vector or matrix).
+    atol : float, optional
+        Absolute tolerance for convergence.
+    rtol : float, optional
+        Relative tolerance for convergence.
+    preconditioner : {'banded', 'ilu', 'jacobi', 'none'}, optional
+        The type of preconditioner to use. More accurate preconditioners
+        significantly speed up convergence.
+    init_guess : {'banded', 'mean'}, optional
+        The type of initial guess to use. A good initial guess can
+        significantly speed up convergence. 'banded' takes the banded
+        solution. 'mean' approximates the initial guess as the mean of
+        the right-hand side divided by the mean of the diagonal of A.
+
+    Returns
+    -------
+    np.ndarray
+        The solution vector (or matrix) x.
+    """
     bandwidth = (A.shape[0] - 1) // 2
     idx = np.arange(A.shape[1])
     A_sparse = scipy.sparse.csc_matrix((
@@ -158,5 +185,5 @@ def solve_banded_iterative(
     sol = np.empty_like(b)
     for col in range(b.shape[1]):
         sol[:, col], _ = scipy.sparse.linalg.lgmres(
-            A_sparse, b[:, col], x0=x0[:, col], rtol=1e-3, M=M)
+            A_sparse, b[:, col], x0=x0[:, col], atol=atol, rtol=rtol, M=M)
     return sol
