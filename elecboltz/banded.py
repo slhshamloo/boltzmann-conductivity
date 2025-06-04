@@ -126,3 +126,37 @@ def solve_cyclic_banded(A: np.ndarray, b: np.ndarray) -> np.ndarray:
     VdotBinv = V1@solution[:bandwidth] + V2@solution[-bandwidth:]
     solution -= np.linalg.multi_dot((BinvU, dense_inversion, VdotBinv))
     return solution
+
+
+def solve_banded_iterative(
+        A: np.ndarray, b: np.ndarray, preconditioner='banded',
+        init_guess='banded') -> np.ndarray:
+    bandwidth = (A.shape[0] - 1) // 2
+    idx = np.arange(A.shape[1])
+    A_sparse = scipy.sparse.csc_matrix((
+        A.flat, (np.concatenate([np.roll(idx, ndiag) for ndiag
+                                 in range(bandwidth, -bandwidth-1, -1)]),
+                 np.tile(idx, 2*bandwidth + 1))))
+    if preconditioner == 'banded':
+        M = scipy.sparse.linalg.LinearOperator(
+            A_sparse.shape, lambda x: scipy.linalg.solve_banded(
+                (bandwidth, bandwidth), A, x))
+    elif preconditioner == 'ilu':
+        M = scipy.sparse.linalg.LinearOperator(
+            A_sparse.shape, scipy.sparse.linalg.spilu(A_sparse).solve)
+    elif preconditioner == 'jacobi':
+        M = scipy.sparse.diags(1 / A[bandwidth, :], 0)
+    elif preconditioner == 'none':
+        M = None
+    # good initial guess, significantly speeds up convergence
+    if init_guess == 'mean':
+        b_mean = np.mean(b, axis=0)
+        A_mean = np.mean(A[bandwidth])
+        x0 = np.full(b.shape, b_mean / A_mean)
+    elif init_guess == 'banded':
+        x0 = scipy.linalg.solve_banded((bandwidth, bandwidth), A, b)
+    sol = np.empty_like(b)
+    for col in range(b.shape[1]):
+        sol[:, col], _ = scipy.sparse.linalg.lgmres(
+            A_sparse, b[:, col], x0=x0[:, col], rtol=1e-3, M=M)
+    return sol

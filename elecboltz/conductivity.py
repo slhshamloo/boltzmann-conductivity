@@ -5,7 +5,7 @@ from scipy.constants import e, hbar, angstrom
 from typing import Callable
 from collections.abc import Collection
 from .bandstructure import BandStructure
-from .banded import solve_cyclic_banded, banded_column
+from .banded import solve_banded_iterative, banded_column
 
 
 class Conductivity:
@@ -160,7 +160,7 @@ class Conductivity:
         
         i, j, j_calc = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
-        linear_solution = solve_cyclic_banded(
+        linear_solution = solve_banded_iterative(
             self._differential_operator, self._vhat_projections[:, j_calc])
         # reuse previously calculated solutions
         for col in j:
