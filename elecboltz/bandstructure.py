@@ -305,35 +305,37 @@ class BandStructure:
         periodic mesh arrays. Threshold sets the periodic distance below
         which points are considered duplicates.
         """
-        high_border = np.argwhere(np.any(
-            self.kpoints - self._gvec[None, :] > -threshold, axis=1)).ravel()
-        low_border = np.argwhere(np.any(
-            self.kpoints + self._gvec[None, :] < threshold, axis=1)).ravel()
-        duplicate_points = dict()
-        for low in low_border:
-            for high in high_border:
-                if low != high:
-                    if np.linalg.norm(self.periodic_distance(
-                            self.kpoints[low], self.kpoints[high])
-                            ) < threshold:
-                        duplicate_points[int(high)] = int(low)
-        self._build_periodic_mesh(duplicate_points)
-    
-    def _build_periodic_mesh(self, duplicate_points):
+        duplicates = dict()
+        for axis in range(3):
+            high_border = np.argwhere(
+                self.kpoints[:, axis] - self._gvec[axis] > -threshold).ravel()
+            low_border = np.argwhere(
+                self.kpoints[:, axis] + self._gvec[axis] < threshold).ravel()
+            for low in low_border:
+                for high in high_border:
+                    if low != high:
+                        distance = np.linalg.norm(
+                            self.periodic_distance(self.kpoints[low],
+                                                   self.kpoints[high]))
+                        if distance < threshold:
+                            duplicates[int(high)] = int(low)
+        self._build_periodic_mesh(duplicates)
+
+    def _build_periodic_mesh(self, duplicates):
         """
         Build the periodic kpoints and kfaces arrays by removing
         duplicate points and reindexing.
         """
         unique_mask = np.full(len(self.kpoints), True)
-        unique_mask[list(duplicate_points.keys())] = False
+        unique_mask[list(duplicates.keys())] = False
         self.kpoints_periodic = self.kpoints[unique_mask]
         reindex_map = np.cumsum(unique_mask) - 1
         self.kfaces_periodic = np.empty_like(self.kfaces)
         for i, face in enumerate(self.kfaces):
             for j, point in enumerate(face):
-                if point in duplicate_points:
+                if point in duplicates:
                     reindex_map[point] = reindex_map[
-                        duplicate_points[point]]
+                        duplicates[point]]
                 self.kfaces_periodic[i, j] = reindex_map[point]
     
     def _apply_newton_correction(self):
