@@ -153,5 +153,5 @@ def build_scattering_function(
             params = _get_params(['gamma_k', 'sym', 'power'], i)
             scattering_functions.append(
                 lambda kx, ky, kz: params['gamma_k'] * np.abs(np.cos(
-                    params['sym']*np.atan(ky, kx)))**params['power'])
-    return scattering_functions
+                    params['sym']*np.atan2(ky, kx)))**params['power'])
+    return lambda kx, ky, kz: sum(s(kx, ky, kz) for s in scattering_functions)
