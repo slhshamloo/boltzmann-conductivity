@@ -29,11 +29,6 @@ class BandStructure:
         The chemical potential in milli eV.
     unit_cell : Collection[float]
         The dimensions of the unit cell in angstrom.
-    atoms_per_cell : int, optional
-        The number of atoms in the specified unit cell. This is not
-        necessarily the exact number of atoms; it should be the number
-        of conducting units in the cell. So, for example, this is equal
-        to 2 for LSCO, which has the cuprate atoms in a BCC cell.
     periodic : bool
         Whether to consider periodic boundary conditions.
     band_params : dict, optional
@@ -63,9 +58,6 @@ class BandStructure:
         The chemical potential in milli eV.
     unit_cell : Collection[float]
         The dimensions of the unit cell in angstrom.
-    atoms_per_cell : int
-        The number of atoms (more precisely, the number of conducting
-        units) in the specified unit cell.
     periodic : bool
         Whether periodic boundary conditions are applied or not. Note
         that this only has a significant effect if the Fermi surface
@@ -110,8 +102,8 @@ class BandStructure:
     """
     def __init__(
             self, dispersion: str, chemical_potential: float,
-            unit_cell: Collection[float], atoms_per_cell: int = 1,
-            periodic: bool = False, band_params: dict = {},
+            unit_cell: Collection[float], periodic: bool = False,
+            band_params: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
             resolution: int = 20, ncorrect: int = 2, **kwargs):
@@ -121,7 +113,6 @@ class BandStructure:
         self.chemical_potential = chemical_potential
         self.unit_cell = unit_cell
         self.periodic = periodic
-        self.atoms_per_cell = atoms_per_cell
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
         self.resolution = resolution

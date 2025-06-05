@@ -35,6 +35,10 @@ class Conductivity:
     frequency : float
         The frequency of the applied field in units of THz.
         Default is `0.0`.
+    atoms_per_cell : int, optional
+        The number of (conducting) atoms per unit cell in the material.
+        The conductivity is multiplied by this number in the end of the
+        calculation.
     
     Attributes
     ----------
@@ -71,7 +75,7 @@ class Conductivity:
                  field: Collection[float] = np.zeros(3),
                  scattering_rate: Callable | float | None = None,
                  scattering_kernel: Callable | None = None,
-                 frequency: float = 0.0, **kwargs):
+                 frequency: float = 0.0, atoms_per_cell: int = 1, **kwargs):
         # avoid triggering setattr in the constructor
         super().__setattr__('band', band)
         super().__setattr__('scattering_rate', scattering_rate)
@@ -179,7 +183,7 @@ class Conductivity:
                     linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
         sigma_result = self._vhat_projections[:, i].T @ linear_solution
-        sigma_result *= e**2 / (4 * np.pi**3 * hbar)
+        sigma_result *= self.atoms_per_cell * e**2 / (4 * np.pi**3 * hbar)
 
         for idx_row, row in enumerate(i):
             for idx_col, col in enumerate(j):
@@ -305,8 +309,8 @@ class Conductivity:
                 self._jacobian_sums[self._bandwidth + shift][:, None]
                 * self._vhats / 24, shift, axis=0)
         # alpha_i * v^i / 24
-        self._vhat_projections += (
-            self._jacobian_sums[self._bandwidth][:, None] * self._vhats / 24)
+        self._vhat_projections += \
+            self._jacobian_sums[self._bandwidth][:, None] * self._vhats / 24
 
     def _build_differential_operator(self):
         """
