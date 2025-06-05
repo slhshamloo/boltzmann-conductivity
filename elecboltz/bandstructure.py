@@ -69,7 +69,9 @@ class BandStructure:
         The number of atoms (more precisely, the number of conducting
         units) in the specified unit cell.
     periodic : bool
-        Whether periodic boundary conditions are applied or not.
+        Whether periodic boundary conditions are applied or not. Note
+        that this only has a significant effect if the Fermi surface
+        has asymmetry along the axis of periodicity.
     bandparams : dict
         The parameters of the dispersion relation. Updating this 
         will automatically update `energy_func` and `velocity_func`.
@@ -111,7 +113,7 @@ class BandStructure:
     def __init__(
             self, dispersion: str, chemical_potential: float,
             unit_cell: Collection[float], atoms_per_cell: int = 1,
-            periodic=True, bandparams: dict = {},
+            periodic=False, bandparams: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
             resolution: int = 20, ncorrect=2, **kwargs):
