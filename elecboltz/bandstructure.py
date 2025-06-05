@@ -5,8 +5,6 @@ from skimage.measure import marching_cubes
 from scipy.constants import hbar, eV, angstrom
 # type hinting
 from collections.abc import Collection
-# default dictionary for point hashing
-from collections import defaultdict
 from .integrate import adaptive_octree_integrate
 # conversion from energy gradient units to m/s for velocity
 velocity_units = 1e-3 * eV * angstrom / hbar
@@ -25,7 +23,7 @@ class BandStructure:
     dispersion : str
         The dispersion relation. Expresses the dispersion relation
         in terms of symbols in `wavevector_names` and additional
-        parameters in `bandparams`. It must be parsable and
+        parameters in `band_params`. It must be parsable and
         differentiable by `sympy`. Energy units are milli eV.
     chemical_potential : float
         The chemical potential in milli eV.
@@ -38,7 +36,7 @@ class BandStructure:
         to 2 for LSCO, which has the cuprate atoms in a BCC cell.
     periodic : bool
         Whether to consider periodic boundary conditions.
-    bandparams : dict, optional
+    band_params : dict, optional
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
     axis_names : str or Collection[str], optional
@@ -72,7 +70,7 @@ class BandStructure:
         Whether periodic boundary conditions are applied or not. Note
         that this only has a significant effect if the Fermi surface
         has asymmetry along the axis of periodicity.
-    bandparams : dict
+    band_params : dict
         The parameters of the dispersion relation. Updating this 
         will automatically update `energy_func` and `velocity_func`.
     energy_func : function
@@ -113,13 +111,13 @@ class BandStructure:
     def __init__(
             self, dispersion: str, chemical_potential: float,
             unit_cell: Collection[float], atoms_per_cell: int = 1,
-            periodic=False, bandparams: dict = {},
+            periodic=False, band_params: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
             resolution: int = 20, ncorrect=2, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
-        super().__setattr__('bandparams', bandparams)
+        super().__setattr__('band_params', band_params)
         self.chemical_potential = chemical_potential
         self.unit_cell = unit_cell
         self.periodic = periodic
@@ -136,7 +134,7 @@ class BandStructure:
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
-        if name == 'dispersion' or name == 'bandparams':
+        if name == 'dispersion' or name == 'band_params':
             self._parse_dispersion()
         if name == 'unit_cell':
             self._gvec = np.array([np.pi / a for a in value])
@@ -261,7 +259,7 @@ class BandStructure:
         """
         ksymbols = sympy.symbols(self.wavevector_names)
         all_symbols = (ksymbols + sympy.symbols(self.axis_names)
-                       + sympy.symbols(list(self.bandparams.keys())))
+                       + sympy.symbols(list(self.band_params.keys())))
         self._energy_sympy = sympy.sympify(self.dispersion)
         self._velocities_sympy = [
             sympy.diff(self._energy_sympy, k) * velocity_units
@@ -275,9 +273,9 @@ class BandStructure:
             sympy.lambdify(all_symbols, vexpr, 'numpy')
             for vexpr in self._velocities_sympy]
         self.energy_func = lambda kx, ky, kz: self._energy_func_full(
-            kx, ky, kz, *self.unit_cell, **self.bandparams)
+            kx, ky, kz, *self.unit_cell, **self.band_params)
         self.velocity_func = lambda kx, ky, kz: [
-            vfunc(kx, ky, kz, *self.unit_cell, **self.bandparams)
+            vfunc(kx, ky, kz, *self.unit_cell, **self.band_params)
             for vfunc in self._velocity_funcs_full]
     
     def _optimally_reindex(self):

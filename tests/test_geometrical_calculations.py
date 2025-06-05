@@ -12,7 +12,7 @@ class TestGeometricalCalculations(unittest.TestCase):
         # jacobian calculations
         self.band = elecboltz.BandStructure(
             "Ef * (kx^2 + ky^2 + kz^2)", 1.0, [np.pi, np.pi, np.pi],
-            bandparams={'Ef': 1.0})
+            band_params={'Ef': 1.0})
         self.cond = elecboltz.Conductivity(
             self.band, field=[0.0, 0.0, 0.0], scattering_rate=1.0)
     
