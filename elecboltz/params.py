@@ -42,14 +42,16 @@ def easy_params(params):
         if 'c' in params:
             unit_cell[2] = params['c']
         new_params['unit_cell'] = unit_cell
+    # some like to shift the energy dispersion itself by the chemical
+    # potential and treat similarly to the other energy parameters
+    if 'band_params' in params:
+        new_params['band_params'] = params['band_params'].copy()
+        if 'mu' in params['band_params']:
+            new_params['chemical_potential'] = 0.0
     # scale all energy parameters by a given factor
     if 'energy_scale' in params:
         for key in new_params['band_params']:
             new_params['band_params'][key] *= params['energy_scale']
-    # some like to shift the energy dispersion itself by the chemical
-    # potential and treat similarly to the other energy parameters
-    if 'mu' in params['band_params']:
-        new_params['chemical_potential'] = 0.0
     # get the default tight-binding dispersion relation
     if 'dispersion' not in new_params:
         new_params['dispersion'] = get_tight_binding_dispersion(
