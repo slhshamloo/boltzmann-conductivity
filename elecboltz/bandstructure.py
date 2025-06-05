@@ -111,10 +111,10 @@ class BandStructure:
     def __init__(
             self, dispersion: str, chemical_potential: float,
             unit_cell: Collection[float], atoms_per_cell: int = 1,
-            periodic=False, band_params: dict = {},
+            periodic: bool = False, band_params: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
-            resolution: int = 20, ncorrect=2, **kwargs):
+            resolution: int = 20, ncorrect: int = 2, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('band_params', band_params)
