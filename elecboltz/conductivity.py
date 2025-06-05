@@ -342,9 +342,10 @@ class Conductivity:
                 self._calculate_out_scattering_from_kernel()
 
         if isinstance(self.scattering_rate, Callable):
-            scattering = self.scattering_rate(self.band.kpoints[:, 0],
-                                              self.band.kpoints[:, 1],
-                                              self.band.kpoints[:, 2])
+            scattering = self.scattering_rate(
+                self.band.kpoints_periodic[:, 0],
+                self.band.kpoints_periodic[:, 1],
+                self.band.kpoints_periodic[:, 2])
         else:
             scattering = self.scattering_rate
         # separate the optical conductivity case to avoid making
