@@ -71,7 +71,7 @@ class Conductivity:
                  field: Collection[float] = np.zeros(3),
                  scattering_rate: Callable | float | None = None,
                  scattering_kernel: Callable | None = None,
-                 frequency: float = 0.0):
+                 frequency: float = 0.0, **kwargs):
         # avoid triggering setattr in the constructor
         super().__setattr__('band', band)
         super().__setattr__('scattering_rate', scattering_rate)
