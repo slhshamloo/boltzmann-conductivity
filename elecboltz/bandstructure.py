@@ -58,6 +58,11 @@ class BandStructure:
         The chemical potential in milli eV.
     unit_cell : Collection[float]
         The dimensions of the unit cell in angstrom.
+    domain_size : Collection[float]
+        The ratio of the reciprocal space domain sidelengths to simple
+        cubic unit cell dimensions in reciprocal space. The product
+        of the numbers in this collection must be equal to the number
+        of atoms in the conventional unit cell specified by `unit_cell`.
     periodic : bool
         Whether periodic boundary conditions are applied or not. Note
         that this only has a significant effect if the Fermi surface
@@ -102,16 +107,19 @@ class BandStructure:
     """
     def __init__(
             self, dispersion: str, chemical_potential: float,
-            unit_cell: Collection[float], periodic: bool = False,
-            band_params: dict = {},
+            unit_cell: Collection[float],
+            domain_size: Collection[float] = [1.0, 1.0, 1.0],
+            periodic: bool = False, band_params: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
-            resolution: int = 20, ncorrect: int = 2, **kwargs):
+            sort_axis: int = None, resolution: int | Collection[int] = 20,
+            ncorrect: int = 2, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('band_params', band_params)
         self.chemical_potential = chemical_potential
         self.unit_cell = unit_cell
+        self.domain_size = domain_size
         self.periodic = periodic
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
@@ -124,13 +132,16 @@ class BandStructure:
         self.kfaces_periodic = None
 
     def __setattr__(self, name, value):
-        super().__setattr__(name, value)
         if name == 'dispersion' or name == 'band_params':
             self._parse_dispersion()
-        if name == 'unit_cell':
-            self._gvec = np.array([np.pi / a for a in value])
-        elif name == 'resolution':
-            super().__setattr__('resolution', value + value % 2)
+        if name == 'resolution':
+            if isinstance(value, Collection):
+                value = np.array(value)
+            else:
+                value = np.array([value, value, value])
+        if name in {'unit_cell', 'domain_size'}:
+            value = np.array(value, dtype=float)
+        super().__setattr__(name, value)
     
     def discretize(self, sort_axis: int | None = None):
         """
@@ -152,13 +163,14 @@ class BandStructure:
             have the minimum index difference between the furthest
             neighbors in the triangulation.
         """
+        self._gvec = self.domain_size * np.pi / self.unit_cell
         self.kpoints, self.kfaces, _, _ = marching_cubes(
             self.energy_func(*np.mgrid[
-                -self._gvec[0]:self._gvec[0]:1j*self.resolution,
-                -self._gvec[1]:self._gvec[1]:1j*self.resolution,
-                -self._gvec[2]:self._gvec[2]:1j*self.resolution]),
+                -self._gvec[0]:self._gvec[0]:1j*self.resolution[0],
+                -self._gvec[1]:self._gvec[1]:1j*self.resolution[1],
+                -self._gvec[2]:self._gvec[2]:1j*self.resolution[2]]),
             level=self.chemical_potential)
-        self.kpoints *= 2 * self._gvec[None, :] / (self.resolution-1)
+        self.kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
         self.kpoints -= self._gvec[None, :]
         for _ in range(self.correction_steps):
             self._apply_newton_correction()
@@ -220,6 +232,7 @@ class BandStructure:
         float
             The electron density n_e of the material in SI units.
         """
+        self._gvec = self.domain_size * np.pi / self.unit_cell
         filling_fraction = adaptive_octree_integrate(
             lambda kx, ky, kz: (self.energy_func(kx, ky, kz)
                                 < self.chemical_potential),
@@ -227,7 +240,7 @@ class BandStructure:
              -self._gvec[2], self._gvec[2]), depth
              ) / 8 / np.prod(self._gvec)
         # the extra factor of 2 is the spin degeneracy
-        return (2 * self.atoms_per_cell * filling_fraction
+        return (2 * filling_fraction * np.prod(self.domain_size)
                 / np.prod(self.unit_cell) / angstrom**3)
 
     def calculate_mass(self):
@@ -291,14 +304,13 @@ class BandStructure:
         old_to_new_map[new_order] = np.arange(len(new_order))
         return new_order, old_to_new_map[self.kfaces]
 
-
-    def _stitch_periodic_boundaries(self, threshold=1e-5):
+    def _stitch_periodic_boundaries(self, threshold=1e-3):
         """
         Find duplicate points on the periodic boundaries, then make the
         periodic mesh arrays. Threshold sets the periodic distance below
         which points are considered duplicates.
         """
-        duplicates = dict()
+        self.duplicates = dict()
         for axis in range(3):
             high_border = np.argwhere(
                 self.kpoints[:, axis] - self._gvec[axis] > -threshold).ravel()
@@ -311,8 +323,8 @@ class BandStructure:
                             self.periodic_distance(self.kpoints[low],
                                                    self.kpoints[high]))
                         if distance < threshold:
-                            duplicates[int(high)] = int(low)
-        self._build_periodic_mesh(duplicates)
+                            self.duplicates[int(high)] = int(low)
+        self._build_periodic_mesh(self.duplicates)
 
     def _build_periodic_mesh(self, duplicates):
         """
