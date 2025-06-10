@@ -1,6 +1,9 @@
 # figures
 **/*.pdf
 
+# data
+data/
+
 # LaTeX
 **/*.aux
 **/*.bbl
