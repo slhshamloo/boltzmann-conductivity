@@ -75,7 +75,7 @@ class Conductivity:
                  field: Collection[float] = np.zeros(3),
                  scattering_rate: Callable | float | None = None,
                  scattering_kernel: Callable | None = None,
-                 frequency: float = 0.0, atoms_per_cell: int = 1, **kwargs):
+                 frequency: float = 0.0, **kwargs):
         # avoid triggering setattr in the constructor
         super().__setattr__('band', band)
         super().__setattr__('scattering_rate', scattering_rate)
@@ -87,7 +87,6 @@ class Conductivity:
             self._field_direction = field / self._field_magnitude
         else:
             self._field_direction = np.zeros(3)
-        self.atoms_per_cell = atoms_per_cell
         self.sigma = np.zeros((3, 3))
         self._saved_solutions = [None, None, None]
         self._velocities = None
@@ -184,7 +183,7 @@ class Conductivity:
                     linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
         sigma_result = self._vhat_projections[:, i].T @ linear_solution
-        sigma_result *= self.atoms_per_cell * e**2 / (4 * np.pi**3 * hbar)
+        sigma_result *= e**2 / (4 * np.pi**3 * hbar)
 
         for idx_row, row in enumerate(i):
             for idx_col, col in enumerate(j):
