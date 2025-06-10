@@ -214,34 +214,63 @@ class BandStructure:
         kdiff -= gvec
         return kdiff
 
-    def calculate_electron_density(self, depth: int = 8) -> float:
+    def calculate_filling_fraction(self, depth: int = 7) -> float:
+        """
+        Calculate the filling fraction n of the material.
+
+        The filling fraction is calculated by integrating the volume
+        in the reciprocal space having energy bellow the Fermi level
+        (calculated by an adaptive octree integration method), then
+        dividing by the volume of the unit cell in the reciprocal space.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth of the adaptive octree integration. Higher values
+            result in more accurate integration, but take exponentially
+            longer to compute.
+
+        Returns
+        -------
+        float
+            The filling fraction n of the material.
+        """
+        self._gvec = self.domain_size * np.pi / self.unit_cell
+        # the extra factor of 2 is the spin degeneracy
+        return 2 * adaptive_octree_integrate(
+            lambda kx, ky, kz: (self.energy_func(kx, ky, kz)
+                                < self.chemical_potential),
+            (-self._gvec[0], self._gvec[0], -self._gvec[1], self._gvec[1],
+             -self._gvec[2], self._gvec[2]), depth
+            ) / 8 / np.prod(self._gvec)
+
+    def calculate_electron_density(self, depth: int = 7) -> float:
         """
         Calculate the electron density n_e of the material.
 
         Note that the surface needs to be discretized before calling
-        this method. First, the filling fraction is calculated by
-        calculating the volume containing energy bellow the Fermi level
-        (calculated by an adaptive octree integration method) and then
-        dividing by the volume of the unit cell in the reciprocal space.
-        Then, the electron density is obtained by multiplying the
-        filling fraction by the number of atoms and dividing by the
-        volume of the unit cell in real space.
+        this method. First, the filling fraction is calculated (see
+        `calculate_filling_fraction`). The electron density is obtained
+        by dividing the filling fraction by the volume of the unit cell
+        in real space.
+
+        Parameters
+        ----------
+        depth : int, optional
+            The depth of the adaptive octree integration in
+            `calculate_filling_fraction`.
 
         Returns
         -------
         float
             The electron density n_e of the material in SI units.
         """
-        self._gvec = self.domain_size * np.pi / self.unit_cell
-        filling_fraction = adaptive_octree_integrate(
-            lambda kx, ky, kz: (self.energy_func(kx, ky, kz)
-                                < self.chemical_potential),
-            (-self._gvec[0], self._gvec[0], -self._gvec[1], self._gvec[1],
-             -self._gvec[2], self._gvec[2]), depth
-             ) / 8 / np.prod(self._gvec)
-        # the extra factor of 2 is the spin degeneracy
-        return (2 * filling_fraction * np.prod(self.domain_size)
-                / np.prod(self.unit_cell) / angstrom**3)
+        filling_fraction = self.calculate_filling_fraction(depth)
+        # the volume of the unit cell in real space is scaled by
+        # the inverse scaling of the unit cell in reciprocal space
+        unit_cell_volume = (np.prod(self.unit_cell) * angstrom**3
+                            / np.prod(self.domain_size))
+        return filling_fraction / unit_cell_volume
 
     def calculate_mass(self):
         """
