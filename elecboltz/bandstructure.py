@@ -49,6 +49,11 @@ class BandStructure:
     ncorrect : int, optional
         The number of correction steps for improving the accuracy of
         the discretization of the Fermi surface.
+    sort_axis : int, optional
+        The axis along which to sort the points after triangulation.
+        If None, the points are sorted in a way to have the minimum
+        index difference between the furthest neighbors in the
+        triangulation.
 
     Attributes
     ----------
@@ -101,6 +106,8 @@ class BandStructure:
     ncorrect : int
         The number of Newton--Raphson steps applied to correct the
         triangulated surface after the marching cubes algorithm.
+    sort_axis : int, optional
+        The axis along which to sort the points after triangulation.
     axis_names : str or Collection[str]
         The names of the unit cell axes.
     wavevector_names : str or Collection[str]
@@ -131,6 +138,7 @@ class BandStructure:
         self.kfaces = None
         self.kpoints_periodic = None
         self.kfaces_periodic = None
+        self.sort_axis = sort_axis
 
     def __setattr__(self, name, value):
         if name == 'dispersion' or name == 'band_params':
@@ -144,7 +152,7 @@ class BandStructure:
             value = np.array(value, dtype=float)
         super().__setattr__(name, value)
     
-    def discretize(self, sort_axis: int | None = None):
+    def discretize(self):
         """
         Discretize the Fermi surface.
 
@@ -155,14 +163,6 @@ class BandStructure:
         applied to the output of marching cubes. Finally, after the
         surface construction, periodic boundary conditions are applied
         to "stitch" the open ends of the surface together.
-
-        Parameters
-        ----------
-        sort_axis : int, optional
-            The axis along which to sort the points after
-            triangulation. If None, the points are sorted in a way to
-            have the minimum index difference between the furthest
-            neighbors in the triangulation.
         """
         self._gvec = self.domain_size * np.pi / self.unit_cell
         self.kpoints, self.kfaces, _, _ = marching_cubes(
@@ -176,10 +176,10 @@ class BandStructure:
         for _ in range(self.correction_steps):
             self._apply_newton_correction()
         
-        if sort_axis is None:
+        if self.sort_axis is None:
             self._optimally_reindex()
         else:
-            self._sort_and_reindex(sort_axis)
+            self._sort_and_reindex(self.sort_axis)
         if self.periodic:
             self._stitch_periodic_boundaries()
         else:
@@ -322,6 +322,7 @@ class BandStructure:
             if furtherst_neighbors < best_furtherst_neighbors:
                 best_furtherst_neighbors = furtherst_neighbors
                 best_order_axis = axis
+        self.sort_axis = best_order_axis
         self._sort_and_reindex(best_order_axis)
     
     def _sort_and_reindex(self, sort_axis):
@@ -340,7 +341,7 @@ class BandStructure:
         periodic mesh arrays.
         """
         self.duplicates = dict()
-        threshold = np.min(self._gvec / self.resolution)
+        threshold = np.min(self._gvec / self.resolution) / 10
         for axis in range(3):
             high_border = np.argwhere(
                 self.kpoints[:, axis] - self._gvec[axis] > -threshold).ravel()
