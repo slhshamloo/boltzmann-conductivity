@@ -51,9 +51,7 @@ class BandStructure:
         the discretization of the Fermi surface.
     sort_axis : int, optional
         The axis along which to sort the points after triangulation.
-        If None, the points are sorted in a way to have the minimum
-        index difference between the furthest neighbors in the
-        triangulation.
+        If None, do not sort the points.
 
     Attributes
     ----------
@@ -175,10 +173,7 @@ class BandStructure:
         self.kpoints -= self._gvec[None, :]
         for _ in range(self.correction_steps):
             self._apply_newton_correction()
-        
-        if self.sort_axis is None:
-            self._optimally_reindex()
-        else:
+        if self.sort_axis:
             self._sort_and_reindex(self.sort_axis)
         if self.periodic:
             self._stitch_periodic_boundaries()
@@ -285,7 +280,7 @@ class BandStructure:
         """
         # Placeholder for actual calculation
         return 0.0
-    
+
     def _parse_dispersion(self):
         """
         Parse the dispersion relation and extract the necessary
@@ -311,20 +306,7 @@ class BandStructure:
         self.velocity_func = lambda kx, ky, kz: [
             vfunc(kx, ky, kz, *self.unit_cell, **self.band_params)
             for vfunc in self._velocity_funcs_full]
-    
-    def _optimally_reindex(self):
-        best_order_axis = 0
-        best_furtherst_neighbors = np.inf
-        for axis in range(3):
-            _, new_faces = self._generate_reindex(axis)
-            furtherst_neighbors = np.max(
-                np.abs(np.roll(new_faces, 1, axis=1) - new_faces))
-            if furtherst_neighbors < best_furtherst_neighbors:
-                best_furtherst_neighbors = furtherst_neighbors
-                best_order_axis = axis
-        self.sort_axis = best_order_axis
-        self._sort_and_reindex(best_order_axis)
-    
+
     def _sort_and_reindex(self, sort_axis):
         new_order, self.kfaces = self._generate_reindex(sort_axis)
         self.kpoints = self.kpoints[new_order]
