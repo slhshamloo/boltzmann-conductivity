@@ -115,7 +115,7 @@ class BandStructure:
             self, dispersion: str, chemical_potential: float,
             unit_cell: Collection[float],
             domain_size: Collection[float] = [1.0, 1.0, 1.0],
-            periodic: bool = False, band_params: dict = {},
+            periodic: bool = True, band_params: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
             sort_axis: int = None, resolution: int | Collection[int] = 20,
