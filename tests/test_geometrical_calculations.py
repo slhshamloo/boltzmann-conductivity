@@ -19,21 +19,21 @@ class TestGeometricalCalculations(unittest.TestCase):
     def test_regular_octahedron_jacobian(self):
         self.set_up_regular_octahedron()
         self.cond._calculate_jacobian_sums(self.triangle_coordinates)
+        neighbor_pairs = {
+            (0, 1), (1, 2), (2, 3), (3, 0), (0, 4), (1, 4),
+            (2, 4), (3, 4), (0, 5), (1, 5), (2, 5), (3, 5)}
         for i in range(6):
             for j in range(6):
-                error_msg = f"Regular octahedron Jacobian sum at ({i}, {j})"\
-                            " is incorrect"
                 if i == j:
-                    self.assertAlmostEqual(
-                        self.cond._jacobian_sums[self.cond._bandwidth][j],
-                        4 * np.sqrt(3), 4, error_msg)
+                    value = 4 * np.sqrt(3)
+                elif (i, j) in neighbor_pairs or (j, i) in neighbor_pairs:
+                    value = 2 * np.sqrt(3)
                 else:
-                    for face in self.band.kfaces:
-                        if i in face and j in face:
-                            self.assertAlmostEqual(
-                                self.cond._jacobian_sums[
-                                    self.cond._brow(i, j)][j],
-                                2 * np.sqrt(3), 4, error_msg)
+                    value = 0.0
+                self.assertAlmostEqual(
+                    self.cond._jacobian_sums[i, j], value, 5,
+                    f"Regular octahedron Jacobian sum at ({i}, {j})"
+                    "is incorrect")
 
     def test_regular_octahedron_derivative(self):
         self.set_up_regular_octahedron()
@@ -67,7 +67,7 @@ class TestGeometricalCalculations(unittest.TestCase):
             for j in range(6):
                 for k in range(3):
                     self.assertEqual(
-                        self.cond._derivatives[self.cond._bandwidth+i-j, j, k],
+                        self.cond._derivatives[k][i, j],
                         derivative_sums[i, j, k],
                         "Regular octahedron derivative sum at"
                         f" ({i}, {j}) is incorrect on axis {k}")
