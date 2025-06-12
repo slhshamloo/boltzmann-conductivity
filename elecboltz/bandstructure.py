@@ -118,7 +118,7 @@ class BandStructure:
             periodic: bool = True, band_params: dict = {},
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
-            sort_axis: int = None, resolution: int | Collection[int] = 20,
+            sort_axis: int = None, resolution: int | Collection[int] = 21,
             ncorrect: int = 2, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
@@ -180,35 +180,6 @@ class BandStructure:
         else:
             self.kpoints_periodic = self.kpoints
             self.kfaces_periodic = self.kfaces
-
-    def periodic_distance(self, k1: np.ndarray, k2: np.ndarray,
-                          broadcast: bool = False) -> np.ndarray:
-        """
-        Calculate the periodic distance between two k-points.
-
-        Parameters
-        ----------
-        k1 : np.ndarray
-            The first k-point.
-        k2 : np.ndarray
-            The second k-point.
-        broadcast : bool, optional
-            If True, assumes that k1 and k2 are 2D arrays containing
-            multiple k-points and broadcasts the calculation
-            accordingly. If False, assumes that k1 and k2 are 1D
-            arrays containing a single k-point.
-
-        Returns
-        -------
-        float
-            k2 - k1 with periodic boundary conditions applied.
-        """
-        gvec = self._gvec[None, :] if broadcast else self._gvec
-        kdiff = k2 - k1
-        kdiff += gvec
-        kdiff %= 2 * gvec
-        kdiff -= gvec
-        return kdiff
 
     def calculate_filling_fraction(self, depth: int = 7) -> float:
         """
@@ -325,44 +296,49 @@ class BandStructure:
         self.duplicates = dict()
         threshold = np.min(self._gvec / self.resolution) / 10
         for axis in range(3):
-            high_border = np.argwhere(
-                self.kpoints[:, axis] - self._gvec[axis] > -threshold).ravel()
             low_border = np.argwhere(
                 self.kpoints[:, axis] + self._gvec[axis] < threshold).ravel()
-            mindist = np.inf
-            for border, face, (i, j) in itertools.product(
-                    (high_border, low_border), self.kfaces,
-                    itertools.combinations(range(3), 2)):
-                if bool(face[i] in border) ^ bool(face[j] in border):
-                    dist = np.linalg.norm(
-                        self.kpoints[face[i]] - self.kpoints[face[j]])
-                    if dist < mindist:
-                        mindist = dist
-            for low in low_border:
-                for high in high_border:
-                    if low != high:
-                        distance = np.linalg.norm(
-                            self.periodic_distance(self.kpoints[low],
-                                                   self.kpoints[high]))
-                        if distance < mindist/2:
-                            self.duplicates[int(high)] = int(low)
-        self._build_periodic_mesh()
+            high_border = np.argwhere(
+                self.kpoints[:, axis] - self._gvec[axis] > -threshold).ravel()
 
-    def _build_periodic_mesh(self):
+            low_border_triangles = self.kfaces[np.any(
+                np.isin(self.kfaces, low_border), axis=1)]
+            high_border_triangles = self.kfaces[np.any(
+                np.isin(self.kfaces, high_border), axis=1)]
+            for triangles in [low_border_triangles, high_border_triangles]:
+                points = self.kpoints[triangles]
+                mindist = np.min(np.linalg.norm(
+                    points - np.roll(points, 1, axis=1), axis=-1))
+
+            k1 = self.kpoints[low_border]
+            k2 = self.kpoints[high_border][None, :]
+            gvec = self._gvec[None, None, :]
+            kdiff = k2 - k1
+            kdiff += gvec
+            kdiff %= 2 * gvec
+            kdiff -= gvec
+            duplicate_pairs = np.argwhere(
+                np.linalg.norm(kdiff, axis=-1) < mindist / 2)
+            duplicates = dict(zip(
+                high_border[duplicate_pairs[:, 1]],
+                low_border[duplicate_pairs[:, 0]]))
+        self._build_periodic_mesh(duplicates)
+
+    def _build_periodic_mesh(self, duplicates):
         """
         Build the periodic kpoints and kfaces arrays by removing
         duplicate points and reindexing.
         """
         unique_mask = np.full(len(self.kpoints), True)
-        unique_mask[list(self.duplicates.keys())] = False
+        unique_mask[list(duplicates.keys())] = False
         self.kpoints_periodic = self.kpoints[unique_mask]
         reindex_map = np.cumsum(unique_mask) - 1
         self.kfaces_periodic = np.empty_like(self.kfaces)
         for i, face in enumerate(self.kfaces):
             for j, point in enumerate(face):
-                if point in self.duplicates:
+                if point in duplicates:
                     reindex_map[point] = reindex_map[
-                        self.duplicates[point]]
+                        duplicates[point]]
                 self.kfaces_periodic[i, j] = reindex_map[point]
     
     def _apply_newton_correction(self):
