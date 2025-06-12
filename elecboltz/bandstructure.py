@@ -298,6 +298,8 @@ class BandStructure:
                 self.kpoints[:, axis] + self._gvec[axis] < threshold).ravel()
             high_border = np.argwhere(
                 self.kpoints[:, axis] - self._gvec[axis] > -threshold).ravel()
+            if len(low_border) == 0 or len(high_border) == 0:
+                continue
 
             low_border_triangles = self.kfaces[np.any(
                 np.isin(self.kfaces, low_border), axis=1)]
