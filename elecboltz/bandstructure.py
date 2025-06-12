@@ -310,7 +310,7 @@ class BandStructure:
                 mindist = np.min(np.linalg.norm(
                     points - np.roll(points, 1, axis=1), axis=-1))
 
-            k1 = self.kpoints[low_border]
+            k1 = self.kpoints[low_border][:, None]
             k2 = self.kpoints[high_border][None, :]
             gvec = self._gvec[None, None, :]
             kdiff = k2 - k1
