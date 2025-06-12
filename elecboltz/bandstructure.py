@@ -68,9 +68,7 @@ class BandStructure:
         of the numbers in this collection must be equal to the number
         of atoms in the conventional unit cell specified by `unit_cell`.
     periodic : bool
-        Whether periodic boundary conditions are applied or not. Note
-        that this only has a significant effect if the Fermi surface
-        has asymmetry along the axis of periodicity.
+        Whether periodic boundary conditions are applied or not.
     band_params : dict
         The parameters of the dispersion relation. Updating this 
         will automatically update `energy_func` and `velocity_func`.
