@@ -2,10 +2,9 @@ import numpy as np
 import scipy
 
 
-def banded_column(i, j, b, n):
+def banded_row(i, j, b, n):
     """
-    Get the diagonal ordered form column index
-    for a cyclic banded matrix.
+    Get the diagonal ordered form row index for a cyclic banded matrix.
 
     Parameters
     ----------
@@ -128,10 +127,10 @@ def solve_cyclic_banded(A: np.ndarray, b: np.ndarray) -> np.ndarray:
     i_idx = idx[:, None]
     j_idx = idx[None, :]
     # U1 @ V1 = V1 since U1 = I
-    B[banded_column(i_idx, j_idx, bandwidth, n), j_idx] -= V1
+    B[banded_row(i_idx, j_idx, bandwidth, n), j_idx] -= V1
     i_idx = n - bandwidth + idx[:, None]
     j_idx = n - bandwidth + idx[None, :]
-    B[banded_column(i_idx, j_idx, bandwidth, n), j_idx] -= (U2 @ V2)[
+    B[banded_row(i_idx, j_idx, bandwidth, n), j_idx] -= (U2 @ V2)[
         i_idx - n + bandwidth, j_idx - n + bandwidth]
 
     diagonals = [B[bandwidth+ndiag, :-ndiag]

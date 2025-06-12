@@ -3,7 +3,7 @@ import numpy as np
 
 import os, sys
 sys.path.append(os.path.dirname(os.path.relpath(__file__)) + "/..")
-from elecboltz.banded import solve_cyclic_banded, banded_column
+from elecboltz.banded import solve_cyclic_banded, banded_row
 
 
 class TestCyclicBandedInverse(unittest.TestCase):
@@ -29,7 +29,7 @@ class TestCyclicBandedInverse(unittest.TestCase):
                     np.random.random_sample(ndiag)
         A_banded = np.zeros((2*bandwidth + 1, n))
         i, j = np.nonzero(A_dense)
-        A_banded[banded_column(i, j, bandwidth, n), j] = A_dense[i, j]
+        A_banded[banded_row(i, j, bandwidth, n), j] = A_dense[i, j]
 
         b = np.random.random_sample(n)
         dense_solution = np.linalg.solve(A_dense, b)

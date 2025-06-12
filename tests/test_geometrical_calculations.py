@@ -32,7 +32,7 @@ class TestGeometricalCalculations(unittest.TestCase):
                         if i in face and j in face:
                             self.assertAlmostEqual(
                                 self.cond._jacobian_sums[
-                                    self.cond._bcol(i, j)][j],
+                                    self.cond._brow(i, j)][j],
                                 2 * np.sqrt(3), 4, error_msg)
 
     def test_regular_octahedron_derivative(self):

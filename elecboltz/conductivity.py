@@ -539,16 +539,16 @@ class Conductivity:
         if add_kk is not None:
             np.add.at(banded_matrix, (self._bandwidth, k_idx), add_kk)
         if add_ij is not None:
-            np.add.at(banded_matrix, (self._bcol(i_idx, j_idx), j_idx), add_ij)
-            np.add.at(banded_matrix, (self._bcol(j_idx, i_idx), i_idx), add_ij)
+            np.add.at(banded_matrix, (self._brow(i_idx, j_idx), j_idx), add_ij)
+            np.add.at(banded_matrix, (self._brow(j_idx, i_idx), i_idx), add_ij)
         if add_jk is not None:
-            np.add.at(banded_matrix, (self._bcol(j_idx, k_idx), k_idx), add_jk)
-            np.add.at(banded_matrix, (self._bcol(k_idx, j_idx), j_idx), add_jk)
+            np.add.at(banded_matrix, (self._brow(j_idx, k_idx), k_idx), add_jk)
+            np.add.at(banded_matrix, (self._brow(k_idx, j_idx), j_idx), add_jk)
         if add_ik is not None:
-            np.add.at(banded_matrix, (self._bcol(i_idx, k_idx), k_idx), add_ik)
-            np.add.at(banded_matrix, (self._bcol(k_idx, i_idx), i_idx), add_ik)
+            np.add.at(banded_matrix, (self._brow(i_idx, k_idx), k_idx), add_ik)
+            np.add.at(banded_matrix, (self._brow(k_idx, i_idx), i_idx), add_ik)
 
-    def _bcol(self, i, j):
-        """Get the column index in the diagonal ordered form."""
-        return banded_column(i, j, self._bandwidth,
-                             self.band.kpoints_periodic.shape[0])
+    def _brow(self, i, j):
+        """Get the row index in the diagonal ordered form."""
+        return banded_row(i, j, self._bandwidth,
+                          self.band.kpoints_periodic.shape[0])
