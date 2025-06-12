@@ -415,7 +415,8 @@ class Conductivity:
                                                ) / 6
             elif self.storage == 'sparse':
                 self._derivative_term = sum(
-                    Bi * Di for Bi, Di in zip(self.field, self._derivatives))
+                    Bi * Di for Bi, Di in zip(self.field, self._derivatives)
+                    ) / 6
             else:
                 raise ValueError(
                     f"Unknown storage type: '{self.storage}'. Available "
