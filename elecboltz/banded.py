@@ -26,6 +26,30 @@ def banded_column(i, j, b, n):
     return b + i - j + (np.abs(i-j)>b) * ((j>i)*n - (i>j)*n)
 
 
+def convert_to_csc(banded_matrix: np.ndarray) -> scipy.sparse.csc_matrix:
+    """
+    Convert a (cyclic) banded matrix in diagonal ordered form to a CSC
+    sparse matrix.
+
+    Parameters
+    ----------
+    banded_matrix : np.ndarray
+        Banded matrix in diagonal ordered form.
+
+    Returns
+    -------
+    scipy.sparse.csc_matrix
+        The CSC sparse matrix representation of the banded matrix.
+    """
+    bandwidth = (banded_matrix.shape[0] - 1) // 2
+    diagonals = [banded_matrix[bandwidth+ndiag, :-ndiag]
+                 for ndiag in range(bandwidth, 0, -1)]
+    diagonals.extend([banded_matrix[bandwidth-ndiag, ndiag:]
+                      for ndiag in range(bandwidth + 1)])
+    return scipy.sparse.diags_array(
+        diagonals, offsets=np.arange(-bandwidth, bandwidth + 1), format='csc')
+
+
 def solve_cyclic_banded(A: np.ndarray, b: np.ndarray) -> np.ndarray:
     r"""
     Solve the system of equations Ax = b
@@ -130,7 +154,7 @@ def solve_cyclic_banded(A: np.ndarray, b: np.ndarray) -> np.ndarray:
 
 def solve_banded_iterative(
         A: np.ndarray, b: np.ndarray, atol=0.0, rtol=1e-3,
-        preconditioner='banded', init_guess='banded') -> np.ndarray:
+        preconditioner='ilu', init_guess='banded') -> np.ndarray:
     """
     Solve the system of equations Ax = b using an iterative method.
 
