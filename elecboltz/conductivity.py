@@ -7,7 +7,6 @@ from collections.abc import Collection
 from scipy.constants import e, hbar, angstrom
 from scipy.linalg import solve_banded
 from .bandstructure import BandStructure
-from .banded import *
 
 
 class Conductivity:
