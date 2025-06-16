@@ -291,7 +291,7 @@ class BandStructure:
         Find duplicate points on the periodic boundaries, then make the
         periodic mesh arrays.
         """
-        self.duplicates = dict()
+        duplicates = dict()
         threshold = np.min(self._gvec / self.resolution) / 10
         for axis in range(3):
             low_border = np.argwhere(
@@ -319,9 +319,9 @@ class BandStructure:
             kdiff -= gvec
             duplicate_pairs = np.argwhere(
                 np.linalg.norm(kdiff, axis=-1) < mindist / 2)
-            duplicates = dict(zip(
+            duplicates.update(dict(zip(
                 high_border[duplicate_pairs[:, 1]],
-                low_border[duplicate_pairs[:, 0]]))
+                low_border[duplicate_pairs[:, 0]])))
         self._build_periodic_mesh(duplicates)
 
     def _build_periodic_mesh(self, duplicates):
