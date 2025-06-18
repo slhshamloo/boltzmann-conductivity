@@ -160,7 +160,10 @@ class BandStructure:
             value = np.array(value, dtype=float)
         if name == 'periodic':
             if isinstance(value, bool):
-                value = [0, 1, 2]
+                if value:
+                    value = [0, 1, 2]
+                else:
+                    value = []
             if isinstance(value, int):
                 value = [value]
             elif isinstance(value, Collection) and all(
