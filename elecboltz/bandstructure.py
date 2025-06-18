@@ -38,9 +38,10 @@ class BandStructure:
         cubic unit cell dimensions in reciprocal space. The product
         of the numbers in this collection must be equal to the number
         of atoms in the conventional unit cell specified by `unit_cell`.
-    periodic : bool or Collection[bool] or Collection[int]
+    periodic : bool or int or Collection[bool] or Collection[int]
         If bool, whether periodic boundary conditions are applied to all
-        axes or not. If a collection, specifies which axes are periodic.
+        axes or not. If a single int, specifies which single axis is 
+        periodic. If a collection, specifies which axes are periodic.
         If the collection is of integers, the integers specify the
         periodic axes, e.g. [0, 2] means periodic in x and z axes.
         If the collection is of booleans, it specifies whether each axis
@@ -160,6 +161,8 @@ class BandStructure:
         if name == 'periodic':
             if isinstance(value, bool):
                 value = [0, 1, 2]
+            if isinstance(value, int):
+                value = [value]
             elif isinstance(value, Collection) and all(
                     isinstance(i, bool) for i in value):
                 value = [i for i, v in enumerate(value) if v]
@@ -314,28 +317,43 @@ class BandStructure:
             if len(low_border) == 0 or len(high_border) == 0:
                 continue
 
-            low_border_triangles = self.kfaces[np.any(
-                np.isin(self.kfaces, low_border), axis=1)]
-            high_border_triangles = self.kfaces[np.any(
-                np.isin(self.kfaces, high_border), axis=1)]
-            for triangles in [low_border_triangles, high_border_triangles]:
-                points = self.kpoints[triangles]
-                mindist = np.min(np.linalg.norm(
-                    points - np.roll(points, 1, axis=1), axis=-1))
+            min_dist = min(
+                self._get_min_border_distance(low_border),
+                self._get_min_border_distance(high_border))
 
-            k1 = self.kpoints[low_border][:, None]
-            k2 = self.kpoints[high_border][None, :]
-            gvec = self._gvec[None, None, :]
+            k1 = self.kpoints[low_border][None, :]
+            k2 = self.kpoints[high_border][:, None]
             kdiff = k2 - k1
-            kdiff += gvec
-            kdiff %= 2 * gvec
-            kdiff -= gvec
-            duplicate_pairs = np.argwhere(
-                np.linalg.norm(kdiff, axis=-1) < mindist / 2)
+            kdiff[:, :, axis] += self._gvec[axis]
+            kdiff[:, :, axis] %= 2 * self._gvec[axis]
+            kdiff[:, :, axis] -= self._gvec[axis]
+            kdiff = np.linalg.norm(kdiff, axis=-1)
+
+            min_pair = np.argmin(kdiff, axis=1)
+            is_duplicate = kdiff[np.arange(len(high_border)), min_pair
+                                 ] < min_dist / 2
             duplicates.update(dict(zip(
-                high_border[duplicate_pairs[:, 1]],
-                low_border[duplicate_pairs[:, 0]])))
+                high_border[is_duplicate],
+                low_border[min_pair[is_duplicate]])))
         self._build_periodic_mesh(duplicates)
+    
+    def _get_min_border_distance(self, border):
+        """
+        Find minimum intra-layer distance to set the threshold
+        for duplicate point detection.
+        """
+        is_triangle_point_in_border = np.isin(self.kfaces, border)
+        border_triangles = self.kfaces[np.any(
+            is_triangle_point_in_border, axis=1)]
+        points = self.kpoints[border_triangles]
+        is_triangle_point_in_border = is_triangle_point_in_border[
+            np.any(is_triangle_point_in_border, axis=1)]
+        is_pair_intra_layer = np.logical_xor(
+            is_triangle_point_in_border,
+            np.roll(is_triangle_point_in_border, 1, axis=-1))
+        return np.min(np.linalg.norm(
+            (points - np.roll(points, 1, axis=1))[is_pair_intra_layer],
+            axis=-1))
 
     def _build_periodic_mesh(self, duplicates):
         """
