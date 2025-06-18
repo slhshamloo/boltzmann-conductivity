@@ -30,11 +30,22 @@ class BandStructure:
         The chemical potential in milli eV.
     unit_cell : Collection[float]
         The dimensions of the unit cell in angstrom.
-    periodic : bool
-        Whether to consider periodic boundary conditions.
     band_params : dict, optional
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
+    domain_size : Collection[float]
+        The ratio of the reciprocal space domain sidelengths to simple
+        cubic unit cell dimensions in reciprocal space. The product
+        of the numbers in this collection must be equal to the number
+        of atoms in the conventional unit cell specified by `unit_cell`.
+    periodic : bool or Collection[bool] or Collection[int]
+        If bool, whether periodic boundary conditions are applied to all
+        axes or not. If a collection, specifies which axes are periodic.
+        If the collection is of integers, the integers specify the
+        periodic axes, e.g. [0, 2] means periodic in x and z axes.
+        If the collection is of booleans, it specifies whether each axis
+        is periodic or not, e.g. [True, False, True] means periodic in
+        x and z axes, but not in y axis.
     axis_names : str or Collection[str], optional
         The names of the unit cell axes. Must be parsable by
         `sympy.symbols`.
@@ -67,8 +78,8 @@ class BandStructure:
         cubic unit cell dimensions in reciprocal space. The product
         of the numbers in this collection must be equal to the number
         of atoms in the conventional unit cell specified by `unit_cell`.
-    periodic : bool
-        Whether periodic boundary conditions are applied or not.
+    periodic : Collection[int]
+        The periodic axes.
     band_params : dict
         The parameters of the dispersion relation. Updating this 
         will automatically update `energy_func` and `velocity_func`.
@@ -111,9 +122,9 @@ class BandStructure:
     """
     def __init__(
             self, dispersion: str, chemical_potential: float,
-            unit_cell: Collection[float],
+            unit_cell: Collection[float], band_params: dict = {},
             domain_size: Collection[float] = [1.0, 1.0, 1.0],
-            periodic: bool = True, band_params: dict = {},
+            periodic: bool | Collection[int|bool] = True,
             axis_names: Collection[str] | str = ['a', 'b', 'c'],
             wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
             sort_axis: int = None, resolution: int | Collection[int] = 21,
@@ -128,7 +139,7 @@ class BandStructure:
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
         self.resolution = resolution
-        self.correction_steps = ncorrect
+        self.ncorrect = ncorrect
         self._parse_dispersion()
         self.kpoints = None
         self.kfaces = None
@@ -146,6 +157,12 @@ class BandStructure:
                 value = np.array([value, value, value])
         if name in {'unit_cell', 'domain_size'}:
             value = np.array(value, dtype=float)
+        if name == 'periodic':
+            if isinstance(value, bool):
+                value = [0, 1, 2]
+            elif isinstance(value, Collection) and all(
+                    isinstance(i, bool) for i in value):
+                value = [i for i, v in enumerate(value) if v]
         super().__setattr__(name, value)
     
     def discretize(self):
@@ -169,15 +186,11 @@ class BandStructure:
             level=self.chemical_potential)
         self.kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
         self.kpoints -= self._gvec[None, :]
-        for _ in range(self.correction_steps):
+        for _ in range(self.ncorrect):
             self._apply_newton_correction()
         if self.sort_axis:
             self._sort_and_reindex(self.sort_axis)
-        if self.periodic:
-            self._stitch_periodic_boundaries()
-        else:
-            self.kpoints_periodic = self.kpoints
-            self.kfaces_periodic = self.kfaces
+        self._stitch_periodic_boundaries()
 
     def calculate_filling_fraction(self, depth: int = 7) -> float:
         """
@@ -293,7 +306,7 @@ class BandStructure:
         """
         duplicates = dict()
         threshold = np.min(self._gvec / self.resolution) / 10
-        for axis in range(3):
+        for axis in self.periodic:
             low_border = np.argwhere(
                 self.kpoints[:, axis] + self._gvec[axis] < threshold).ravel()
             high_border = np.argwhere(
