@@ -120,9 +120,15 @@ def build_scattering_function(
 
     Supported scattering models include:
     - 'isotropic': Constant `gamma_0` everywhere
-    - 'cosine': `gamma_k * abs(cos(sym * phi))^power` where `phi` is
+    - 'cos': `gamma_k * abs(cos(sym * phi))^power` where `phi` is
         the angle of the projection of the wavevector k in the x-y
         plane with the x axis. The rest are parameters of the model.
+    - 'sin', 'tan', and 'cot': Same as 'cos' but using different
+        trigonometric functions.
+    - 'cos[n]phi': Where [n] is some integer, e.g. 'cos2phi'. Alias for
+        'cos' with sym being set to the integer in [n].
+    - 'sin[n]phi', 'tan[n]phi', and 'cot[n]phi': Same as 'cos[n]phi' but
+        using different trigonometric functions.
 
     Parameters
     ----------
@@ -151,9 +157,15 @@ def build_scattering_function(
         if model == 'isotropic':
             scattering_functions.append(
                 lambda kx, ky, kz: _get_param('gamma_0', i))
-        elif model == 'cosine':
-            params = _get_params(['gamma_k', 'sym', 'power'], i)
+        elif model.startswith('cos') or model.startswith('sin'):
+            trig_func = {'cos': np.cos, 'sin': np.sin, 'tan': np.tan,
+                         'cot': lambda x: 1.0 / np.tan(x)}[model[:3]]
+            if len(model) == 3:
+                params = _get_params(['gamma_k', 'power'], i)
+            else:
+                params = _get_params(['gamma_k', 'power'], i)
+                params['sym'] = int(model[3:-3])
             scattering_functions.append(
-                lambda kx, ky, kz: params['gamma_k'] * np.abs(np.cos(
+                lambda kx, ky, kz: params['gamma_k'] * np.abs(trig_func(
                     params['sym']*np.atan2(ky, kx)))**params['power'])
     return lambda kx, ky, kz: sum(s(kx, ky, kz) for s in scattering_functions)
