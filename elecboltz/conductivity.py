@@ -5,7 +5,6 @@ from typing import Callable
 from collections.abc import Collection
 # units
 from scipy.constants import e, hbar, angstrom
-from scipy.linalg import solve_banded
 from .bandstructure import BandStructure
 
 
@@ -35,14 +34,15 @@ class Conductivity:
     frequency : float
         The frequency of the applied field in units of THz.
         Default is `0.0`.
-    solver : {'sparse', 'iterative'}
-        The type of solver to use for the linear system. 'sparse' uses
-        `scipy.sparse.linalg.spsolve` and 'iterative' uses
-        `scipy.sparse.linalg.lgmres`. For most use cases, 'sparse' is
-        faster. For very large systems (more than 100000 points),
-        'iterative' might be the faster option.
     correct_curvature : bool, optional
         If True, correct for the curvature of the Fermi surface.
+    solver : Callable, optional
+        The solver used to solve the linear system. Takes the (sparse)
+        matrix as the first argument and the right-hand side as the
+        second argument. When using a custom solver, keep in mind that
+        the right-hand side might not be a vector. So, solvers that
+        only work with vectors need to be adapted to solve each column
+        of the right-hand side separately.
     
     Attributes
     ----------
@@ -71,17 +71,17 @@ class Conductivity:
         The conductivity tensor, which is a 3x3 matrix. Can be
         calculated using the `solve` method. Elements that are not
         calculated yet are set to zero.
-    solver : {'sparse', 'iterative'}
-        The solver used to solve the linear system.
     correct_curvature : bool
         Whether to correct for the curvature of the Fermi surface.
+    solver : Callable
+        The solver used to solve the linear system.
     """
     def __init__(self, band: BandStructure,
                  field: Collection[float] = np.zeros(3),
                  scattering_rate: Callable | float | None = None,
                  scattering_kernel: Callable | None = None,
-                 frequency: float = 0.0, solver: str = 'sparse',
-                 correct_curvature: bool = True, **kwargs):
+                 frequency: float = 0.0, correct_curvature: bool = True,
+                 solver: Callable = scipy.sparse.linalg.spsolve, **kwargs):
         self.solver = solver
         self.correct_curvature = correct_curvature
         # avoid triggering setattr in the constructor
@@ -172,8 +172,8 @@ class Conductivity:
         
         i, j, j_calc = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
-        linear_solution = self._solve(
-            self._differential_operator, self._vhat_projections[:, j_calc])
+        linear_solution = self.solver(self._differential_operator,
+                                      self._vhat_projections[:, j_calc])
         # reuse previously calculated solutions
         for col in j:
             if col in j_calc:
@@ -231,18 +231,6 @@ class Conductivity:
             self._derivative_term = None
         self._differential_operator = None
         self._saved_solutions = [None, None, None]
-    
-    def _solve(self, A, b):
-        if self.solver == 'sparse':
-            return scipy.sparse.linalg.spsolve(A, b)
-        elif self.solver == 'umfpack':
-            return scipy.sparse.linalg.spsolve(A, b, use_umfpack=True)
-        elif self.solver == 'iterative':
-            pass
-        else:
-            raise ValueError(
-                f"Unknown solver type: '{self.solver}'. Available options are "
-                "'sparse', 'umfpack', and 'iterative'.")
 
     def _get_calculation_indices(self, i, j):
         if i is None:
