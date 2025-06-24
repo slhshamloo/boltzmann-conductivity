@@ -193,7 +193,7 @@ class BandStructure:
         self.kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
         self.kpoints -= self._gvec[None, :]
         for _ in range(self.ncorrect):
-            self._apply_newton_correction()
+            self.kpoints = self._apply_newton_correction(self.kpoints)
         if self.sort_axis:
             self._sort_and_reindex(self.sort_axis)
         self._stitch_periodic_boundaries()
@@ -277,18 +277,22 @@ class BandStructure:
         ksymbols = sympy.symbols(self.wavevector_names)
         all_symbols = (ksymbols + sympy.symbols(self.axis_names)
                        + sympy.symbols(list(self.band_params.keys())))
+        # symbolic expressions
         self._energy_sympy = sympy.sympify(self.dispersion)
         self._velocities_sympy = [
             sympy.diff(self._energy_sympy, k) * velocity_units
             for k in sympy.symbols(self.wavevector_names)]
+        # replace zero velocities with zero arrays
         for i, v in enumerate(self._velocities_sympy):
             if v == 0:
                 self._velocities_sympy[i] = f"numpy.zeros_like({ksymbols[i]})"
+        # convert expressions into python functions
         self._energy_func_full = sympy.lambdify(
             all_symbols, self._energy_sympy)
         self._velocity_funcs_full = [
             sympy.lambdify(all_symbols, vexpr, 'numpy')
             for vexpr in self._velocities_sympy]
+        # reduce the arguments to only kx, ky, kz
         self.energy_func = lambda kx, ky, kz: self._energy_func_full(
             kx, ky, kz, *self.unit_cell, **self.band_params)
         self.velocity_func = lambda kx, ky, kz: [
@@ -375,12 +379,10 @@ class BandStructure:
                         duplicates[point]]
                 self.kfaces_periodic[i, j] = reindex_map[point]
     
-    def _apply_newton_correction(self):
+    def _apply_newton_correction(self, points):
         residuals = self.energy_func(
-            self.kpoints[:, 0], self.kpoints[:, 1], self.kpoints[:, 2]
-            ) - self.chemical_potential
+            points[:, 0], points[:, 1], points[:, 2]) - self.chemical_potential
         gradients = np.column_stack(self.velocity_func(
-            self.kpoints[:, 0], self.kpoints[:, 1], self.kpoints[:, 2])
-            ) / velocity_units
+            points[:, 0], points[:, 1], points[:, 2])) / velocity_units
         gradient_norms = np.linalg.norm(gradients, axis=-1)
-        self.kpoints -= (residuals / gradient_norms**2)[:, None] * gradients
+        return points - (residuals/gradient_norms**2)[:, None]*gradients
