@@ -81,20 +81,6 @@ class TestGeometricalCalculations(unittest.TestCase):
             [2, 3, 4], [2, 5, 3], [3, 0, 4], [3, 5, 0]])
         self.set_up_geometry(vertices, faces)
 
-    def set_up_irregular_octahedron(self):
-        randnums = np.random.random((6, 3))
-        vertices = np.array(
-            [[randnums[0, 0], -randnums[0, 1], 0.0],
-             [randnums[1, 0], randnums[1, 1], 0.0],
-             [-randnums[2, 0], randnums[2, 1], 0.0],
-             [-randnums[3, 0], -randnums[3, 1], 0.0],
-             [randnums[4, 0], randnums[4, 1], randnums[4, 2]],
-             [-randnums[5, 0], -randnums[5, 1], -randnums[5, 2]]])
-        faces = np.array([
-            [0, 1, 4], [0, 5, 1], [1, 2, 4], [1, 5, 2],
-            [2, 3, 4], [2, 5, 3], [3, 0, 4], [3, 5, 0]])
-        self.set_up_geometry(vertices, faces)
-
     def set_up_geometry(self, vertices, faces):
         self.band.kpoints = vertices
         self.band.kpoints_periodic = vertices.copy()
