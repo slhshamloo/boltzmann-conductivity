@@ -6,22 +6,23 @@ def easy_params(params):
     Convenience function to set parameters for the simulation.
 
     List of convenience features:
-    * Set unit cell dimensions with named parameters `a`, `b`, and `c`.
-        If `b` or `c` are not given, they are assumed to be equal to
-        `a`.
+
+    * | Set unit cell dimensions with named parameters `a`, `b`, and
+      | `c`. If `b` or `c` are not given, they are assumed to be equal
+      | to `a`.
     * Define an `energy_scale` which scales all energy parameters.
-    * Set the chemical potential with `mu` in `band_params`. If `mu` is
-        set in `band_params`, it is assumed the energy dispersion is
-        shifted by the chemical potential, so the associated variable
-        is set to 0.0 in the returned parameters.
-    * Set the dispersion relation with a default tight-binding model.
-        See `get_tight_binding_dispersion` for the list of parameters
-        and the resulting expression.
-    * Build the scattering function using predefined `scattering_models`
-        and the `scattering_params` associated with them. See
-        `build_scattering_function` for supported scattering models and
-        their parameters. `scattering_models` is assumed to be only one
-        `isotropic` model if not specified.
+    * | Set the chemical potential with `mu` in `band_params`. If `mu`
+      | is set in `band_params`, it is assumed the energy dispersion is
+      | shifted by the chemical potential, so the associated variable
+      | is set to 0.0 in the returned parameters.
+    * | Set the dispersion relation with a default tight-binding model.
+      | See `get_tight_binding_dispersion` for the list of parameters
+      | and the resulting expression.
+    * | Build the scattering function using predefined
+      | `scattering_models` and the `scattering_params` associated with
+      | them. See `build_scattering_function` for supported scattering
+      | models and their parameters. `scattering_models` is assumed to
+      | be only one `isotropic` model if not specified.
 
     Parameters
     ----------
@@ -65,28 +66,29 @@ def easy_params(params):
     return new_params
 
 
-def get_tight_binding_dispersion(band_params):
+def get_tight_binding_dispersion(band_params) -> str:
     """
     Get the tight-binding dispersion relation containing terms relating
     to the parameters in `band_params`.
 
-    The full tight-binding dispersion relation is given by:
-    ```
-    -mu - 2*t * (cos(a*kx)+cos(b*ky))
-    - 4*tp * cos(a*kx)*cos(b*ky)
-    - 2*tpp * (cos(2*a*kx)+cos(2*b*ky))
-    - 2*tz * (cos(a*kx)-cos(b*ky))**2
-        * cos(a*kx/2)*cos(b*ky/2)*cos(c*kz/2)
-    ```
+    The full tight-binding dispersion relation is given by::
+
+        -mu - 2*t * (cos(a*kx)+cos(b*ky))
+        - 4*tp * cos(a*kx)*cos(b*ky)
+        - 2*tpp * (cos(2*a*kx)+cos(2*b*ky))
+        - 2*tz * (cos(a*kx)-cos(b*ky))**2
+            * cos(a*kx/2)*cos(b*ky/2)*cos(c*kz/2)
 
     The list of parameters is as follows:
-    - mu: Chemical potential.
-    - t: Nearest-neighbor hopping parameter in the x-y plane.
-    - tp: Next-nearest-neighbor hopping parameter in the x-y plane.
-    - tpp: Next-next-nearest-neighbor hopping parameter
-        in the x-y plane.
-    - tz: Nearest-neighbor hopping parameter between
-        the different layers in the z direction.
+
+    * mu: Chemical potential.
+    * t: Nearest-neighbor hopping parameter in the x-y plane.
+    * tp: Next-nearest-neighbor hopping parameter in the x-y plane.
+    * | tpp: Next-next-nearest-neighbor hopping parameter
+      | in the x-y plane.
+
+    * | tz: Nearest-neighbor hopping parameter between
+      | the different layers in the z direction.
 
     Parameters
     ----------
@@ -119,16 +121,17 @@ def build_scattering_function(
     Build a scattering function from the given parameters.
 
     Supported scattering models include:
-    - 'isotropic': Constant `gamma_0` everywhere
-    - 'cos': `gamma_k * abs(cos(sym * phi))^power` where `phi` is
-        the angle of the projection of the wavevector k in the x-y
-        plane with the x axis. The rest are parameters of the model.
-    - 'sin', 'tan', and 'cot': Same as 'cos' but using different
-        trigonometric functions.
-    - 'cos[n]phi': Where [n] is some integer, e.g. 'cos2phi'. Alias for
-        'cos' with sym being set to the integer in [n].
-    - 'sin[n]phi', 'tan[n]phi', and 'cot[n]phi': Same as 'cos[n]phi' but
-        using different trigonometric functions.
+
+    * 'isotropic': Constant `gamma_0` everywhere
+    * | 'cos': `gamma_k * abs(cos(sym * phi))^power` where `phi` is
+      | the angle of the projection of the wavevector k in the x-y
+      | plane with the x axis. The rest are parameters of the model.
+    * | 'sin', 'tan', and 'cot': Same as 'cos' but using different
+      | trigonometric functions.
+    * | 'cos[n]phi': Where [n] is some integer, e.g. 'cos2phi'. Alias
+      | for 'cos' with sym being set to the integer in [n].
+    * | 'sin[n]phi', 'tan[n]phi', and 'cot[n]phi': Same as 'cos[n]phi'
+      | but using different trigonometric functions.
 
     Parameters
     ----------
