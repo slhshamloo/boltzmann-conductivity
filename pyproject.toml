@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "elecboltz"
-version = "0.1.0"
+version = "0.1.1"
+authors=[{name = "Saleh Shamloo Ahmadi", email = "slhshamloo@gmail.com"}]
 description = "Boltzmann transport for conductivity of materials using an FEM"
 dependencies = [
     "numpy>=1.26.4",
@@ -12,6 +13,8 @@ dependencies = [
     "sympy>=1.10.1",
     "scikit-image>=0.22.0"
 ]
+readme = "README.md"
+license = "MIT"
 
 [tool.setuptools]
 packages = ["elecboltz"]
