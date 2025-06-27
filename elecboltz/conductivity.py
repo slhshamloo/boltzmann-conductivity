@@ -1,4 +1,5 @@
 import numpy as np
+import scipy.linalg
 import scipy.sparse
 # type hinting
 from typing import Callable
@@ -294,54 +295,33 @@ class Conductivity:
         Average over the inscribed and circumscribed polygonal surfaces
         to correct the Jacobians for the curvature of the Fermi surface.
         """
-        kcenters, kcenters_tangent = self._find_centers()
-        normals = self._find_normals(triangle_points)
-        normals_tangent = self._find_tangent_normals(kcenters_tangent)
+        kcenters = np.mean(self.band.kpoints[self.band.kfaces], axis=1)
+        kcenters_tangent = kcenters.copy()
+        for _ in range(self.band.ncorrect):
+            kcenters_tangent = self.band._apply_newton_correction(
+                kcenters_tangent)
+        center_diff = (kcenters_tangent - kcenters) / angstrom
+        diff_magnitude = np.linalg.norm(center_diff, axis=-1)
 
-        kcenters /= angstrom
-        kcenters_tangent /= angstrom
-        rays_centers_norm = np.einsum('ij,ij->i', kcenters, normals)
-        rays_centers_norm[rays_centers_norm==0] = 1.0 # avoid division by zero
-        rays_centers = normals * rays_centers_norm[:, None]
-        rays_centers_tangent_norm = np.einsum(
-            'ij,ij->i', kcenters_tangent, normals_tangent)
-        rays_centers_tangent = \
-            normals_tangent * rays_centers_tangent_norm[:, None]
+        velocities =  np.column_stack(self.band.velocity_func(
+            self.band.kpoints[:, 0], self.band.kpoints[:, 1],
+            self.band.kpoints[:, 2]))
+        vhats = velocities / np.linalg.norm(velocities, axis=-1)[:, None]
+        normals = vhats[self.band.kfaces]
 
-        rays_points = triangle_points - (kcenters + rays_centers)[:, None, :]
-        rays_points_tangent = rays_points * (
-            rays_centers_tangent_norm / rays_centers_norm)[:, None, None]
-        points_tangent = rays_points_tangent + (
-            kcenters_tangent-rays_centers_tangent)[:, None, :]
+        with np.errstate(divide='ignore', invalid='ignore'):
+            cosines = np.einsum('ijk,ik->ij', normals, center_diff
+                                ) / diff_magnitude[:, None]
+            np.nan_to_num(cosines, copy=False, nan=1.0)
+        points_tangent = triangle_points + (
+            diff_magnitude[:, None] / cosines
+            )[:, :, None] * normals
 
         large_areas = np.linalg.norm(
             np.cross(points_tangent[:, 1] - points_tangent[:, 0],
                      points_tangent[:, 2] - points_tangent[:, 0]),
             axis=-1)
         self._jacobians = (large_areas+self._jacobians) / 2
-    
-    def _find_centers(self):
-        kcenters = np.mean(self.band.kpoints[self.band.kfaces], axis=1)
-        kcenters_tangent = kcenters.copy()
-        for _ in range(self.band.ncorrect):
-            kcenters_tangent = self.band._apply_newton_correction(
-                kcenters_tangent)
-        return kcenters, kcenters_tangent
-    
-    def _find_normals(self, triangle_points):
-        outer_product = np.cross(
-            triangle_points[:, 1] - triangle_points[:, 0],
-            triangle_points[:, 2] - triangle_points[:, 0], axis=-1)
-        areas = np.linalg.norm(outer_product, axis=-1)
-        areas[areas==0] = 1.0 # avoid division by zero
-        return outer_product / areas[:, None]
-    
-    def _find_tangent_normals(self, kcenters_tangent):
-        v_tangent = np.column_stack(self.band.velocity_func(
-            kcenters_tangent[:, 0], kcenters_tangent[:, 1],
-            kcenters_tangent[:, 2]))
-        vmag_tangent = np.linalg.norm(v_tangent, axis=-1)
-        return v_tangent / vmag_tangent[:, None]
 
     def _calculate_derivative_sums(self, triangle_points):
         """
@@ -373,11 +353,12 @@ class Conductivity:
                 self.band.kpoints[:, 0], self.band.kpoints[:, 1],
                 self.band.kpoints[:, 2]))
         normals = gradients / np.linalg.norm(gradients, axis=1)[:, None]
-        cosines = np.column_stack(
+        projections = np.column_stack(
             [np.einsum('ij,ij->i', normals[self.band.kfaces[:, i]],
                        normals[self.band.kfaces[:, j]])
              for i, j in ((0, 2), (0, 1), (1, 2))])
-        corrections = (cosines**(-2) - 1) / 6
+        # tan**2 = cos**(-2) - 1
+        corrections = (projections**(-2) - 1) / 6
         return 1 + corrections[:, :, None]
 
     def _calculate_velocity_projections(self):
