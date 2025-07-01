@@ -258,11 +258,38 @@ class Conductivity:
             self.band.kpoints_periodic[:, 2]))
         self._vmags = np.linalg.norm(self._velocities, axis=1)
         self._vhats = self._velocities / self._vmags[:, None]
+
         triangle_points = self.band.kpoints[self.band.kfaces] / angstrom
+        if self.correct_curvature:
+            triangle_points = self._curvature_correct_points(triangle_points)
+    
         self._calculate_jacobian_sums(triangle_points)
         self._calculate_derivative_sums(triangle_points)
         self._calculate_velocity_projections()
         self._are_elements_saved = True
+    
+    def _curvature_correct_points(self, triangle_points):
+        """Take the curvature into account for the areas and lengths"""
+        kcenters = np.mean(self.band.kpoints[self.band.kfaces], axis=1)
+        kcenters_tangent = kcenters.copy()
+        for _ in range(2):
+            kcenters_tangent = self.band._apply_newton_correction(
+                kcenters_tangent)
+        center_diff = (kcenters_tangent - kcenters) / angstrom
+        projected_diff = np.linalg.norm(center_diff, axis=-1)
+
+        velocities =  np.column_stack(self.band.velocity_func(
+            self.band.kpoints[:, 0], self.band.kpoints[:, 1],
+            self.band.kpoints[:, 2]))
+        vhats = velocities / np.linalg.norm(velocities, axis=-1)[:, None]
+        point_normals = vhats[self.band.kfaces]
+
+        with np.errstate(divide='ignore', invalid='ignore'):
+            cosines = np.einsum('ijk,ik->ij', point_normals, center_diff
+                                ) / projected_diff[:, None]
+            np.nan_to_num(cosines, copy=False, nan=1.0)
+        diff = projected_diff[:, None] / cosines
+        return triangle_points + point_normals*diff[:, :, None]
 
     def _calculate_jacobian_sums(self, triangle_points):
         """
@@ -272,8 +299,6 @@ class Conductivity:
                 np.cross(triangle_points[:, 1] - triangle_points[:, 0],
                          triangle_points[:, 2] - triangle_points[:, 0]),
                 axis=-1)
-        if self.correct_curvature:
-            self._curvature_correct_jacobians(triangle_points)
         # build diagonal ordered matrices of the jacobian sums
         n = len(self.band.kpoints_periodic)
         i_idx = self.band.kfaces_periodic[:, 0]
@@ -290,48 +315,11 @@ class Conductivity:
         np.add.at(self._jacobian_diagonal, j_idx, self._jacobians)
         np.add.at(self._jacobian_diagonal, k_idx, self._jacobians)
 
-    def _curvature_correct_jacobians(self, triangle_points):
-        """
-        Average over the inscribed and circumscribed polygonal surfaces
-        to correct the Jacobians for the curvature of the Fermi surface.
-        """
-        kcenters = np.mean(self.band.kpoints[self.band.kfaces], axis=1)
-        kcenters_tangent = kcenters.copy()
-        for _ in range(self.band.ncorrect):
-            kcenters_tangent = self.band._apply_newton_correction(
-                kcenters_tangent)
-        center_diff = (kcenters_tangent - kcenters) / angstrom
-        diff_magnitude = np.linalg.norm(center_diff, axis=-1)
-
-        velocities =  np.column_stack(self.band.velocity_func(
-            self.band.kpoints[:, 0], self.band.kpoints[:, 1],
-            self.band.kpoints[:, 2]))
-        vhats = velocities / np.linalg.norm(velocities, axis=-1)[:, None]
-        normals = vhats[self.band.kfaces]
-
-        with np.errstate(divide='ignore', invalid='ignore'):
-            cosines = np.einsum('ijk,ik->ij', normals, center_diff
-                                ) / diff_magnitude[:, None]
-            np.nan_to_num(cosines, copy=False, nan=1.0)
-        points_tangent = triangle_points + (
-            diff_magnitude[:, None] / cosines
-            )[:, :, None] * normals
-
-        large_areas = np.linalg.norm(
-            np.cross(points_tangent[:, 1] - points_tangent[:, 0],
-                     points_tangent[:, 2] - points_tangent[:, 0]),
-            axis=-1)
-        self._jacobians = (large_areas+self._jacobians) / 2
-
     def _calculate_derivative_sums(self, triangle_points):
         """
         Calculate the field-independent part of the derivative term.
         """
-        if self.correct_curvature:
-            curvature_factor = self._edge_curvature_factor()
-        else:
-            curvature_factor = 1.0
-        self._derivative_components = curvature_factor * (
+        self._derivative_components = (
             triangle_points - np.roll(triangle_points, -2, axis=1))
         i_idx = self.band.kfaces_periodic
         j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
@@ -342,24 +330,6 @@ class Conductivity:
             scipy.sparse.csc_array((
             np.tile(component.flat, 2), (rows, cols))) for component in
             self._derivative_components.transpose(2, 0, 1)]
-    
-    def _edge_curvature_factor(self):
-        """
-        Get the curvature correction factor for the edge lengths
-        using the variation in the normal vector through the
-        path of the edge.
-        """
-        gradients = np.column_stack(self.band.velocity_func(
-                self.band.kpoints[:, 0], self.band.kpoints[:, 1],
-                self.band.kpoints[:, 2]))
-        normals = gradients / np.linalg.norm(gradients, axis=1)[:, None]
-        projections = np.column_stack(
-            [np.einsum('ij,ij->i', normals[self.band.kfaces[:, i]],
-                       normals[self.band.kfaces[:, j]])
-             for i, j in ((0, 2), (0, 1), (1, 2))])
-        # tan**2 = cos**(-2) - 1
-        corrections = (projections**(-2) - 1) / 6
-        return 1 + corrections[:, :, None]
 
     def _calculate_velocity_projections(self):
         self._vhat_projections = self._jacobian_sums @ self._vhats / 24
