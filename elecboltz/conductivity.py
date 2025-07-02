@@ -254,8 +254,8 @@ class Conductivity:
         band structure.
         """
         self._velocities = np.column_stack(self.band.velocity_func(
-            self.band.kpoints_periodic[:, 0], self.band.kpoints_periodic[:, 1],
-            self.band.kpoints_periodic[:, 2]))
+            self.band.kpoints[:, 0], self.band.kpoints[:, 1],
+            self.band.kpoints[:, 2]))
         self._vmags = np.linalg.norm(self._velocities, axis=1)
         self._vhats = self._velocities / self._vmags[:, None]
 
@@ -270,7 +270,7 @@ class Conductivity:
     
     def _curvature_correct_points(self, triangle_points):
         """Take the curvature into account for the areas and lengths"""
-        kcenters = np.mean(self.band.kpoints[self.band.kfaces], axis=1)
+        kcenters = np.mean(triangle_points, axis=1) * angstrom
         kcenters_tangent = kcenters.copy()
         for _ in range(2):
             kcenters_tangent = self.band._apply_newton_correction(
@@ -278,15 +278,13 @@ class Conductivity:
         center_diff = (kcenters_tangent - kcenters) / angstrom
         projected_diff = np.linalg.norm(center_diff, axis=-1)
 
-        velocities =  np.column_stack(self.band.velocity_func(
-            self.band.kpoints[:, 0], self.band.kpoints[:, 1],
-            self.band.kpoints[:, 2]))
-        vhats = velocities / np.linalg.norm(velocities, axis=-1)[:, None]
-        point_normals = vhats[self.band.kfaces]
-
+        point_normals = self._vhats[self.band.kfaces]
+        # Turn off warnings for division by zero
         with np.errstate(divide='ignore', invalid='ignore'):
+            # cosine = nhat.cdiff / |cdiff||nhat| and |nhat| = 1
             cosines = np.einsum('ijk,ik->ij', point_normals, center_diff
                                 ) / projected_diff[:, None]
+            # Handle division by zero
             np.nan_to_num(cosines, copy=False, nan=1.0)
         diff = projected_diff[:, None] / cosines
         return triangle_points + point_normals*diff[:, :, None]
@@ -300,10 +298,10 @@ class Conductivity:
                          triangle_points[:, 2] - triangle_points[:, 0]),
                 axis=-1)
         # build diagonal ordered matrices of the jacobian sums
-        n = len(self.band.kpoints_periodic)
-        i_idx = self.band.kfaces_periodic[:, 0]
-        j_idx = self.band.kfaces_periodic[:, 1]
-        k_idx = self.band.kfaces_periodic[:, 2]
+        n = len(self.band.kpoints)
+        i_idx = self.band.kfaces[:, 0]
+        j_idx = self.band.kfaces[:, 1]
+        k_idx = self.band.kfaces[:, 2]
         rows = np.concatenate((i_idx, j_idx, k_idx, i_idx, i_idx,
                                 j_idx, j_idx, k_idx, k_idx))
         cols = np.concatenate((i_idx, j_idx, k_idx, j_idx, k_idx,
@@ -321,20 +319,28 @@ class Conductivity:
         """
         self._derivative_components = (
             triangle_points - np.roll(triangle_points, -2, axis=1))
-        i_idx = self.band.kfaces_periodic
-        j_idx = np.roll(self.band.kfaces_periodic, -1, axis=1)
-        k_idx = np.roll(self.band.kfaces_periodic, -2, axis=1)
+        i_idx = self.band.kfaces
+        j_idx = np.roll(self.band.kfaces, -1, axis=1)
+        k_idx = np.roll(self.band.kfaces, -2, axis=1)
         rows = np.concatenate((i_idx.flat, k_idx.flat))
         cols = np.tile(j_idx.flat, 2)
         self._derivatives = [
             scipy.sparse.csc_array((
             np.tile(component.flat, 2), (rows, cols))) for component in
             self._derivative_components.transpose(2, 0, 1)]
+        if self.band.periodic:
+            self._derivatives = [
+                (self.band.periodic_projector @ derivative
+                 @ self.band.periodic_projector.T).tocsc()
+                for derivative in self._derivatives]
 
     def _calculate_velocity_projections(self):
         self._vhat_projections = self._jacobian_sums @ self._vhats / 24
         self._vhat_projections += (
             self._jacobian_diagonal[:, None] * self._vhats / 24)
+        if self.band.periodic:
+            self._vhat_projections = \
+                self.band.periodic_projector @ self._vhat_projections
 
     def _build_differential_operator(self):
         """
@@ -366,10 +372,9 @@ class Conductivity:
                 self._calculate_out_scattering_from_kernel()
 
         if isinstance(self.scattering_rate, Callable):
-            scattering = self.scattering_rate(
-                self.band.kpoints_periodic[:, 0],
-                self.band.kpoints_periodic[:, 1],
-                self.band.kpoints_periodic[:, 2])
+            scattering = self.scattering_rate(self.band.kpoints[:, 0],
+                                              self.band.kpoints[:, 1],
+                                              self.band.kpoints[:, 2])
         else:
             scattering = self.scattering_rate
         # separate the optical conductivity case to avoid making
@@ -402,10 +407,10 @@ class Conductivity:
                 self._jacobian_sums @ self._scattering_invlen, format='csc')
             ) / 60
         # alpha(i,j,k) * gamma^k / 120
-        i_idx = self.band.kfaces_periodic[:, 0]
-        j_idx = self.band.kfaces_periodic[:, 1]
-        k_idx = self.band.kfaces_periodic[:, 2]
-        n = len(self.band.kpoints_periodic)
+        i_idx = self.band.kfaces[:, 0]
+        j_idx = self.band.kfaces[:, 1]
+        k_idx = self.band.kfaces[:, 2]
+        n = len(self.band.kpoints)
         rows = np.concatenate((i_idx, i_idx, j_idx, j_idx, k_idx, k_idx))
         cols = np.concatenate((j_idx, k_idx, i_idx, k_idx, i_idx, j_idx))
         data = np.concatenate((
@@ -417,3 +422,7 @@ class Conductivity:
             self._jacobians * self._scattering_invlen[i_idx])) / 120
         self._out_scattering += scipy.sparse.csc_array(
             (data, (rows, cols)), shape=(n, n))
+        if self.band.periodic:
+            self._out_scattering = (
+                self.band.periodic_projector @ self._out_scattering
+                @ self.band.periodic_projector.T).tocsc()
