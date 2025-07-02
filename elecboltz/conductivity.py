@@ -1,8 +1,7 @@
 import numpy as np
-import scipy.linalg
 import scipy.sparse
 # type hinting
-from typing import Callable
+from typing import Callable, Union
 from collections.abc import Collection
 # units
 from scipy.constants import e, hbar, angstrom
@@ -79,8 +78,8 @@ class Conductivity:
     """
     def __init__(self, band: BandStructure,
                  field: Collection[float] = np.zeros(3),
-                 scattering_rate: Callable | float | None = None,
-                 scattering_kernel: Callable | None = None,
+                 scattering_rate: Union[Callable, float, None] = None,
+                 scattering_kernel: Union[Callable, None] = None,
                  frequency: float = 0.0, correct_curvature: bool = True,
                  solver: Callable = scipy.sparse.linalg.spsolve, **kwargs):
         self.solver = solver
@@ -146,9 +145,9 @@ class Conductivity:
         self._field_direction = new_direction
         super().__setattr__('field', field)
 
-    def calculate(self, i: Collection[int] | int | None = None,
-                  j: Collection[int] | int | None = None
-                  ) -> np.ndarray | float:
+    def calculate(self, i: Union[Collection[int], int, None] = None,
+                  j: Union[Collection[int], int, None] = None
+                  ) -> Union[np.ndarray, float]:
         """
         Calculate the conductivity tensor.
 

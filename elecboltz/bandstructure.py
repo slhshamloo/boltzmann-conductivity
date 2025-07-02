@@ -5,6 +5,7 @@ from skimage.measure import marching_cubes
 # units
 from scipy.constants import hbar, eV, angstrom
 # type hinting
+from typing import Union
 from collections.abc import Collection
 from .integrate import adaptive_octree_integrate
 # conversion from energy gradient units to m/s for velocity
@@ -120,11 +121,11 @@ class BandStructure:
             self, dispersion: str, chemical_potential: float,
             unit_cell: Collection[float], band_params: dict = {},
             domain_size: Collection[float] = [1.0, 1.0, 1.0],
-            periodic: bool | Collection[int|bool] = True,
-            axis_names: Collection[str] | str = ['a', 'b', 'c'],
-            wavevector_names: Collection[str] | str = ['kx', 'ky', 'kz'],
-            sort_axis: int = None, resolution: int | Collection[int] = 21,
-            ncorrect: int = 2, **kwargs):
+            periodic: Union[bool, Collection[Union[int, bool]]] = True,
+            axis_names: Union[Collection[str], str] = ['a', 'b', 'c'],
+            wavevector_names: Union[Collection[str], str] = ['kx', 'ky', 'kz'],
+            resolution: Union[int, Collection[int]] = 21, ncorrect: int = 2,
+            sort_axis: int = None, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         super().__setattr__('band_params', band_params)
