@@ -1,6 +1,6 @@
 import numpy as np
 import sympy
-import itertools
+import scipy.sparse
 from skimage.measure import marching_cubes
 # units
 from scipy.constants import hbar, eV, angstrom
@@ -100,14 +100,9 @@ class BandStructure:
         corresponds to a face in the form [i, j, k], where i, j,
         and k are the indices of the vertices of the face in the
         `kpoints` array.
-    kpoints_periodic : (N, 3) numpy.ndarray of float
-        The kpoints on the Fermi surface with the duplicate boundary
-        points removed. Is only different from `kpoints` if `periodic`
-        is True.
-    kfaces_periodic : (F, 3) numpy.ndarray of int
-        Same as `kfaces`, but points to the unique points in
-        `kpoints_periodic`. is only different from `kfaces` if
-        `periodic` is True.
+    periodic_projector : scipy.sparse.csr_array
+        Projects quantities into the periodic k-space, where points that
+        are periodic images of each other are mapped to the same point.
     resolution : int or Collection[int]
         The resolution of the grids used for approximating the Fermi
         surface geometry with the marching cubes algorithm.
@@ -144,8 +139,7 @@ class BandStructure:
         self._parse_dispersion()
         self.kpoints = None
         self.kfaces = None
-        self.kpoints_periodic = None
-        self.kfaces_periodic = None
+        self.periodic_projector = None
         self.sort_axis = sort_axis
 
     def __setattr__(self, name, value):
@@ -324,9 +318,8 @@ class BandStructure:
             if len(low_border) == 0 or len(high_border) == 0:
                 continue
 
-            min_dist = min(
-                self._get_min_border_distance(low_border),
-                self._get_min_border_distance(high_border))
+            min_dist = min(self._get_min_border_distance(low_border),
+                           self._get_min_border_distance(high_border))
 
             k1 = self.kpoints[low_border][None, :]
             k2 = self.kpoints[high_border][:, None]
@@ -342,7 +335,7 @@ class BandStructure:
             duplicates.update(dict(zip(
                 high_border[is_duplicate],
                 low_border[min_pair[is_duplicate]])))
-        self._build_periodic_mesh(duplicates)
+        self._build_periodic_projector(duplicates)
     
     def _get_min_border_distance(self, border):
         """
@@ -362,23 +355,25 @@ class BandStructure:
             (points - np.roll(points, 1, axis=1))[is_pair_intra_layer],
             axis=-1))
 
-    def _build_periodic_mesh(self, duplicates):
+    def _build_periodic_projector(self, duplicates):
         """
         Build the periodic kpoints and kfaces arrays by removing
         duplicate points and reindexing.
         """
-        unique_mask = np.full(len(self.kpoints), True)
-        unique_mask[list(duplicates.keys())] = False
-        self.kpoints_periodic = self.kpoints[unique_mask]
-        reindex_map = np.cumsum(unique_mask) - 1
-        self.kfaces_periodic = np.empty_like(self.kfaces)
-        for i, face in enumerate(self.kfaces):
-            for j, point in enumerate(face):
-                if point in duplicates:
-                    reindex_map[point] = reindex_map[
-                        duplicates[point]]
-                self.kfaces_periodic[i, j] = reindex_map[point]
-    
+        if not duplicates:
+            self.periodic_projector = scipy.sparse.eye(
+                len(self.kpoints), format='csr')
+        else:
+            unique_mask = np.full(len(self.kpoints), True)
+            unique_mask[list(duplicates.keys())] = False
+            reindex_map = np.cumsum(unique_mask) - 1
+            reindex_map[list(duplicates.keys())] = reindex_map[
+                list(duplicates.values())]
+            self.periodic_projector = scipy.sparse.csr_array(
+                (np.ones(len(self.kpoints)),
+                (reindex_map, np.arange(len(self.kpoints)))),
+                shape=(np.count_nonzero(unique_mask), len(self.kpoints)))
+
     def _apply_newton_correction(self, points):
         residuals = self.energy_func(
             points[:, 0], points[:, 1], points[:, 2]) - self.chemical_potential
