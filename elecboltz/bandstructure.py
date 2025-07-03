@@ -1,20 +1,20 @@
+from .integrate import adaptive_octree_integrate
+
 import numpy as np
 import sympy
 import scipy.sparse
 from skimage.measure import marching_cubes
-# units
-from scipy.constants import hbar, eV, angstrom
-# type hinting
+
 from typing import Union
-from collections.abc import Collection
-from .integrate import adaptive_octree_integrate
+from collections.abc import Sequence
+
+from scipy.constants import hbar, eV, angstrom
 # conversion from energy gradient units to m/s for velocity
 velocity_units = 1e-3 * eV * angstrom / hbar
 
 
 class BandStructure:
-    """
-    Contains bandstructure information for a given material.
+    """Contains bandstructure information for a given material.
 
     In addition to the dispersion relation and general parameters, this
     class also contains methods for discretizing the Fermi surface and
@@ -29,17 +29,17 @@ class BandStructure:
         differentiable by `sympy`. Energy units are milli eV.
     chemical_potential : float
         The chemical potential in milli eV.
-    unit_cell : Collection[float]
+    unit_cell : Sequence[float]
         The dimensions of the unit cell in angstrom.
     band_params : dict, optional
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
-    domain_size : Collection[float]
+    domain_size : Sequence[float]
         The ratio of the reciprocal space domain sidelengths to simple
         cubic unit cell dimensions in reciprocal space. The product
         of the numbers in this collection must be equal to the number
         of atoms in the conventional unit cell specified by `unit_cell`.
-    periodic : bool or int or Collection[bool] or Collection[int]
+    periodic : bool or int or Sequence[bool] or Sequence[int]
         If bool, whether periodic boundary conditions are applied to all
         axes or not. If a single int, specifies which single axis is 
         periodic. If a collection, specifies which axes are periodic.
@@ -48,13 +48,13 @@ class BandStructure:
         If the collection is of booleans, it specifies whether each axis
         is periodic or not, e.g. [True, False, True] means periodic in
         x and z axes, but not in y axis.
-    axis_names : str or Collection[str], optional
+    axis_names : str or Sequence[str], optional
         The names of the unit cell axes. Must be parsable by
         `sympy.symbols`.
-    wavevector_names : str or Collection[str], optional
+    wavevector_names : str or Sequence[str], optional
         The names of the wavevector components. Must be parsable by
         `sympy.symbols`.
-    resolution :  int or Collection[int], optional
+    resolution :  int or Sequence[int], optional
         Controls the resolution of the grids used for discretizing the
         Fermi surface. If a collection of integers is provided, each
         element corresponds to the resolution along the respective
@@ -73,18 +73,18 @@ class BandStructure:
         update `energy_func` and `velocity_func`.
     chemical_potential : float
         The chemical potential in milli eV.
-    unit_cell : Collection[float]
+    unit_cell : Sequence[float]
         The dimensions of the unit cell in angstrom.
-    domain_size : Collection[float]
+    domain_size : Sequence[float]
         The ratio of the reciprocal space domain sidelengths to simple
         cubic unit cell dimensions in reciprocal space. The product
         of the numbers in this collection must be equal to the number
         of atoms in the conventional unit cell specified by `unit_cell`.
-    periodic : Collection[int]
+    periodic : Sequence[int]
         The periodic axes.
     band_params : dict
-        The parameters of the dispersion relation. Updating this 
-        will automatically update `energy_func` and `velocity_func`.
+        The parameters of the dispersion relation. Energy units are
+        milli eV and distance units are angstrom.
     energy_func : function
         The energy function for the dispersion relation. Takes
         kx, ky, and kz in angstrome^-1 as arguments and returns
@@ -104,27 +104,27 @@ class BandStructure:
     periodic_projector : scipy.sparse.csr_array
         Projects quantities into the periodic k-space, where points that
         are periodic images of each other are mapped to the same point.
-    resolution : int or Collection[int]
+    resolution : int or Sequence[int]
         The resolution of the grids used for approximating the Fermi
         surface geometry with the marching cubes algorithm.
     ncorrect : int
         The number of Newton--Raphson steps applied to correct the
         triangulated surface after the marching cubes algorithm.
-    sort_axis : int, optional
+    sort_axis : int or None
         The axis along which to sort the points after triangulation.
-    axis_names : str or Collection[str]
+    axis_names : str or Sequence[str]
         The names of the unit cell axes.
-    wavevector_names : str or Collection[str]
+    wavevector_names : str or Sequence[str]
         The names of the wavevector components.
     """
     def __init__(
             self, dispersion: str, chemical_potential: float,
-            unit_cell: Collection[float], band_params: dict = {},
-            domain_size: Collection[float] = [1.0, 1.0, 1.0],
-            periodic: Union[bool, Collection[Union[int, bool]]] = True,
-            axis_names: Union[Collection[str], str] = ['a', 'b', 'c'],
-            wavevector_names: Union[Collection[str], str] = ['kx', 'ky', 'kz'],
-            resolution: Union[int, Collection[int]] = 21, ncorrect: int = 2,
+            unit_cell: Sequence[float], band_params: dict = {},
+            domain_size: Sequence[float] = [1.0, 1.0, 1.0],
+            periodic: Union[bool, Sequence[Union[int, bool]]] = True,
+            axis_names: Union[Sequence[str], str] = ['a', 'b', 'c'],
+            wavevector_names: Union[Sequence[str], str] = ['kx', 'ky', 'kz'],
+            resolution: Union[int, Sequence[int]] = 21, ncorrect: int = 2,
             sort_axis: int = None, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
@@ -144,10 +144,10 @@ class BandStructure:
         self.sort_axis = sort_axis
 
     def __setattr__(self, name, value):
-        if name == 'dispersion' or name == 'band_params':
+        if name == 'dispersion':
             self._parse_dispersion()
         if name == 'resolution':
-            if isinstance(value, Collection):
+            if isinstance(value, Sequence):
                 value = np.array(value)
             else:
                 value = np.array([value, value, value])
@@ -161,7 +161,7 @@ class BandStructure:
                     value = []
             if isinstance(value, int):
                 value = [value]
-            elif isinstance(value, Collection) and all(
+            elif isinstance(value, Sequence) and all(
                     isinstance(i, bool) for i in value):
                 value = [i for i, v in enumerate(value) if v]
         super().__setattr__(name, value)
