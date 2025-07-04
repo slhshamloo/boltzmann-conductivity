@@ -287,12 +287,40 @@ class BandStructure:
         self._velocity_funcs_full = [
             sympy.lambdify(all_symbols, vexpr, 'numpy')
             for vexpr in self._velocities_sympy]
-        # reduce the arguments to only kx, ky, kz
-        self.energy_func = lambda kx, ky, kz: self._energy_func_full(
+    
+    def energy_func(self, kx, ky, kz):
+        """
+        Calculate the energy at the given k-point.
+
+        Parameters
+        ----------
+        kx, ky, kz : float
+            The components of the wavevector in angstrom^-1.
+
+        Returns
+        -------
+        object like kx, ky, kz
+            The energy at the given k-point in milli eV.
+        """
+        return self._energy_func_full(
             kx, ky, kz, *self.unit_cell, **self.band_params)
-        self.velocity_func = lambda kx, ky, kz: [
-            vfunc(kx, ky, kz, *self.unit_cell, **self.band_params)
-            for vfunc in self._velocity_funcs_full]
+    
+    def velocity_func(self, kx, ky, kz):
+        """
+        Calculate the velocity at the given k-point.
+
+        Parameters
+        ----------
+        kx, ky, kz : float
+            The components of the wavevector in angstrom^-1.
+
+        Returns
+        -------
+        list of 3 objects like kx, ky, kz
+            The velocity vector at the given k-point in m/s.
+        """
+        return [vfunc(kx, ky, kz, *self.unit_cell, **self.band_params)
+                for vfunc in self._velocity_funcs_full]
 
     def _sort_and_reindex(self, sort_axis):
         new_order, self.kfaces = self._generate_reindex(sort_axis)
