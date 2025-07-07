@@ -133,8 +133,8 @@ def _get_param(scattering_params, key, idx):
             return scattering_params[key][idx]
 
 
-def _get_params(keys, idx):
-    return {key: _get_param(key, idx) for key in keys}
+def _get_params(scattering_params, keys, idx):
+    return {key: _get_param(scattering_params, key, idx) for key in keys}
 
 
 def _cot(x):
