@@ -58,6 +58,8 @@ class FittingRoutine:
         The current iteration number.
     last_time : float
         The timestamp of the last fitting iteration.
+    total_time : float
+        The total time spent on the fitting routine.
     base_band : BandStructure
         The base band structure object.
     base_cond : Conductivity
@@ -74,6 +76,7 @@ class FittingRoutine:
         self.print_log = print_log
         self.iteration = 0
         self.last_time = time()
+        self.total_time = 0.0
         self.base_band = BandStructure(**easy_params(init_params))
         self.base_band.discretize()
         self.base_cond = Conductivity(
@@ -156,6 +159,7 @@ class FittingRoutine:
         now = time()
         iter_time = now - self.last_time
         self.last_time = now
+        self.total_time += iter_time
 
         log_message = f"Iteration {self.iteration}\n" \
                       f"----------{'-' * len(str(self.iteration))}\n" \
@@ -170,6 +174,15 @@ class FittingRoutine:
         if convergence is not None:
             log_message += f"Convergence: {convergence:.5f}\n\n"
         log_message += f"Iteration Runtime: {iter_time:.3f} seconds\n"
+        minutes, seconds = divmod(self.total_time, 60)
+        hours, minutes = divmod(minutes, 60)
+        log_message += f"Total Runtime: "
+        if hours > 0:
+            log_message += f"{int(hours)} hours "
+        if minutes > 0:
+            log_message += f"{int(minutes)} minutes "
+        log_message += f"{seconds:.1f} seconds\n"
+
         
         if self.print_log:
             print(log_message)
