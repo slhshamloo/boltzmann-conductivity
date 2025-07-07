@@ -1,9 +1,9 @@
 import numpy as np
-from typing import Callable, Collection
+from typing import Callable, Sequence
 
 
 def adaptive_octree_integrate(
-        func: Callable, bounds: Collection[float], depth=8):
+        func: Callable, bounds: Sequence[float], depth: int = 7) -> float:
     """
     Integrate a binary-valued function over a cubic volume using an
     adaptive octree subdivision scheme.
@@ -14,11 +14,11 @@ def adaptive_octree_integrate(
         A function that takes three arguments (x, y, z) and returns
         a boolean value indicating whether the point is inside the
         volume of interest.
-    bounds : Collection[float]
+    bounds : Sequence[float]
         A collection of six floats (xmin, xmax, ymin, ymax, zmin, zmax)
         defining the bounds of the cubic volume to integrate over.
     depth : int, optional
-        The maximum depth of the octree, by default 8
+        The maximum depth of the octree.
 
     Returns
     -------
@@ -79,32 +79,8 @@ def _subdivide_voxel(bounds, centers):
 
 def _integrate_final_octree(func, bounds):
     corners, centers = _get_corners_and_centers(bounds)
-    edge_centers = np.concatenate(
-        [np.concatenate([np.vstack([centers[0], bounds[i+2], bounds[j+4]]),
-                         np.vstack([bounds[i], centers[1], bounds[j+4]]),
-                         np.vstack([bounds[i], bounds[j+2], centers[2]])],
-                        axis=1)
-            for i in range(2) for j in range(2)],
-        axis=1)
-    face_centers = np.concatenate(
-        [np.concatenate([np.vstack([centers[0], centers[1], bounds[i+4]]),
-                            np.vstack([centers[0], bounds[i+2], centers[2]]),
-                            np.vstack([bounds[i], centers[1], centers[2]])],
-                        axis=1)
-            for i in range(2)],
-        axis=1)
-
-    corner_values = func(corners[0], corners[1], corners[2]
-                         ).reshape((8, -1))
-    edge_values = func(edge_centers[0], edge_centers[1], edge_centers[2]
-                       ).reshape((12, -1))
-    face_values = func(face_centers[0], face_centers[1], face_centers[2]
-                       ).reshape((6, -1))
-    center_values = func(centers[0], centers[1], centers[2])
-
-    corner_sums = np.sum(corner_values, axis=0) / 8
-    edge_sums = np.sum(edge_values, axis=0) / 4
-    face_sums = np.sum(face_values, axis=0) / 2
-    fractions = (corner_sums + edge_sums + face_sums + center_values) / 8
     volumes = np.prod(bounds[1::2] - bounds[::2], axis=0)
-    return np.sum(fractions * volumes)
+    return np.sum((np.sum(func(corners[0], corners[1], corners[2]
+                               ).reshape((8, -1)), axis=0)
+                   + func(centers[0], centers[1], centers[2])) / 9
+                  * volumes)
