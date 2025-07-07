@@ -1,11 +1,12 @@
+from .bandstructure import BandStructure
+
 import numpy as np
 import scipy.sparse
-# type hinting
+
 from typing import Callable, Union
-from collections.abc import Collection
-# units
+from collections.abc import Sequence
+
 from scipy.constants import e, hbar, angstrom
-from .bandstructure import BandStructure
 
 
 class Conductivity:
@@ -17,7 +18,7 @@ class Conductivity:
     ----------
     band : BandStructure
         The class holding band structure information of the material.
-    field : Collection[float]
+    field : Sequence[float]
         The magnetic field in the x, y, and z directions in units of
         Tesla.
     scattering_rate : Callable or float or None
@@ -31,9 +32,11 @@ class Conductivity:
         coordinates are given to the function in order, so the function
         signature would be C(kx, ky, kz, kx', ky', kz'). If None, the
         scattering rate should be specified instead.
+    scattering_params : dict[str, float or Sequence[float]], optional
+        Extra parameters passed to the scattering kernel or the
+        scattering rate function.
     frequency : float
         The frequency of the applied field in units of THz.
-        Default is `0.0`.
     correct_curvature : bool, optional
         If True, correct for the curvature of the Fermi surface.
     solver : Callable, optional
@@ -48,22 +51,27 @@ class Conductivity:
     ----------
     band : BandStructure
         The class holding band structure information of the material.
-    field : Collection[float] or None
+    field : Sequence[float] or None
         The magnetic field in the x, y, and z directions in units of
         Tesla.
-    scattering_rate : Callable or float or Collection[float] or None
+    scattering_rate : Callable or float or Sequence[float] or None
         The (out-)scattering rate as a function of kx, ky, and kz. Can
         also be a constant value instead of a function. If initialized
         as None, it will be calculated from the scattering kernel upon
         the next calculation.
     scattering_kernel : Callable or None
         The scattering kernel as a function of a pair of coordinates
-        (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
-        coordinates are given to the function in order, so the function
-        signature would be C(kx, ky, kz, kx', ky', kz'). If None, the
+        ``(kx, ky, kz)`` and ``(kx', ky', kz')`` in units of angstrom,
+        which returns values in units of angstrom THz. All coordinates
+        are given to the function in order, so the function signature
+        would be ``C(kx, ky, kz, kx', ky', kz')``. If None, the
         scattering rate should be specified instead. The out-scattering
         rate will be calculated from the scattering kernel if the
         scattering rate is not provided.
+    scattering_params : dict[str, float or Sequence[float]], optional
+        Extra parameters passed to the scattering kernel or the
+        scattering rate function. If, for instance, you also want the
+        scattering to depend on the velocities, you can set them here.
     frequency : float
         The frequency of the applied field in units of THz.
         If non-zero, the conductivity output will be complex.
@@ -76,18 +84,20 @@ class Conductivity:
     solver : Callable
         The solver used to solve the linear system.
     """
-    def __init__(self, band: BandStructure,
-                 field: Collection[float] = np.zeros(3),
-                 scattering_rate: Union[Callable, float, None] = None,
-                 scattering_kernel: Union[Callable, None] = None,
-                 frequency: float = 0.0, correct_curvature: bool = True,
-                 solver: Callable = scipy.sparse.linalg.spsolve, **kwargs):
+    def __init__(
+            self, band: BandStructure, field: Sequence[float] = np.zeros(3),
+            scattering_rate: Union[Callable, float, None] = None,
+            scattering_kernel: Union[Callable, None] = None,
+            scattering_params: dict[str, Union[float, Sequence[float]]] = {},
+            frequency: float = 0.0, correct_curvature: bool = True,
+            solver: Callable = scipy.sparse.linalg.spsolve, **kwargs):
         self.solver = solver
         self.correct_curvature = correct_curvature
         # avoid triggering setattr in the constructor
         super().__setattr__('band', band)
         super().__setattr__('scattering_rate', scattering_rate)
         super().__setattr__('scattering_kernel', scattering_kernel)
+        super().__setattr__('scattering_params', scattering_params)
         super().__setattr__('frequency', frequency)
         super().__setattr__('field', np.array(field))
         self._field_magnitude = np.linalg.norm(field)
@@ -116,7 +126,8 @@ class Conductivity:
     def __setattr__(self, name, value):
         if name == 'band':
             self.erase_memory()
-        if name in ['frequency', 'scattering_rate', 'scattering_kernel']:
+        if name in ['frequency', 'scattering_rate',
+                    'scattering_kernel', 'scattering_params']:
             self.erase_memory(elements=False, scattering=True,
                               derivative=False)
         if name == 'field' and value is not None:
@@ -145,18 +156,17 @@ class Conductivity:
         self._field_direction = new_direction
         super().__setattr__('field', field)
 
-    def calculate(self, i: Union[Collection[int], int, None] = None,
-                  j: Union[Collection[int], int, None] = None
+    def calculate(self, i: Union[Sequence[int], int, None] = None,
+                  j: Union[Sequence[int], int, None] = None
                   ) -> Union[np.ndarray, float]:
-        """
-        Calculate the conductivity tensor.
+        """Calculate the conductivity tensor.
 
         Parameters
         ----------
-        i : Collection[int] or int or None, optional
+        i : Sequence[int] or int or None, optional
             The index of the first component (row) of the conductivity
             tensor. If None (default), all components are calculated.
-        j : Collection[int] or int or None, optional
+        j : Sequence[int] or int or None, optional
             The index of the second component (column) of the
             conductivity tensor. If None (default), all components
             are calculated.
@@ -194,8 +204,7 @@ class Conductivity:
 
     def erase_memory(self, elements: bool = True, scattering: bool = True,
                      derivative: bool = True):
-        """
-        Erase saved calculations to free memory.
+        """Erase saved calculations to free memory.
 
         This class saves already calculated values for the FEM elements
         and matrices to avoid recalculating them every time a new
@@ -289,9 +298,7 @@ class Conductivity:
         return triangle_points + point_normals*diff[:, :, None]
 
     def _calculate_jacobian_sums(self, triangle_points):
-        """
-        Calculate the Jacobian sums for each point and point pair.
-        """
+        """Calculate the Jacobian sums for each point and point pair."""
         self._jacobians = np.linalg.norm(
                 np.cross(triangle_points[:, 1] - triangle_points[:, 0],
                          triangle_points[:, 2] - triangle_points[:, 0]),
@@ -371,9 +378,9 @@ class Conductivity:
                 self._calculate_out_scattering_from_kernel()
 
         if isinstance(self.scattering_rate, Callable):
-            scattering = self.scattering_rate(self.band.kpoints[:, 0],
-                                              self.band.kpoints[:, 1],
-                                              self.band.kpoints[:, 2])
+            scattering = self.scattering_rate(
+                self.band.kpoints[:, 0], self.band.kpoints[:, 1],
+                self.band.kpoints[:, 2], **self.scattering_params)
         else:
             scattering = self.scattering_rate
         # separate the optical conductivity case to avoid making
