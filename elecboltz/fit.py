@@ -85,11 +85,8 @@ class FittingRoutine:
         self.base_cond._build_differential_operator()
 
     def residual(self, param_values: Sequence, param_keys: Sequence[str],
-                 x_data: Union[np.ndarray, Sequence[np.ndarray]],
-                 y_data: Union[np.ndarray, Sequence[np.ndarray]],
-                 x_label: Union[str, Sequence[str]],
-                 y_label: Union[str, Sequence[str]],
-                 squared: bool = True):
+                 x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
+                 y_label: Sequence[str], squared: bool = True):
         """Compute the residual for the given parameters and data.
 
         Parameters
@@ -98,27 +95,31 @@ class FittingRoutine:
             The values of the parameters to update.
         param_keys : Sequence[str]
             The keys of the parameters to update.
-        x_data : Union[numpy.ndarray, Sequence[numpy.ndarray]]
-        The independent variable data (e.g. field). If multiple datasets
-        are provided, they should be in a collection of numpy arrays.
-        y_data : numpy.ndarray
-            The dependent variable data (e.g. conductivity). If multiple
-            datasets are provided, they should be in a collection of
-            numpy arrays.
-        x_label : Union[str, Sequence[str]]
-            The label(s) for the independent variable(s).
-        y_label : Union[numpy.ndarray, Sequence[numpy.ndarray]]
-            The label(s) for the dependent variable(s). Each label can
-            start with "sigma" or "rho" (for conductivity or resistivity,
-            respectively), and you can add a suffix to specify the
-            component (e.g. "sigma_xx", "rho_xy").
+        x_data : Sequence
+            The independent variable data (e.g. field). Note that, to
+            avoid ambiguity, the data needs to be packed into a
+            sequence, even if there is only one independent variable.
+        y_data : Sequence
+            The dependent variable data (e.g. conductivity). Note that,
+            to avoid ambiguity, the data needs to be packed into a
+            sequence, even if there is only one data set.
+        x_label : Sequence[str]
+            The labels for the independent variables. Note that to avoid
+            ambiguity, this should be a sequence of strings (matching
+            x_data), even if there is only one independent variable.
+        y_label : Sequence[str]
+            The labels for the dependent variables. Each label can
+            start with "sigma" or "rho" (for conductivity or
+            resistivity, respectively), and you can add a suffix to
+            specify the component (e.g. "sigma_xx", "rho_xy").
+            Note that, to avoid ambiguity, this should be a sequence
+            of strings (matching y_data), even if there is only one
+            dependent variable.
         squared : bool, optional
             If True, the residual is computed as the mean squared error.
             If False, it returns the mean absolute difference.
         """
         cond = self._build_obj(param_values, param_keys)
-        x_data, y_data, x_label, y_label = \
-            _pack_single_values(x_data, y_data, x_label, y_label)
         name, y_label_i, y_label_j = self._get_calc_indices(y_label)
 
         y_fit = [np.zeros_like(y) for y in y_data]
@@ -432,19 +433,6 @@ def _build_params_from_flat(params_keys, params_values):
             key = part
         level_params[key] = params_values.pop(0)
     return params
-            
-
-def _pack_single_values(x_data, y_data, x_label, y_label):
-    """Ensure that single values are packed into lists for consistency."""
-    if isinstance(x_data, np.ndarray):
-        x_data = [x_data]
-    if isinstance(y_data, np.ndarray):
-        y_data = [y_data]
-    if isinstance(x_label, str):
-        x_label = [x_label]
-    if isinstance(y_label, str):
-        y_label = [y_label]
-    return x_data, y_data, x_label, y_label
 
 
 def _result_to_serializable(result):
