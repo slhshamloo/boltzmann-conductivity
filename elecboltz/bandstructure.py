@@ -124,11 +124,11 @@ class BandStructure:
             periodic: Union[bool, Sequence[Union[int, bool]]] = True,
             axis_names: Union[Sequence[str], str] = ['a', 'b', 'c'],
             wavevector_names: Union[Sequence[str], str] = ['kx', 'ky', 'kz'],
-            resolution: Union[int, Sequence[int]] = 21, ncorrect: int = 2,
+            resolution: Union[int, Sequence[int]] = 21, n_correct: int = 2,
             sort_axis: int = None, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
-        super().__setattr__('band_params', band_params)
+        self.band_params = band_params
         self.chemical_potential = chemical_potential
         self.unit_cell = unit_cell
         self.domain_size = domain_size
@@ -136,7 +136,7 @@ class BandStructure:
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
         self.resolution = resolution
-        self.ncorrect = ncorrect
+        self.n_correct = n_correct
         self._parse_dispersion()
         self.kpoints = None
         self.kfaces = None
@@ -167,8 +167,7 @@ class BandStructure:
         super().__setattr__(name, value)
     
     def discretize(self):
-        """
-        Discretize the Fermi surface.
+        """Discretize the Fermi surface.
 
         First, the surface is triangulated using the marching cubes
         algorithm with `resolution` controlling the resolution of the
@@ -187,15 +186,14 @@ class BandStructure:
             level=self.chemical_potential)
         self.kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
         self.kpoints -= self._gvec[None, :]
-        for _ in range(self.ncorrect):
+        for _ in range(self.n_correct):
             self.kpoints = self._apply_newton_correction(self.kpoints)
         if self.sort_axis:
             self._sort_and_reindex(self.sort_axis)
         self._stitch_periodic_boundaries()
 
     def calculate_filling_fraction(self, depth: int = 7) -> float:
-        """
-        Calculate the filling fraction n of the material.
+        """Calculate the filling fraction n of the material.
 
         The filling fraction is calculated by integrating the volume
         in the reciprocal space having energy bellow the Fermi level
@@ -220,12 +218,11 @@ class BandStructure:
             lambda kx, ky, kz: (self.energy_func(kx, ky, kz)
                                 < self.chemical_potential),
             (-self._gvec[0], self._gvec[0], -self._gvec[1], self._gvec[1],
-             -self._gvec[2], self._gvec[2]), depth
+             -self._gvec[2], self._gvec[2]), depth=depth
             ) / 8 / np.prod(self._gvec)
 
     def calculate_electron_density(self, depth: int = 7) -> float:
-        """
-        Calculate the electron density n_e of the material.
+        """Calculate the electron density n_e of the material.
 
         Note that the surface needs to be discretized before calling
         this method. First, the filling fraction is calculated (see
@@ -252,8 +249,7 @@ class BandStructure:
         return filling_fraction / unit_cell_volume
 
     def calculate_mass(self):
-        """
-        Calculate the effective mass of the charge carries.
+        """Calculate the effective mass of the charge carries.
 
         Returns
         -------
@@ -289,8 +285,7 @@ class BandStructure:
             for vexpr in self._velocities_sympy]
     
     def energy_func(self, kx, ky, kz):
-        """
-        Calculate the energy at the given k-point.
+        """Calculate the energy at the given k-point.
 
         Parameters
         ----------
@@ -306,8 +301,7 @@ class BandStructure:
             kx, ky, kz, *self.unit_cell, **self.band_params)
     
     def velocity_func(self, kx, ky, kz):
-        """
-        Calculate the velocity at the given k-point.
+        """Calculate the velocity at the given k-point.
 
         Parameters
         ----------
