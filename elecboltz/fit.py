@@ -196,13 +196,16 @@ class FittingRoutine:
         """
         Build the conductivity object with the given parameters.
         """
-        BandStructure.__init__.__code__.co_varnames[1:-1]
         band = copy(self.base_band)
         cond = deepcopy(self.base_cond)
         params = _build_params_from_flat(param_values, param_keys)
         new_params = easy_params(params)
         update_band = False
         for key, value in new_params.items():
+            if key == 'band_params':
+                update_band = True
+                for band_key, band_value in value.items():
+                    band.band_params[band_key] = band_value
             if hasattr(band, key):
                 update_band = True
                 setattr(band, key, value)
