@@ -228,13 +228,10 @@ class FittingRoutine:
         return name, i, j
 
 
-def fit_model(x_data: Union[np.ndarray, Sequence[np.ndarray]],
-              y_data: Union[np.ndarray, Sequence[np.ndarray]],
-              x_label: Union[str, Sequence[str]],
-              y_label: Union[str, Sequence[str]],
-              init_params: Mapping, bounds: Mapping, save_path: str = None,
-              save_label: str = None, worker_percentage: float = 0.0,
-              **kwargs):
+def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
+              y_label: Sequence[str], init_params: Mapping, bounds: Mapping,
+              save_path: str = None, save_label: str = None,
+              worker_percentage: float = 0.0, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
     This uses `scipy.optimize.differential_evolution` to perform a
@@ -244,20 +241,25 @@ def fit_model(x_data: Union[np.ndarray, Sequence[np.ndarray]],
 
     Parameters
     ----------
-    x_data : Union[numpy.ndarray, Sequence[numpy.ndarray]]
-        The independent variable data (e.g. field). If multiple datasets
-        are provided, they should be in a collection of numpy arrays.
-    y_data : numpy.ndarray
-        The dependent variable data (e.g. conductivity). If multiple
-        datasets are provided, they should be in a collection of
-        numpy arrays.
-    x_label : Union[str, Sequence[str]]
-        The label(s) for the independent variable(s).
-    y_label : Union[numpy.ndarray, Sequence[numpy.ndarray]]
-        The label(s) for the dependent variable(s). Each label can
+    x_data : Sequence
+        The independent variable data (e.g. field). Note that, to
+        avoid ambiguity, the data needs to be packed into a
+        sequence, even if there is only one independent variable.
+    y_data : Sequence
+        The dependent variable data (e.g. conductivity). Note that,
+        to avoid ambiguity, the data needs to be packed into a
+        sequence, even if there is only one data set.
+    x_label : Sequence[str]
+        The labels for the independent variables. Note that to avoid
+        ambiguity, this should be a sequence of strings (matching
+        x_data), even if there is only one independent variable.
+    y_label : Sequence[str]
+        The labels for the dependent variables. Each label can
         start with "sigma" or "rho" (for conductivity or resistivity,
-        respectively), and you can add a suffix to specify the
-        component (e.g. "sigma_xx", "rho_xy").
+        respectively), and you can add a suffix to specify the component
+        (e.g. "sigma_xx", "rho_xy"). Note that, to avoid ambiguity, this
+        should be a sequence of strings (matching y_data), even if there
+        is only one dependent variable.
     init_params : Mapping
         Initial parameters for the fitting routine, and also other
         parameters for initiallizing the classes. This is passed through
