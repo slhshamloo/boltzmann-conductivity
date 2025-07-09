@@ -36,10 +36,6 @@ class Loader:
         (column headers).
     extra_labels : Sequence[str], optional
         Labels of extra variables to be extracted from the file names.
-    extra_values : Sequence[Sequence[Union[int, float]]]
-        Values of extra variables extracted from the file names.
-        Each sequence corresponds to a different variable in
-        `extra_labels`.
     data_type : str, optional
         Type of data to load. If 'plain', no processing is done on
         the data and the x_data is constructed directly from the
@@ -72,6 +68,10 @@ class Loader:
     y_data_interpolated : Sequence[Sequence[np.ndarray]]
         Interpolated, but unprocessed, data of the dependent variable
         collected from the files.
+    extra_values : Sequence[Sequence[float]]
+        Values of extra variables extracted from the file names.
+        Each sequence corresponds to a different variable in
+        `extra_labels`.
     """
     def __init__(self, x_vary_label: str = None,
                  x_labels_search: Sequence[str] = ['phi'],
@@ -249,8 +249,7 @@ class Loader:
                     self.extra_labels.append(label)
                     self.extra_values.append([])
                 idx = self.extra_labels.index(label)
-                if label_map[label] not in self.extra_values[idx]:
-                    self.extra_values[idx].append(label_map[label])
+                self.extra_values[idx].append(label_map[label])
     
     def _extract_none_labels(self, file, header_lines,
                              x_vary_label, y_labels_fit):
