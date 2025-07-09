@@ -1,9 +1,6 @@
 import unittest
-import numpy as np
-
-import os, sys
-sys.path.append(os.path.dirname(os.path.relpath(__file__)) + "/..")
 import elecboltz
+import numpy as np
 
 class TestGeometricalCalculations(unittest.TestCase):
     def setUp(self):
