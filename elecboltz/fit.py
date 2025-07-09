@@ -313,6 +313,9 @@ def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
     
     result = _result_to_serializable(result)
     result['fit_params'] = _build_params_from_flat(update_keys, result['x'])
+    result['init_params'] = _build_params_from_flat(
+        update_keys, [_extract_flat_value(init_params, key)
+                      for key in update_keys])
     result.pop('x')
     all_keys = _extract_flat_keys(init_params)
     fixed_keys = set(all_keys) - set(update_keys)
