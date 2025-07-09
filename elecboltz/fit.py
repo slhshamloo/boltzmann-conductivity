@@ -5,8 +5,9 @@ from .params import easy_params
 import numpy as np
 import scipy.optimize
 import json
-from copy import copy, deepcopy
+import datetime
 from time import time
+from copy import copy, deepcopy
 from multiprocessing import cpu_count
 from pathlib import Path
 from pprint import pformat
@@ -305,28 +306,17 @@ def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
             x_min, x_max = bounds[i]
             x0[i] = (x_min + x_max) / 2
 
+    begin_time = datetime.now()
     fitter = FittingRoutine(init_params, save_path, save_label,
                             update_keys=update_keys)
     result = scipy.optimize.differential_evolution(
         fitter.residual, bounds=bounds, x0=x0,
         args=(update_keys, x_data, y_data, x_label, y_label), **kwargs)
-    
-    result = _result_to_serializable(result)
-    result['fit_params'] = _build_params_from_flat(update_keys, result['x'])
-    result['init_params'] = _build_params_from_flat(
-        update_keys, [_extract_flat_value(init_params, key)
-                      for key in update_keys])
-    result.pop('x')
-    all_keys = _extract_flat_keys(init_params)
-    fixed_keys = set(all_keys) - set(update_keys)
-    result['fixed_params'] = _build_params_from_flat(
-        fixed_keys, [_extract_flat_value(init_params, key)
-                     for key in fixed_keys])
-    if save_path is not None:
-        path = Path(save_path) / f"{save_label}.json"
-        with path.open('w') as f:
-            json.dump(result, f)
-    return result
+    end_time = datetime.now()
+
+    return _save_fit_result(
+        result, fitter, init_params, update_keys, begin_time, end_time,
+        save_path, save_label)
 
 
 def _extract_flat_keys(params: Mapping) -> list[str]:
@@ -438,6 +428,32 @@ def _build_params_from_flat(params_keys, params_values):
             key = part
         level_params[key] = params_values.pop(0)
     return params
+
+
+def _save_fit_result(result, init_params, update_keys, begin_time,
+                     end_time, save_path, save_label):
+    result = _result_to_serializable(result)
+    result['fit_params'] = _build_params_from_flat(update_keys, result['x'])
+    result.pop('x')
+
+    result['init_params'] = _build_params_from_flat(
+        update_keys, [_extract_flat_value(init_params, key)
+                      for key in update_keys])
+    all_keys = _extract_flat_keys(init_params)
+    fixed_keys = set(all_keys) - set(update_keys)
+    result['fixed_params'] = _build_params_from_flat(
+        fixed_keys, [_extract_flat_value(init_params, key)
+                     for key in fixed_keys])
+
+    result['begin_time'] = begin_time.isoformat()
+    result['end_time'] = end_time.isoformat()
+    result['runtime'] = (end_time - begin_time).total_seconds()
+
+    if save_path is not None:
+        path = Path(save_path) / f"{save_label}.json"
+        with path.open('w') as f:
+            json.dump(result, f)
+    return result
 
 
 def _result_to_serializable(result):
