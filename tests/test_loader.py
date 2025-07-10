@@ -51,111 +51,105 @@ class TestLoader(unittest.TestCase):
 
     def test_auto_search(self):
         loader = elecboltz.Loader(
-            data_type='plain', extra_labels=['rho0', 'date'])
+            save_new_labels=True, save_new_values=True, data_type='plain')
         loader.load(folder_path=str(self.temp_dir.name),
                     prefix='test_data_', delimiter=',', skiprows=4)
         self.assertTrue(all(
-            val == test_val for val, test_val
-            in zip(loader.extra_values[0], [0.5, 1.5, 1.0])),
-            "Extra values do not match expected values.")
-        self.assertTrue(all(
-            np.all(x == x_test) for x, x_test in
-            zip(loader.x_data_raw, [np.array([0.5, 1.0, 1.5]),
-                                    np.array([4.5, 5.0]),
-                                    np.array([2.0, 2.5, 3.0, 3.5, 4.0])])),
-            "Raw x data does not match expected values.")
+            np.all(x == x_test) for x, x_test in zip(loader.x_data_raw['theta'],
+                [np.array([0.5, 1.0, 1.5]),
+                 np.array([4.5, 5.0]),
+                 np.array([2.0, 2.5, 3.0, 3.5, 4.0])])),
+            "x_data_raw does not match expected values.")
         self.assertTrue(all(
             np.all(y == y_test) for y, y_test in
-            zip(loader.y_data_raw[0],
+            zip(loader.y_data_raw['rho_a'],
                 [np.array([0.01, 0.02, 0.03]),
                  np.array([0.09, 0.1]),
                  np.array([0.04, 0.05, 0.06, 0.07, 0.08])])),
-            "Raw y data does not match expected values.")
+            "y_data_raw does not match expected values.")
         self.assertTrue(all(
             np.all(y == y_test) for y, y_test in
-            zip(loader.y_data_raw[1], [np.array([0.1, 0.2, 0.3]),
+            zip(loader.y_data_raw['rho_c'], [np.array([0.1, 0.2, 0.3]),
                                        np.array([0.9, 1.0]),
                                        np.array([0.4, 0.5, 0.6, 0.7, 0.8])])),
-            "Raw y data does not match expected values.")
+            "y_data_raw does not match expected values.")
         self.assertTrue(all(
-            label == label_test for label, label_test in
-            zip(loader.x_label, ['theta', 'phi', 'B'])),
-            "x labels do not match expected values.")
-        self.assertTrue(all(
-            np.all(x == x_test) for x, x_test in zip(loader.x_data,
+            np.all(x == x_test) for x, x_test in zip(
+                [loader.x_data['theta'], loader.x_data['phi'],
+                 loader.x_data['B'], loader.x_data['rho0']],
                 [np.array([0.5, 1.0, 1.5, 4.5, 5.0, 2.0, 2.5, 3.0, 3.5, 4.0]),
                  np.array([30.0, 30.0, 30.0, 15.0, 15.0,
                            45.0, 45.0, 45.0, 45.0, 45.0]),
                  np.array([10.0, 10.0, 10.0, 3.0, 3.0,
                            2.4, 2.4, 2.4, 2.4, 2.4])])),
-            "x data does not match expected values.")
+            "x_data does not match expected values.")
         self.assertTrue(all(
-            np.all(y == y_test) for y, y_test in zip(loader.y_data,
+            np.all(y == y_test) for y, y_test in zip(
+                [loader.y_data['rho_a'], loader.y_data['rho_c']],
                 [np.array([0.01, 0.02, 0.03, 0.09, 0.1,
                            0.04, 0.05, 0.06, 0.07, 0.08]),
                  np.array([0.1, 0.2, 0.3, 0.9, 1.0,
                            0.4, 0.5, 0.6, 0.7, 0.8])])),
-            "y data does not match expected values.")
+            "y_data does not match expected values.")
+        pass
     
     def test_plain_load(self):
         loader = elecboltz.Loader(
-            x_vary_label='theta', x_search_labels=['phi', 'B'],
-            x_search_values=[[30, 45], [10.0, 2.4]],
-            y_label=['rho_xx', 'rho_xy'], extra_labels=['rho0'],
-            data_type='plain')
+            x_vary_label='theta',
+            x_search={'phi': [30, 45], 'B': [10.0, 2.4], 'rho0': [0.5, 1.0]},
+            y_label=['rho_xx', 'rho_xy'], data_type='plain')
         loader.load(folder_path=str(self.temp_dir.name), prefix='test_data_',
-                    y_columns=[1, 2], delimiter=',', skiprows=4)
-        self.assertTrue(all(
-            val == test_val for val, test_val
-            in zip(loader.extra_values[0], [0.5, 1.0])),
-            "Extra values do not match expected values.")
-        self.assertTrue(all(
-            np.all(x == x_test) for x, x_test in
-            zip(loader.x_data_raw,[np.array([0.5, 1.0, 1.5]),
-                                   np.array([2.0, 2.5, 3.0, 3.5, 4.0])])),
-            "Raw x data does not match expected values.")
+                    x_columns=[0], y_columns=[1, 2], delimiter=',', skiprows=4)
+        self.assertTrue(all(np.all(x == x_test)
+            for x, x_test in zip(loader.x_data_raw['theta'],
+                [np.array([0.5, 1.0, 1.5]),
+                 np.array([2.0, 2.5, 3.0, 3.5, 4.0])])),
+            "x_data_raw does not match expected values.")
         self.assertTrue(all(
             np.all(y == y_test) for y, y_test in
-            zip(loader.y_data_raw[0],
+            zip(loader.y_data_raw['rho_xx'],
                 [np.array([0.01, 0.02, 0.03]),
                  np.array([0.04, 0.05, 0.06, 0.07, 0.08])])),
-            "Raw y data does not match expected values.")
+            "y_data_raw does not match expected values.")
         self.assertTrue(all(
             np.all(y == y_test) for y, y_test in
-            zip(loader.y_data_raw[1], [np.array([0.1, 0.2, 0.3]),
+            zip(loader.y_data_raw['rho_xy'], [np.array([0.1, 0.2, 0.3]),
                                        np.array([0.4, 0.5, 0.6, 0.7, 0.8])])),
-            "Raw y data does not match expected values.")
+            "y_data_raw does not match expected values.")
         self.assertTrue(all(
-            label == label_test for label, label_test in
-            zip(loader.x_label, ['theta', 'phi', 'B'])),
-            "x labels do not match expected values.")
-        self.assertTrue(all(
-            np.all(x == x_test) for x, x_test in zip(loader.x_data,
+            np.all(x == x_test) for x, x_test in zip(
+                [loader.x_data['theta'], loader.x_data['phi'],
+                 loader.x_data['B'], loader.x_data['rho0']],
                 [np.array([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]),
                  np.array([30.0, 30.0, 30.0, 45.0, 45.0, 45.0, 45.0, 45.0]),
-                 np.array([10.0, 10.0, 10.0, 2.4, 2.4, 2.4, 2.4, 2.4])])),
-            "x data does not match expected values.")
+                 np.array([10.0, 10.0, 10.0, 2.4, 2.4, 2.4, 2.4, 2.4]),
+                 np.array([0.5, 0.5, 0.5, 1.0, 1.0, 1.0, 1.0, 1.0])])),
+            "x_data does not match expected values.")
         self.assertTrue(all(
-            np.all(y == y_test) for y, y_test in zip(loader.y_data,
+            np.all(y == y_test) for y, y_test in zip(
+                [loader.y_data['rho_xx'], loader.y_data['rho_xy']],
                 [np.array([0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08]),
                  np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8])])),
-            "y data does not match expected values.")
+            "y_data does not match expected values.")
 
     def test_admr_load(self):
         loader = elecboltz.Loader(
-            x_vary_label='theta', x_search_labels=['phi', 'B'],
-            x_search_values=[[30, 45], [10.0, 2.4]], data_type='admr')
+            x_vary_label='theta',
+            x_search={'phi': [30, 45], 'B': [10.0, 2.4], 'rho0': [0.5, 1.0]},
+            y_label=['rho_xx', 'rho_xy'], data_type='admr')
         loader.load(folder_path=str(self.temp_dir.name), prefix='test_data_',
-                    y_columns=[1, 2], delimiter=',', skiprows=4)
+                    x_columns=[0], y_columns=[1, 2], delimiter=',', skiprows=4)
         theta = np.deg2rad(np.array([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]))
         phi = np.deg2rad(
             np.array([30.0, 30.0, 30.0, 45.0, 45.0, 45.0, 45.0, 45.0]))
         B = np.array([10.0, 10.0, 10.0, 2.4, 2.4, 2.4, 2.4, 2.4])
-        self.assertEqual(loader.x_label, ['field'])
-        self.assertTrue(np.all(loader.x_data[0] == B[:, None] * np.column_stack((
-                np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi),
-                np.cos(theta)))),
+        self.assertEqual(list(loader.x_data.keys()), ['field'])
+        self.assertTrue(np.all(loader.x_data['field']
+            == B[:, None] * np.column_stack((np.sin(theta) * np.cos(phi),
+                                             np.sin(theta) * np.sin(phi),
+                                             np.cos(theta)))),
             "x data does not match expected values.")
+        pass
 
 
 if __name__ == '__main__':
