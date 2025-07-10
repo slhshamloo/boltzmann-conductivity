@@ -184,7 +184,7 @@ class Loader:
         elif self.data_type == 'admr':
             indexing_labels = []
             for label in all_labels:
-                if label in ['B', 'Bmag', 'Bamp']:
+                if label in ['B', 'Bmag', 'Bamp', 'H', 'Hmag', 'Hamp']:
                     label = 'field'
                 indexing_labels.append(label.lower())
             field = x_data_stitched[indexing_labels.index('field')]
