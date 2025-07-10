@@ -36,7 +36,7 @@ class Loader:
         (column headers).
     extra_labels : Sequence[str], optional
         Labels of extra variables to be extracted from the file names.
-    data_type : str, optional
+    data_type : {'plain', 'admr'}, optional
         Type of data to load. If 'plain', no processing is done on
         the data and the x_data is constructed directly from the
         collected values. If 'admr', the x_data is constructed
@@ -60,7 +60,7 @@ class Loader:
     y_data_raw : Sequence[Sequence[np.ndarray]]
         Raw data of the dependent variable collected from the files.
         Each sequence corresponds to a different dependent variable
-        in `y_labels_fit`, and each array inside that corresponds
+        in `y_label`, and each array inside that corresponds
         to a different value in `x_values_search`.
     x_data_interpolated : Sequence[np.ndarray]
         Interpolated, but unprocessed, data of the independent variable
@@ -74,19 +74,18 @@ class Loader:
         `extra_labels`.
     """
     def __init__(self, x_vary_label: str = None,
-                 x_labels_search: Sequence[str] = ['phi'],
-                 x_values_search: Sequence[Union[int, float]] = None,
-                 y_labels_fit: Sequence[str] = None,
+                 x_labels_search: Sequence[str] = [],
+                 x_values_search: Sequence[Union[int, float]] = [],
+                 y_label: Sequence[str] = None,
                  extra_labels: Sequence[str] = [], data_type: str = 'admr'):
         self.x_vary_label = x_vary_label
         self.x_labels_search = x_labels_search
         self.x_values_search = x_values_search
-        self.y_labels_fit = y_labels_fit
+        self.y_label = y_label
         self.extra_labels = extra_labels
         self.extra_values = []
         self.data_type = data_type
         self.x_label = []
-        self.y_label = []
         self.x_data = []
         self.y_data = []
         self.x_data_raw = []
@@ -119,13 +118,12 @@ class Loader:
         y_columns : Sequence[int], optional
             Which columns of the data files to load for the dependent
             variables. If None, all columns are loaded. The number of
-            columns should match the length of `y_labels`.
+            columns should match the length of `y_label`.
         interpolate : bool, optional
             If True, interpolate the data before post processing.
         """
-        self.x_data_raw = []
-        files = sorted(Path(folder_path).glob(f"{prefix}_?*"))
-        if self.x_values_search is None:
+        files = sorted(Path(folder_path).glob(f"{prefix}*"))
+        if self.x_values_search == []:
             self._search_all_files(files, prefix, y_columns, header_lines)
         else:
             self._search_indicated_files(
@@ -194,30 +192,32 @@ class Loader:
                     label = 'field'
                 indexing_labels.append(label.lower())
             field = x_data_stitched[indexing_labels.index('field')]
-            phi = x_data_stitched[indexing_labels.index('phi')]
-            theta = x_data_stitched[indexing_labels.index('theta')]
-            self.x_data = [field * np.column_stack((
+            phi = np.deg2rad(x_data_stitched[indexing_labels.index('phi')])
+            theta = np.deg2rad(x_data_stitched[indexing_labels.index('theta')])
+            self.x_data = [field[:, None] * np.column_stack((
                 np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi),
                 np.cos(theta)))]
             self.x_label = ['field']
 
     def _search_all_files(self, files, prefix, y_columns, header_lines):
-        for file in enumerate(files):
-            if self._skip_file(file, prefix, self.x_labels_search):
+        for file in files:
+            if not file.name.startswith(prefix):
                 continue
-            label_map = _extract_labels_and_values(
-                file.name, self.x_labels_search + self.extra_labels)
+            label_map = _extract_labels_and_values(file.name)
             self._sort_labels_and_values(label_map)
             self._extract_data(file, header_lines, y_columns)
 
     def _search_indicated_files(self, files, prefix, y_columns, header_lines):
         for i in range(len(self.x_values_search[0])):
             for file in files:
-                if self._skip_file(file, prefix, self.x_labels_search):
+                if not file.name.startswith(prefix):
                     continue
-                label_map = _extract_labels_and_values(
-                    file.name, self.x_labels_search + self.extra_labels)
-                if not all(label in label_map for label in self.x_labels_search):
+                for label in self.x_labels_search:
+                    if label not in file.name:
+                        return True
+                label_map = _extract_labels_and_values(file.name)
+                if not all(label in label_map
+                           for label in self.x_labels_search):
                     continue
                 if not all(label in label_map for label in self.extra_labels):
                     continue
@@ -226,22 +226,12 @@ class Loader:
                     continue
                 self._sort_labels_and_values(label_map)
                 self._extract_data(file, header_lines, y_columns)
-
-    def _skip_file(self, file, prefix, x_labels_search):
-        if not file.name.startswith(prefix):
-            return True
-        for label in x_labels_search:
-            if label not in file.name:
-                return True
-        return False
     
     def _sort_labels_and_values(self, label_map):
+        add_labels = self.x_labels_search == []
         for label in label_map:
             if label in self.x_labels_search:
-                if label not in self.x_label:
-                    self.x_label.append(label)
-                    self.x_values_search.append([])
-                idx = self.x_label.index(label)
+                idx = self.x_labels_search.index(label)
                 if label_map[label] not in self.x_values_search[idx]:
                     self.x_values_search[idx].append(label_map[label])
             elif label in self.extra_labels:
@@ -249,49 +239,48 @@ class Loader:
                     self.extra_labels.append(label)
                     self.extra_values.append([])
                 idx = self.extra_labels.index(label)
+                while idx >= len(self.extra_values):
+                    self.extra_values.append([])
                 self.extra_values[idx].append(label_map[label])
+            elif add_labels:
+                self.x_labels_search.append(label)
+                self.x_values_search.append([label_map[label]])
     
-    def _extract_none_labels(self, file, header_lines,
-                             x_vary_label, y_labels_fit):
+    def _extract_none_labels(self, file, header_lines):
         with open(file, 'r') as f:
             skip_counter = header_lines
-            while skip_counter > 1:
-                line = f.readline()
-                if not line.startswith('#'):
-                    skip_counter -= 1
+            while skip_counter > 0:
+                f.readline()
+                skip_counter -= 1
             line = f.readline()
-            if x_vary_label is None:
-                x_vary_label = line.split(',')[0].strip()
-            if y_labels_fit is None:
-                y_labels_fit = [col.strip() for col in line.split(',')[1:]]
-        self.y_label = y_labels_fit
-        return x_vary_label, y_labels_fit
+            if self.x_vary_label is None:
+                self.x_vary_label = line.split(',')[0].strip()
+            if self.y_label is None:
+                self.y_label = [col.strip() for col in line.split(',')[1:]]
 
     def _extract_data(self, file, header_lines, y_columns):
-        self.x_vary_label, y_labels_fit = self._extract_none_labels(
-            file, header_lines, self.x_vary_label, y_labels_fit)
+        self._extract_none_labels(file, header_lines)
         if y_columns is None:
-            y_columns = list(range(1, len(y_labels_fit) + 1))
-
-        data = np.loadtxt(file, delimiter=',', skiprows=1)
+            y_columns = list(range(1, len(self.y_label) + 1))
+        data = np.loadtxt(file, delimiter=',', skiprows=header_lines+1)
         sorted_indices = np.argsort(data[:, 0])
         self.x_data_raw.append(data[sorted_indices, 0])
         if self.y_data_raw == []:
-            self.y_data_raw = [[] for _ in y_labels_fit]
+            self.y_data_raw = [[] for _ in self.y_label]
         for i, col in enumerate(y_columns):
             self.y_data_raw[i].append(data[sorted_indices, col])
 
-def _extract_labels_and_values(file_name, search_labels):
+def _extract_labels_and_values(file_name):
     label_map = {}
     parts = file_name.split('_')
+    parts[-1] = '.'.join(parts[-1].split('.')[:-1])
     for i, part in enumerate(parts):
         if '=' in part:
             label, value = part.split('=', 1)
             value = float(value)
             if int(value) == value:
                 value = int(value)
-            if label in search_labels:
-                label_map[label] = value
+            label_map[label] = value
         else:
             value = re.search(r'([-+]?\d+\.?\d*)', part)
             if value:
@@ -299,10 +288,9 @@ def _extract_labels_and_values(file_name, search_labels):
                 if int(value) == value:
                     value = int(value)
                 label = re.search(r'([a-zA-Z_]+)', part)
-                if label and label.group(0) in search_labels:
+                if label:
                     label_map[label.group(0)] = value
                 elif i > 0:
                     if re.search(r'([a-zA-Z_]+)', parts[i - 1]):
-                        if parts[i - 1] in search_labels:
-                            label_map[parts[i - 1]] = value
+                        label_map[parts[i - 1]] = value
     return label_map
