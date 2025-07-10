@@ -19,14 +19,14 @@ class Loader:
         Label of the independent variable that varies inside the files.
         If not provided, it will be inferred from the file contents
         (column headers).
-    x_labels_search : Sequence[str], optional
+    x_search_labels : Sequence[str], optional
         Labels of the independent variables to be extracted from
         the file names. If not provided, the value of all labels will
         be extracted.
-    x_values_search : Sequence[Sequence[Union[int, float]]], optional
+    x_search_values : Sequence[Sequence[Union[int, float]]], optional
         Which values of the independent variable to load.
-        For example, if x_labels_search is ['phi', 'field'] then
-        x_values_search should be something like
+        For example, if ``x_search_labels`` is ['phi', 'field'] then
+        ``x_search_values`` should be something like
         [[30, 60], [1.3, 2.7]]. If None, all values corresponding to
         the labels are loaded.
     y_label : Sequence[str], optional
@@ -53,12 +53,12 @@ class Loader:
     x_data_raw : Sequence[np.ndarray]
         Raw data of the independent variable collected from the files.
         Each array corresponds to a different value in
-        ``x_values_search``.
+        ``x_search_values``.
     y_data_raw : Sequence[Sequence[np.ndarray]]
         Raw data of the dependent variable collected from the files.
         Each sequence corresponds to a different dependent variable
         in ``y_label``, and each array inside that corresponds
-        to a different value in ``x_values_search``.
+        to a different value in ``x_search_values``.
     x_data_interpolated : Sequence[np.ndarray]
         Interpolated, but unprocessed, data of the independent variable
         varying inside the files.
@@ -68,16 +68,16 @@ class Loader:
     extra_values : Sequence[Sequence[float]]
         Values of extra variables extracted from the file names.
         Each sequence corresponds to a different variable in
-        `extra_labels`.
+        ``extra_labels``.
     """
     def __init__(self, x_vary_label: str = None,
-                 x_labels_search: Sequence[str] = [],
-                 x_values_search: Sequence[Union[int, float]] = [],
+                 x_search_labels: Sequence[str] = [],
+                 x_search_values: Sequence[Union[int, float]] = [],
                  y_label: Sequence[str] = None,
                  extra_labels: Sequence[str] = [], data_type: str = 'admr'):
         self.x_vary_label = x_vary_label
-        self.x_labels_search = x_labels_search
-        self.x_values_search = x_values_search
+        self.x_search_labels = x_search_labels
+        self.x_search_values = x_search_values
         self.y_label = y_label
         self.extra_labels = extra_labels
         self.extra_values = []
@@ -120,7 +120,7 @@ class Loader:
             Additional keyword arguments to pass to ``numpy.loadtxt``.
         """
         files = sorted(Path(folder_path).glob(f"{prefix}*"))
-        if self.x_values_search == []:
+        if self.x_search_values == []:
             self._search_all_files(files, prefix, y_columns, **kwargs)
         else:
             self._search_indicated_files(files, prefix, y_columns, **kwargs)
@@ -169,14 +169,14 @@ class Loader:
         self.y_data = []
         for i in range(len(self.y_data_raw)):
             self.y_data.append(np.concatenate(self.y_data_raw[i]))
-        all_labels = [self.x_vary_label] + self.x_labels_search
-        x_data_stitched = [[] for _ in range(len(self.x_values_search) + 1)]
+        all_labels = [self.x_vary_label] + self.x_search_labels
+        x_data_stitched = [[] for _ in range(len(self.x_search_values) + 1)]
         x_data_stitched[0] = self.x_data_raw
         for i in range(len(self.x_data_raw)):
-            for j in range(len(self.x_values_search)):
+            for j in range(len(self.x_search_values)):
                 x_data_stitched[j + 1].append(
                     np.full(len(self.x_data_raw[i]),
-                            self.x_values_search[j][i]))
+                            self.x_search_values[j][i]))
         x_data_stitched = [np.concatenate(x) for x in x_data_stitched]
         if self.data_type == 'plain':
             self.x_label = all_labels
@@ -204,32 +204,32 @@ class Loader:
             self._extract_data(file, y_columns, **kwargs)
 
     def _search_indicated_files(self, files, prefix, y_columns, **kwargs):
-        for i in range(len(self.x_values_search[0])):
+        for i in range(len(self.x_search_values[0])):
             for file in files:
                 if not file.name.startswith(prefix):
                     continue
-                for label in self.x_labels_search:
+                for label in self.x_search_labels:
                     if label not in file.name:
                         return True
                 label_map = _extract_labels_and_values(file.name)
                 if not all(label in label_map
-                           for label in self.x_labels_search):
+                           for label in self.x_search_labels):
                     continue
                 if not all(label in label_map for label in self.extra_labels):
                     continue
-                if not all(label_map[label] == self.x_values_search[j][i]
-                           for j, label in enumerate(self.x_labels_search)):
+                if not all(label_map[label] == self.x_search_values[j][i]
+                           for j, label in enumerate(self.x_search_labels)):
                     continue
                 self._sort_labels_and_values(label_map)
                 self._extract_data(file, y_columns, **kwargs)
 
     def _sort_labels_and_values(self, label_map):
-        add_labels = self.x_labels_search == []
+        add_labels = self.x_search_labels == []
         for label in label_map:
-            if label in self.x_labels_search:
-                idx = self.x_labels_search.index(label)
-                if label_map[label] not in self.x_values_search[idx]:
-                    self.x_values_search[idx].append(label_map[label])
+            if label in self.x_search_labels:
+                idx = self.x_search_labels.index(label)
+                if label_map[label] not in self.x_search_values[idx]:
+                    self.x_search_values[idx].append(label_map[label])
             elif label in self.extra_labels:
                 if label not in self.extra_labels:
                     self.extra_labels.append(label)
@@ -239,8 +239,8 @@ class Loader:
                     self.extra_values.append([])
                 self.extra_values[idx].append(label_map[label])
             elif add_labels:
-                self.x_labels_search.append(label)
-                self.x_values_search.append([label_map[label]])
+                self.x_search_labels.append(label)
+                self.x_search_values.append([label_map[label]])
 
     def _extract_data(self, file, y_columns, **kwargs):
         self._extract_none_labels(file, **kwargs)
