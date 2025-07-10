@@ -86,8 +86,8 @@ class FittingRoutine:
         self.base_cond._build_differential_operator()
 
     def residual(self, param_values: Sequence, param_keys: Sequence[str],
-                 x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
-                 y_label: Sequence[str], squared: bool = True):
+                 x_data: Mapping[str, Sequence],
+                 y_data: Mapping[str, Sequence], squared: bool = True):
         """Compute the residual for the given parameters and data.
 
         Parameters
@@ -96,50 +96,39 @@ class FittingRoutine:
             The values of the parameters to update.
         param_keys : Sequence[str]
             The keys of the parameters to update.
-        x_data : Sequence
-            The independent variable data (e.g. field). Note that, to
-            avoid ambiguity, the data needs to be packed into a
-            sequence, even if there is only one independent variable.
-        y_data : Sequence
-            The dependent variable data (e.g. conductivity). Note that,
-            to avoid ambiguity, the data needs to be packed into a
-            sequence, even if there is only one data set.
-        x_label : Sequence[str]
-            The labels for the independent variables. Note that to avoid
-            ambiguity, this should be a sequence of strings (matching
-            x_data), even if there is only one independent variable.
-        y_label : Sequence[str]
-            The labels for the dependent variables. Each label can
-            start with "sigma" or "rho" (for conductivity or
-            resistivity, respectively), and you can add a suffix to
-            specify the component (e.g. "sigma_xx", "rho_xy").
-            Note that, to avoid ambiguity, this should be a sequence
-            of strings (matching y_data), even if there is only one
-            dependent variable.
+        x_data : Mapping[str, Sequence]
+            The independent variable data (e.g. field). The name of the
+            variable is mapped to the data, e.g.
+            ``{'field': [0, 1, 2]}``.
+        y_data : Mapping[str, Sequence]
+            The dependent variable data (e.g. conductivity). The name
+            of the variable is mapped to the data, e.g.
+            ``{'sigma_xx': [1.1, 2.4, 3.8]}``.
         squared : bool, optional
             If True, the residual is computed as the mean squared error.
             If False, it returns the mean absolute difference.
         """
         cond = self._build_obj(param_values, param_keys)
-        name, y_label_i, y_label_j = self._get_calc_indices(y_label)
+        name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
 
-        y_fit = [np.zeros_like(y) for y in y_data]
+        y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
         for i in range(len(x_data[0])):
-            for label, x in zip(x_label, x_data):
+            for label, x in x_data.items():
                 setattr(cond, label, x[i])
             cond.calculate(sorted(set(y_label_i)), sorted(set(y_label_j)))
             if 'rho' in name:
                 rho = np.linalg.inv(cond.sigma)
-            for j, label in enumerate(y_label):
-                if name[j] == 'sigma':
-                    y_fit[j][i] = cond.sigma[y_label_i[j], y_label_j[j]]
-                elif name[j] == 'rho':
-                    y_fit[j][i] = rho[y_label_i[j], y_label_j[j]]
+            for label in y_data:
+                if name[label] == 'sigma':
+                    y_fit[label][i] = cond.sigma[y_label_i[label],
+                                                 y_label_j[label]]
+                elif name[label] == 'rho':
+                    y_fit[label][i] = rho[y_label_i[label], y_label_j[label]]
                 else:
-                    raise ValueError(f"Unknown y_label: {name[j]}")
+                    raise ValueError(f"Unknown y_data key: {name[label]}")
 
-        y_fit = np.concatenate(y_fit)
-        y_data = np.concatenate(y_data)
+        y_fit = np.concatenate(list(y_fit.values()))
+        y_data = np.concatenate(list(y_data.values()))
         if squared:
             return np.mean(np.abs(y_fit-y_data) ** 2) # abs for complex data
         else:
@@ -218,19 +207,19 @@ class FittingRoutine:
             cond.band = band
         return cond
 
-    def _get_label_indices(self, labels: Sequence[str]):
-        """Extract the names and indices from y_label."""
-        name, i, j = [], [], []
+    def _get_label_indices(self, labels: Collection[str]):
+        """Extract the names and indices from y_data keys."""
+        name, i, j = {}, {}, {}
         for label in labels:
-            name_label, index_labels = label.split("_")
-            name.append(name_label)
-            i.append({'x': 0, 'y': 1, 'z': 2}[index_labels[0]])
-            j.append({'x': 0, 'y': 1, 'z': 2}[index_labels[1]])
+            name[label], index_labels = label.split("_")
+            i[label] = {'x': 0, 'y': 1, 'z': 2}[index_labels[0]]
+            j[label] = {'x': 0, 'y': 1, 'z': 2}[index_labels[1]]
         return name, i, j
 
 
-def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
-              y_label: Sequence[str], init_params: Mapping, bounds: Mapping,
+def fit_model(x_data: Mapping[str, Sequence],
+              y_data: Mapping[str, Sequence],
+              init_params: Mapping, bounds: Mapping,
               save_path: str = None, save_label: str = None,
               worker_percentage: float = 0.0, **kwargs):
     """Convenience function to set up and run a fitting routine.
@@ -242,25 +231,16 @@ def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
 
     Parameters
     ----------
-    x_data : Sequence
-        The independent variable data (e.g. field). Note that, to
-        avoid ambiguity, the data needs to be packed into a
-        sequence, even if there is only one independent variable.
-    y_data : Sequence
-        The dependent variable data (e.g. conductivity). Note that,
-        to avoid ambiguity, the data needs to be packed into a
-        sequence, even if there is only one data set.
-    x_label : Sequence[str]
-        The labels for the independent variables. Note that to avoid
-        ambiguity, this should be a sequence of strings (matching
-        x_data), even if there is only one independent variable.
-    y_label : Sequence[str]
-        The labels for the dependent variables. Each label can
-        start with "sigma" or "rho" (for conductivity or resistivity,
-        respectively), and you can add a suffix to specify the component
-        (e.g. ``"sigma_xx"``, ``"rho_xy"``). Note that, to avoid
-        ambiguity, this should be a sequence of strings (matching
-        ``y_data``), even if there is only one dependent variable.
+    x_data : Mapping[str, Sequence]
+        The independent variable data (e.g. field). The name of the
+        variable is mapped to the data, e.g. ``{'field': [0, 1, 2]}``.
+    y_data : Mapping[str, Sequence]
+        The dependent variable data (e.g. conductivity). The name of
+        the variable is mapped to the data, e.g.
+        ``{'sigma_xx': [1.1, 2.4, 3.8]}``. The name of each variable
+        must start with "sigma" or "rho" (for conductivity or
+        resistivity, respectively), and you can add a suffix to specify
+        the component (e.g. ``"sigma_xx"``, ``"rho_xy"``).
     init_params : Mapping
         Initial parameters for the fitting routine, and also other
         parameters for initiallizing the classes. This is passed through
@@ -311,7 +291,7 @@ def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
                             update_keys=update_keys)
     result = scipy.optimize.differential_evolution(
         fitter.residual, bounds=bounds, x0=x0,
-        args=(update_keys, x_data, y_data, x_label, y_label), **kwargs)
+        args=(update_keys, x_data, y_data), **kwargs)
     end_time = datetime.now()
 
     return _save_fit_result(

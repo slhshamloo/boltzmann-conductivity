@@ -1,7 +1,8 @@
 import numpy as np
 import re
-from typing import Sequence, Union
+from typing import Mapping, Sequence, Union
 from pathlib import Path
+from collections import defaultdict
 
 
 class Loader:
@@ -15,27 +16,25 @@ class Loader:
 
     Parameters
     ----------
-    x_vary_label : str, optional
-        Label of the independent variable that varies inside the files.
-        If not provided, it will be inferred from the file contents
-        (column headers).
-    x_search_labels : Sequence[str], optional
-        Labels of the independent variables to be extracted from
-        the file names. If not provided, the value of all labels will
-        be extracted.
-    x_search_values : Sequence[Sequence[Union[int, float]]], optional
-        Which values of the independent variable to load.
-        For example, if ``x_search_labels`` is ['phi', 'field'] then
-        ``x_search_values`` should be something like
-        [[30, 60], [1.3, 2.7]]. If None, all values corresponding to
-        the labels are loaded.
+    x_vary_label : Union[str, Sequence[str]], optional
+        Label of the independent variable(s) that varies inside the
+        files. If not provided, it will be inferred from the file
+        contents (column headers).
+    x_search : Mapping[str, Sequence[Union[int, float]]], optional
+        Dictionary mapping labels of independent variables to the values
+        to be searched for in the file names. Example: 
+        ``{'phi': [30, 60], 'field': [1.3, 2.7]}``.
     y_label : Sequence[str], optional
         Labels of the dependent variables, used for fitting routine.
         See ``elecboltz.fit.fit_model`` for details about the allowed
         labels. If None, will be inferred from the file contents
         (column headers).
-    extra_labels : Sequence[str], optional
-        Labels of extra variables to be extracted from the file names.
+    save_new_labels : bool, optional
+        If True, new labels found in the file names will be saved to
+        ``x_search``.
+    save_new_values : bool, optional
+        If True, new values for existing labels in ``x_search`` will be
+        added to the list of values for that label.
     data_type : {'plain', 'admr'}, optional
         Type of data to load. If ``'plain'``, no processing is done on
         the data and the x_data is constructed directly from the
@@ -44,54 +43,65 @@ class Loader:
     
     Attributes
     ----------
-    x_data : Sequence[np.ndarray]
+    x_data : defaultdict[str, list[np.ndarray]]
         x_data variable for the fitting procedure.
-    y_data : Sequence[np.ndarray]
+    y_data : defaultdict[str, list[np.ndarray]]
         y_data variable for the fitting procedure.
-    x_label : Sequence[str]
-        Labels of the independent variables for fitting.
-    x_data_raw : Sequence[np.ndarray]
-        Raw data of the independent variable collected from the files.
-        Each array corresponds to a different value in
-        ``x_search_values``.
-    y_data_raw : Sequence[Sequence[np.ndarray]]
+    x_data_raw : defaultdict[str, list[np.ndarray]]
+        Raw data of the independent variable(s) collected from the
+        files. Each ``x_vary_label`` is mapped to the corresponding
+        arrays. Each array corresponds to a different value of the
+        labels in ``x_search``.
+    y_data_raw : deefaultdict[str, list[np.ndarray]]
         Raw data of the dependent variable collected from the files.
         Each sequence corresponds to a different dependent variable
         in ``y_label``, and each array inside that corresponds
         to a different value in ``x_search_values``.
-    x_data_interpolated : Sequence[np.ndarray]
+    x_data_interpolated : defaultdict[str, list[np.ndarray]]
         Interpolated, but unprocessed, data of the independent variable
         varying inside the files.
-    y_data_interpolated : Sequence[Sequence[np.ndarray]]
+    y_data_interpolated : defaultdict[str, list[np.ndarray]]
         Interpolated, but unprocessed, data of the dependent variable
         collected from the files.
-    extra_values : Sequence[Sequence[float]]
-        Values of extra variables extracted from the file names.
-        Each sequence corresponds to a different variable in
-        ``extra_labels``.
+    x_vary_label : Union[str, Sequence[str]], optional
+        Label of the independent variable(s) that varies inside the
+        files.
+    x_search: Mapping[str, Union[int, float]]
+        Dictionary mapping labels of independent variables inside file
+        names to their values.
     """
-    def __init__(self, x_vary_label: str = None,
-                 x_search_labels: Sequence[str] = [],
-                 x_search_values: Sequence[Union[int, float]] = [],
-                 y_label: Sequence[str] = None,
-                 extra_labels: Sequence[str] = [], data_type: str = 'admr'):
+    def __init__(self, x_vary_label: Union[str, Sequence[str]] = None,
+                 x_search: Mapping[str, Sequence[Union[int, float]]] = {},
+                 y_label: Sequence[str] = None, save_new_labels: bool = False,
+                 save_new_values: bool = False, data_type: str = 'admr'):
         self.x_vary_label = x_vary_label
-        self.x_search_labels = x_search_labels
-        self.x_search_values = x_search_values
+        self.x_search = x_search
         self.y_label = y_label
-        self.extra_labels = extra_labels
-        self.extra_values = []
+        self.save_new_labels = save_new_labels
+        self.save_new_values = save_new_values
         self.data_type = data_type
-        self.x_label = []
-        self.x_data = []
-        self.y_data = []
-        self.x_data_raw = []
-        self.y_data_raw = []
-        self.x_data_interpolated = []
-        self.y_data_interpolated = []
+        self.x_data = defaultdict(list)
+        self.y_data = defaultdict(list)
+        self.x_data_raw = defaultdict(list)
+        self.y_data_raw = defaultdict(list)
+        self.x_data_interpolated = defaultdict(list)
+        self.y_data_interpolated = defaultdict(list)
+
+    def __setattr__(self, name, value):
+        if name == 'x_search':
+            if value != {}:
+                values = list(value.values())
+                value_len = len(values[0])
+                for values in values:
+                    if value_len != len(values):
+                        raise ValueError("All labels in x_search must have"
+                                         " the same number of values.")
+        super().__setattr__(name, value)
 
     def load(self, folder_path: str = '.', prefix: str = '',
-             y_columns: Sequence[int] = None, **kwargs):
+             recursive: bool = True,
+             x_columns: Union[Sequence[int], Sequence[str]] = None,
+             y_columns: Union[Sequence[int], Sequence[str]] = None, **kwargs):
         """Load the data from files in the specified folder.
 
         The function automatically determines which files to load based
@@ -110,26 +120,66 @@ class Loader:
             Path to the folder containing the data files.
         prefix : str, optional
             Prefix for the data files.
-        y_columns : Sequence[int], optional
-            Which columns of the data files to load for the dependent
-            variables. If None, all columns are loaded. The number of
-            columns should match the length of ``y_label``.
+        recursive : bool, optional
+            If True, search for files recursively in the folder and its
+            subfolders. If False, search only in the specified folder.
+        x_columns : Union[Sequence[int], Sequence[str]], optional
+            Override which columns to load for the independent variable.
+            If a sequence of integers, it specifies the column indices
+            to load. If a sequence of strings, it specifies the column
+            names (headers) to load. If not provided, the first column
+            is loaded as the independent variable.
+        y_columns : Union[Sequence[int], Sequence[str]], optional
+            Override which columns to load for the dependent variables.
+            If a sequence of integers, it specifies the column indices
+            to load. If a sequence of strings, it specifies the column
+            names (headers) to load. If not provided, all columns except
+            the first one (independent variable) are loaded.
         interpolate : bool, optional
             If True, interpolate the data before post processing.
         **kwargs : dict, optional
             Additional keyword arguments to pass to ``numpy.loadtxt``.
         """
-        files = sorted(Path(folder_path).glob(f"{prefix}*"))
-        if self.x_search_values == []:
-            self._search_all_files(files, prefix, y_columns, **kwargs)
+        if recursive:
+            files = sorted(Path(folder_path).rglob(f"{prefix}*"))
         else:
-            self._search_indicated_files(files, prefix, y_columns, **kwargs)
+            files = sorted(Path(folder_path).glob(f"{prefix}*"))
+        for file in files:
+            if file.is_dir() or not file.name.startswith(prefix):
+                continue
+
+            label_map = _extract_labels_and_values(file.name)
+            for label, value in label_map.items():
+                if self.save_new_labels and label not in self.x_search:
+                    self.x_search[label] = []
+                if self.save_new_values and value not in self.x_search[label]:
+                    self.x_search[label].append(value)
+
+            if self.x_search != {}:
+                if not all(label in label_map for label in self.x_search):
+                    continue
+                if not all(label_map[label] in self.x_search[label]
+                           for label in self.x_search):
+                    continue
+                first_label = list(self.x_search.keys())[0]
+                idx = self.x_search[first_label].index(label_map[first_label])
+            else:
+                if self.x_data_raw == {}:
+                    idx = 0
+                else:
+                    first_label = list(self.x_data_raw.keys())[0]
+                    idx = len(self.x_data_raw[first_label])
+
+            self._extract_data(file, idx, x_columns, y_columns, **kwargs)
         self.process_data()
 
     def interpolate(self, n_points: int = 50, x_min: float = None,
                     x_max: float = None):
         """
         Interpolate the loaded data to the specified number of points.
+
+        For now, only supports linear interpolation for a single
+        independent variable varying inside the files.
 
         Parameters
         ----------
@@ -146,115 +196,90 @@ class Loader:
             the maximum value of the independent variable in the loaded
             data.
         """
-        self.x_data_interpolated = [[] for _ in range(len(self.x_data_raw))]
-        self.y_data_interpolated = [[] for _ in range(len(self.y_data_raw))]
-        for i, x in enumerate(self.x_data_raw):
-            x_min = min(x) if x_min is None else x_min
-            x_max = max(x) if x_max is None else x_max
-            x_new = np.linspace(x_min, x_max, n_points)
-            self.x_data_interpolated.append(x_new)
-            for y in self.y_data_raw[i]:
-                self.y_data_interpolated[i].append(np.interp(x_new, x, y))
+        self.x_data_interpolated = defaultdict(list)
+        self.y_data_interpolated = defaultdict(list)
+        for i in range(len(self.x_data_raw[self.x_vary_label])):
+            for x in self.x_data_raw[self.x_vary_label]:
+                x_min = min(x[i]) if x_min is None else x_min
+                x_max = max(x[i]) if x_max is None else x_max
+                x_new = np.linspace(x_min, x_max, n_points)
+                self.x_data_interpolated[self.x_vary_label].append(x_new)
+                for y_label, y in self.y_data_raw.items():
+                    self.y_data_interpolated[y_label].append(
+                        np.interp(x_new, x[i], y[i]))
         self.process_data()
-    
+
     def process_data(self):
         """Process the loaded data to prepare it for fitting.
         
-        Fills the `x_label`, `y_label`, `x_data` and `y_data`
-        attributes with the correct values. This is run at the
-        end of the `load` and `interpolate` methods. You can use it
-        if you do extra processing on the data after loading or
-        interpolating.
+        Fills the `x_data` and `y_data` attributes with the correct
+        values. This is run at the end of the `load` and `interpolate`
+        methods. You can use it if you do extra processing on the data
+        after loading or interpolating.
         """
-        self.y_data = []
-        for i in range(len(self.y_data_raw)):
-            self.y_data.append(np.concatenate(self.y_data_raw[i]))
-        all_labels = [self.x_vary_label] + self.x_search_labels
-        x_data_stitched = [[] for _ in range(len(self.x_search_values) + 1)]
-        x_data_stitched[0] = self.x_data_raw
-        for i in range(len(self.x_data_raw)):
-            for j in range(len(self.x_search_values)):
-                x_data_stitched[j + 1].append(
-                    np.full(len(self.x_data_raw[i]),
-                            self.x_search_values[j][i]))
-        x_data_stitched = [np.concatenate(x) for x in x_data_stitched]
+        self.x_data = defaultdict(list)
+        self.y_data = defaultdict(list)
+        for label, data in self.y_data_raw.items():
+            self.y_data[label] = np.concatenate(data)
+
+        if isinstance(self.x_vary_label, str):
+            x_vary_label = [self.x_vary_label]
+        else:
+            x_vary_label = self.x_vary_label
+        all_labels = x_vary_label + list(self.x_search.keys())
+        x_data_stitched = {label: [] for label in all_labels}
+        for label in self.x_search:
+            for i, value in enumerate(self.x_search[label]):
+                x_data_stitched[label].append(
+                    np.full(len(self.x_data_raw[x_vary_label[0]][i]), value))
+        for label in x_vary_label:
+            for i, data in enumerate(self.x_data_raw[label]):
+                while len(x_data_stitched[label]) <= i:
+                    x_data_stitched[label].append(np.array([]))
+                x_data_stitched[label][i] = data
+        x_data_stitched = {label: np.concatenate(data)
+                           for label, data in x_data_stitched.items()}
         if self.data_type == 'plain':
-            self.x_label = all_labels
             self.x_data = x_data_stitched
         elif self.data_type == 'admr':
-            indexing_labels = []
-            for label in all_labels:
+            indexing_labels = dict()
+            for label in x_data_stitched:
                 if label in ['B', 'Bmag', 'Bamp', 'H', 'Hmag', 'Hamp']:
-                    label = 'field'
-                indexing_labels.append(label.lower())
-            field = x_data_stitched[indexing_labels.index('field')]
-            phi = np.deg2rad(x_data_stitched[indexing_labels.index('phi')])
-            theta = np.deg2rad(x_data_stitched[indexing_labels.index('theta')])
-            self.x_data = [field[:, None] * np.column_stack((
+                    indexing_labels['field'] = label
+                else:
+                    indexing_labels[label.lower()] = label
+            field = x_data_stitched[indexing_labels['field']]
+            phi = np.deg2rad(x_data_stitched[indexing_labels['phi']])
+            theta = np.deg2rad(x_data_stitched[indexing_labels['theta']])
+            self.x_data = {'field': field[:, None] * np.column_stack((
                 np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi),
-                np.cos(theta)))]
-            self.x_label = ['field']
+                np.cos(theta)))}
 
-    def _search_all_files(self, files, prefix, y_columns, **kwargs):
-        for file in files:
-            if not file.name.startswith(prefix):
-                continue
-            label_map = _extract_labels_and_values(file.name)
-            self._sort_labels_and_values(label_map)
-            self._extract_data(file, y_columns, **kwargs)
-
-    def _search_indicated_files(self, files, prefix, y_columns, **kwargs):
-        for i in range(len(self.x_search_values[0])):
-            for file in files:
-                if not file.name.startswith(prefix):
-                    continue
-                for label in self.x_search_labels:
-                    if label not in file.name:
-                        return True
-                label_map = _extract_labels_and_values(file.name)
-                if not all(label in label_map
-                           for label in self.x_search_labels):
-                    continue
-                if not all(label in label_map for label in self.extra_labels):
-                    continue
-                if not all(label_map[label] == self.x_search_values[j][i]
-                           for j, label in enumerate(self.x_search_labels)):
-                    continue
-                self._sort_labels_and_values(label_map)
-                self._extract_data(file, y_columns, **kwargs)
-
-    def _sort_labels_and_values(self, label_map):
-        add_labels = self.x_search_labels == []
-        for label in label_map:
-            if label in self.x_search_labels:
-                idx = self.x_search_labels.index(label)
-                if label_map[label] not in self.x_search_values[idx]:
-                    self.x_search_values[idx].append(label_map[label])
-            elif label in self.extra_labels:
-                if label not in self.extra_labels:
-                    self.extra_labels.append(label)
-                    self.extra_values.append([])
-                idx = self.extra_labels.index(label)
-                while idx >= len(self.extra_values):
-                    self.extra_values.append([])
-                self.extra_values[idx].append(label_map[label])
-            elif add_labels:
-                self.x_search_labels.append(label)
-                self.x_search_values.append([label_map[label]])
-
-    def _extract_data(self, file, y_columns, **kwargs):
-        self._extract_none_labels(file, **kwargs)
-        if y_columns is None:
-            y_columns = list(range(1, len(self.y_label) + 1))
+    def _extract_data(self, file, idx, x_columns, y_columns, **kwargs):
+        x_columns, y_columns = self._extract_xy_labels(
+            file, x_columns, y_columns, **kwargs)
         data = np.loadtxt(file, **kwargs)
-        sorted_indices = np.argsort(data[:, 0])
-        self.x_data_raw.append(data[sorted_indices, 0])
-        if self.y_data_raw == []:
-            self.y_data_raw = [[] for _ in self.y_label]
-        for i, col in enumerate(y_columns):
-            self.y_data_raw[i].append(data[sorted_indices, col])
-    
-    def _extract_none_labels(self, file, **kwargs):
+
+        # "pack" single labels into a list
+        if isinstance(self.x_vary_label, str):
+            x_vary_label = [self.x_vary_label]
+        else:
+            x_vary_label = self.x_vary_label
+        if isinstance(self.y_label, str):
+            y_label = [self.y_label]
+        else:
+            y_label = self.y_label
+
+        for label, col in zip(x_vary_label, x_columns):
+            while len(self.x_data_raw[label]) <= idx:
+                self.x_data_raw[label].append(np.array([]))
+            self.x_data_raw[label][idx] = data[:, col]
+        for label, col in zip(y_label, y_columns):
+            while len(self.y_data_raw[label]) <= idx:
+                self.y_data_raw[label].append(np.array([]))
+            self.y_data_raw[label][idx] = data[:, col]
+
+    def _extract_xy_labels(self, file, x_columns, y_columns, **kwargs):
         with open(file, 'r') as f:
             for _ in range(kwargs.get('skiprows', 1)):
                 line = f.readline()
@@ -262,9 +287,33 @@ class Loader:
                 line = f.readline()
             if self.x_vary_label is None:
                 self.x_vary_label = line.split(',')[0].strip()
-            if self.y_label is None:
-                self.y_label = [col.strip() for col in line.split(',')[1:]]
 
+            headers = [header.strip() for header in line.split(',')]
+            if x_columns is None:
+                if self.x_vary_label is None:
+                    x_columns = [0]
+                    self.x_vary_label = headers[0]
+                elif isinstance(self.x_vary_label, str):
+                    x_columns = [headers.index(self.x_vary_label)]
+                else:
+                    x_columns = [headers.index(label)
+                                 for label in self.x_vary_label]
+            elif self.x_vary_label is None:
+                self.x_vary_label = [headers[col] for col in x_columns]
+
+            if y_columns is None:
+                if self.y_label is None:
+                    y_columns = sorted(list(
+                        set(range(len(headers))) - set(x_columns)))
+                    self.y_label = [headers[col] for col in y_columns]
+                elif isinstance(self.y_label, str):
+                    y_columns = [headers.index(self.y_label)]
+                else:
+                    y_columns = [headers.index(label)
+                                 for label in self.y_label]
+            elif self.y_label is None:
+                self.y_label = [headers[col] for col in y_columns]
+        return x_columns, y_columns
 
 def _extract_labels_and_values(file_name):
     label_map = {}
@@ -279,7 +328,7 @@ def _extract_labels_and_values(file_name):
                 value = int(value)
             label_map[label] = value
         else:
-            value = re.search(r'([-+]?\d+\.?\d*[a-zA-Z]+)', part)
+            value = re.search(r'([-+]?\d+\.?\d*[a-zA-Z]*)', part)
             if value:
                 value = float(re.search(r'([-+]?\d+\.?\d*)',
                                         value.group(0)).group(0))
