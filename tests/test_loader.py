@@ -53,7 +53,7 @@ class TestLoader(unittest.TestCase):
         loader = elecboltz.Loader(
             data_type='plain', extra_labels=['rho0', 'date'])
         loader.load(folder_path=str(self.temp_dir.name),
-                    prefix='test_data_', header_lines=3, delimiter=',')
+                    prefix='test_data_', delimiter=',', skiprows=4)
         self.assertTrue(all(
             val == test_val for val, test_val
             in zip(loader.extra_values[0], [0.5, 1.5, 1.0])),
@@ -103,9 +103,8 @@ class TestLoader(unittest.TestCase):
             x_values_search=[[30, 45], [10.0, 2.4]],
             y_label=['rho_xx', 'rho_xy'], extra_labels=['rho0'],
             data_type='plain')
-        loader.load(folder_path=str(self.temp_dir.name),
-                    prefix='test_data_', y_columns=[1, 2],
-                    header_lines=3, delimiter=',')
+        loader.load(folder_path=str(self.temp_dir.name), prefix='test_data_',
+                    y_columns=[1, 2], delimiter=',', skiprows=4)
         self.assertTrue(all(
             val == test_val for val, test_val
             in zip(loader.extra_values[0], [0.5, 1.0])),
@@ -146,9 +145,8 @@ class TestLoader(unittest.TestCase):
         loader = elecboltz.Loader(
             x_vary_label='theta', x_labels_search=['phi', 'B'],
             x_values_search=[[30, 45], [10.0, 2.4]], data_type='admr')
-        loader.load(folder_path=str(self.temp_dir.name),
-                    prefix='test_data_', y_columns=[1, 2],
-                    header_lines=3, delimiter=',')
+        loader.load(folder_path=str(self.temp_dir.name), prefix='test_data_',
+                    y_columns=[1, 2], delimiter=',', skiprows=4)
         theta = np.deg2rad(np.array([0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0]))
         phi = np.deg2rad(
             np.array([30.0, 30.0, 30.0, 45.0, 45.0, 45.0, 45.0, 45.0]))

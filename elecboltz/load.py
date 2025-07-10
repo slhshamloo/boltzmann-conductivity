@@ -91,8 +91,7 @@ class Loader:
         self.y_data_interpolated = []
 
     def load(self, folder_path: str = '.', prefix: str = '',
-             y_columns: Sequence[int] = None, header_lines: int = 1,
-             **kwargs):
+             y_columns: Sequence[int] = None, **kwargs):
         """Load the data from files in the specified folder.
 
         The function automatically determines which files to load based
@@ -111,8 +110,6 @@ class Loader:
             Path to the folder containing the data files.
         prefix : str, optional
             Prefix for the data files.
-        header_lines : int, optional
-            Number of header lines to skip when reading the data files.
         y_columns : Sequence[int], optional
             Which columns of the data files to load for the dependent
             variables. If None, all columns are loaded. The number of
@@ -124,11 +121,9 @@ class Loader:
         """
         files = sorted(Path(folder_path).glob(f"{prefix}*"))
         if self.x_values_search == []:
-            self._search_all_files(
-                files, prefix, y_columns, header_lines, **kwargs)
+            self._search_all_files(files, prefix, y_columns, **kwargs)
         else:
-            self._search_indicated_files(
-                files, prefix, y_columns, header_lines, **kwargs)
+            self._search_indicated_files(files, prefix, y_columns, **kwargs)
         self.process_data()
 
     def interpolate(self, n_points: int = 50, x_min: float = None,
@@ -200,17 +195,15 @@ class Loader:
                 np.cos(theta)))]
             self.x_label = ['field']
 
-    def _search_all_files(self, files, prefix, y_columns, header_lines,
-                          **kwargs):
+    def _search_all_files(self, files, prefix, y_columns, **kwargs):
         for file in files:
             if not file.name.startswith(prefix):
                 continue
             label_map = _extract_labels_and_values(file.name)
             self._sort_labels_and_values(label_map)
-            self._extract_data(file, header_lines, y_columns, **kwargs)
+            self._extract_data(file, y_columns, **kwargs)
 
-    def _search_indicated_files(self, files, prefix, y_columns, header_lines,
-                                **kwargs):
+    def _search_indicated_files(self, files, prefix, y_columns, **kwargs):
         for i in range(len(self.x_values_search[0])):
             for file in files:
                 if not file.name.startswith(prefix):
@@ -228,7 +221,7 @@ class Loader:
                            for j, label in enumerate(self.x_labels_search)):
                     continue
                 self._sort_labels_and_values(label_map)
-                self._extract_data(file, header_lines, y_columns, **kwargs)
+                self._extract_data(file, y_columns, **kwargs)
 
     def _sort_labels_and_values(self, label_map):
         add_labels = self.x_labels_search == []
@@ -248,30 +241,30 @@ class Loader:
             elif add_labels:
                 self.x_labels_search.append(label)
                 self.x_values_search.append([label_map[label]])
-    
-    def _extract_none_labels(self, file, header_lines):
-        with open(file, 'r') as f:
-            skip_counter = header_lines
-            while skip_counter > 0:
-                f.readline()
-                skip_counter -= 1
-            line = f.readline()
-            if self.x_vary_label is None:
-                self.x_vary_label = line.split(',')[0].strip()
-            if self.y_label is None:
-                self.y_label = [col.strip() for col in line.split(',')[1:]]
 
-    def _extract_data(self, file, header_lines, y_columns, **kwargs):
-        self._extract_none_labels(file, header_lines)
+    def _extract_data(self, file, y_columns, **kwargs):
+        self._extract_none_labels(file, **kwargs)
         if y_columns is None:
             y_columns = list(range(1, len(self.y_label) + 1))
-        data = np.loadtxt(file, skiprows=header_lines+1, **kwargs)
+        data = np.loadtxt(file, **kwargs)
         sorted_indices = np.argsort(data[:, 0])
         self.x_data_raw.append(data[sorted_indices, 0])
         if self.y_data_raw == []:
             self.y_data_raw = [[] for _ in self.y_label]
         for i, col in enumerate(y_columns):
             self.y_data_raw[i].append(data[sorted_indices, col])
+    
+    def _extract_none_labels(self, file, **kwargs):
+        with open(file, 'r') as f:
+            for _ in range(kwargs.get('skiprows', 1)):
+                line = f.readline()
+            while line.startswith(kwargs.get('comments', '#')):
+                line = f.readline()
+            if self.x_vary_label is None:
+                self.x_vary_label = line.split(',')[0].strip()
+            if self.y_label is None:
+                self.y_label = [col.strip() for col in line.split(',')[1:]]
+
 
 def _extract_labels_and_values(file_name):
     label_map = {}
