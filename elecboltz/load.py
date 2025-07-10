@@ -7,11 +7,11 @@ from pathlib import Path
 class Loader:
     """Convenience class for loading data split into multiple files.
     
-    Prepares the data for `fit_model` by processing multiple files
+    Prepares the data for ``fit_model`` by processing multiple files
     labeled with values of independent variables and containing the
     variation of one variable. For example, the files can be labeled
-    with the values of `phi` and `field`, and contain the variation of
-    `theta`.
+    with the values of ``phi`` and ``field``, and contain the variation
+    of ``theta``.
 
     Parameters
     ----------
@@ -31,15 +31,15 @@ class Loader:
         the labels are loaded.
     y_label : Sequence[str], optional
         Labels of the dependent variables, used for fitting routine.
-        See `elecboltz.fit.fit_model` for details about the allowed
+        See ``elecboltz.fit.fit_model`` for details about the allowed
         labels. If None, will be inferred from the file contents
         (column headers).
     extra_labels : Sequence[str], optional
         Labels of extra variables to be extracted from the file names.
     data_type : {'plain', 'admr'}, optional
-        Type of data to load. If 'plain', no processing is done on
+        Type of data to load. If ``'plain'``, no processing is done on
         the data and the x_data is constructed directly from the
-        collected values. If 'admr', the x_data is constructed
+        collected values. If ``'admr'``, the x_data is constructed
         such that it contains the field vector at each index.
     
     Attributes
@@ -56,12 +56,12 @@ class Loader:
     x_data_raw : Sequence[np.ndarray]
         Raw data of the independent variable collected from the files.
         Each array corresponds to a different value in
-        `x_values_search`.
+        ``x_values_search``.
     y_data_raw : Sequence[Sequence[np.ndarray]]
         Raw data of the dependent variable collected from the files.
         Each sequence corresponds to a different dependent variable
-        in `y_label`, and each array inside that corresponds
-        to a different value in `x_values_search`.
+        in ``y_label``, and each array inside that corresponds
+        to a different value in ``x_values_search``.
     x_data_interpolated : Sequence[np.ndarray]
         Interpolated, but unprocessed, data of the independent variable
         varying inside the files.
@@ -94,7 +94,8 @@ class Loader:
         self.y_data_interpolated = []
 
     def load(self, folder_path: str = '.', prefix: str = '',
-             y_columns: Sequence[int] = None, header_lines: int = 1):
+             y_columns: Sequence[int] = None, header_lines: int = 1,
+             **kwargs):
         """Load the data from files in the specified folder.
 
         The function automatically determines which files to load based
@@ -118,16 +119,19 @@ class Loader:
         y_columns : Sequence[int], optional
             Which columns of the data files to load for the dependent
             variables. If None, all columns are loaded. The number of
-            columns should match the length of `y_label`.
+            columns should match the length of ``y_label``.
         interpolate : bool, optional
             If True, interpolate the data before post processing.
+        **kwargs : dict, optional
+            Additional keyword arguments to pass to ``numpy.loadtxt``.
         """
         files = sorted(Path(folder_path).glob(f"{prefix}*"))
         if self.x_values_search == []:
-            self._search_all_files(files, prefix, y_columns, header_lines)
+            self._search_all_files(
+                files, prefix, y_columns, header_lines, **kwargs)
         else:
             self._search_indicated_files(
-                files, prefix, y_columns, header_lines)
+                files, prefix, y_columns, header_lines, **kwargs)
         self.process_data()
 
     def interpolate(self, n_points: int = 50, x_min: float = None,
@@ -199,15 +203,17 @@ class Loader:
                 np.cos(theta)))]
             self.x_label = ['field']
 
-    def _search_all_files(self, files, prefix, y_columns, header_lines):
+    def _search_all_files(self, files, prefix, y_columns, header_lines,
+                          **kwargs):
         for file in files:
             if not file.name.startswith(prefix):
                 continue
             label_map = _extract_labels_and_values(file.name)
             self._sort_labels_and_values(label_map)
-            self._extract_data(file, header_lines, y_columns)
+            self._extract_data(file, header_lines, y_columns, **kwargs)
 
-    def _search_indicated_files(self, files, prefix, y_columns, header_lines):
+    def _search_indicated_files(self, files, prefix, y_columns, header_lines,
+                                **kwargs):
         for i in range(len(self.x_values_search[0])):
             for file in files:
                 if not file.name.startswith(prefix):
@@ -225,8 +231,8 @@ class Loader:
                            for j, label in enumerate(self.x_labels_search)):
                     continue
                 self._sort_labels_and_values(label_map)
-                self._extract_data(file, header_lines, y_columns)
-    
+                self._extract_data(file, header_lines, y_columns, **kwargs)
+
     def _sort_labels_and_values(self, label_map):
         add_labels = self.x_labels_search == []
         for label in label_map:
@@ -258,11 +264,11 @@ class Loader:
             if self.y_label is None:
                 self.y_label = [col.strip() for col in line.split(',')[1:]]
 
-    def _extract_data(self, file, header_lines, y_columns):
+    def _extract_data(self, file, header_lines, y_columns, **kwargs):
         self._extract_none_labels(file, header_lines)
         if y_columns is None:
             y_columns = list(range(1, len(self.y_label) + 1))
-        data = np.loadtxt(file, delimiter=',', skiprows=header_lines+1)
+        data = np.loadtxt(file, skiprows=header_lines+1, **kwargs)
         sorted_indices = np.argsort(data[:, 0])
         self.x_data_raw.append(data[sorted_indices, 0])
         if self.y_data_raw == []:
