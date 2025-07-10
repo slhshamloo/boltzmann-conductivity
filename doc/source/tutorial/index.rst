@@ -6,7 +6,6 @@ the `usage documentation <usage/index>`_.
 
 .. toctree::
    :maxdepth: 1
-   :caption: Navigation:
 
    install
    quickstart

@@ -24,9 +24,9 @@ class BandStructure:
     ----------
     dispersion : str
         The dispersion relation. Expresses the dispersion relation
-        in terms of symbols in `wavevector_names` and additional
-        parameters in `band_params`. It must be parsable and
-        differentiable by `sympy`. Energy units are milli eV.
+        in terms of symbols in ``wavevector_names`` and additional
+        parameters in ``band_params``. It must be parsable and
+        differentiable by ``sympy``. Energy units are milli eV.
     chemical_potential : float
         The chemical potential in milli eV.
     unit_cell : Sequence[float]
@@ -38,16 +38,17 @@ class BandStructure:
         The ratio of the reciprocal space domain sidelengths to simple
         cubic unit cell dimensions in reciprocal space. The product
         of the numbers in this collection must be equal to the number
-        of atoms in the conventional unit cell specified by `unit_cell`.
+        of atoms in the conventional unit cell specified by
+        ``unit_cell``.
     periodic : bool or int or Sequence[bool] or Sequence[int]
         If bool, whether periodic boundary conditions are applied to all
         axes or not. If a single int, specifies which single axis is 
         periodic. If a collection, specifies which axes are periodic.
         If the collection is of integers, the integers specify the
-        periodic axes, e.g. [0, 2] means periodic in x and z axes.
-        If the collection is of booleans, it specifies whether each axis
-        is periodic or not, e.g. [True, False, True] means periodic in
-        x and z axes, but not in y axis.
+        periodic axes, e.g. ``[0, 2]`` means periodic in `x` and `z`
+        axes. If the collection is of booleans, it specifies whether
+        each axis is periodic or not, e.g. ``[True, False, True]`` means
+        periodic in `x` and `z` axes, but not in `y` axis.
     axis_names : str or Sequence[str], optional
         The names of the unit cell axes. Must be parsable by
         `sympy.symbols`.
@@ -70,7 +71,7 @@ class BandStructure:
     ----------
     dispersion : str
         The dispersion relation. Updating this will automatically
-        update `energy_func` and `velocity_func`.
+        update ``energy_func`` and ``velocity_func``.
     chemical_potential : float
         The chemical potential in milli eV.
     unit_cell : Sequence[float]
@@ -79,28 +80,21 @@ class BandStructure:
         The ratio of the reciprocal space domain sidelengths to simple
         cubic unit cell dimensions in reciprocal space. The product
         of the numbers in this collection must be equal to the number
-        of atoms in the conventional unit cell specified by `unit_cell`.
+        of atoms in the conventional unit cell specified by
+        ``unit_cell``.
     periodic : Sequence[int]
         The periodic axes.
     band_params : dict
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
-    energy_func : function
-        The energy function for the dispersion relation. Takes
-        kx, ky, and kz in angstrome^-1 as arguments and returns
-        the energy in milli eV.
-    velocity_func : function
-        The velocity function for the dispersion relation. Takes
-        kx, ky, and kz in angstrome^-1 as arguments and returns
-        the velocity vector as a list [vx, vy, vz] in units of m/s.
     kpoints : (N, 3) numpy.ndarray
         The discretized k-points on the Fermi surface. Each row
-        corresponds to a k-point in the form [kx, ky, kz].
+        corresponds to a k-point in the form ``[kx, ky, kz]``.
     kfaces : (F, 3) numpy.ndarray
         The faces of the triangulated surface in k-space. Each row
-        corresponds to a face in the form [i, j, k], where i, j,
-        and k are the indices of the vertices of the face in the
-        `kpoints` array.
+        corresponds to a face in the form ``[i, j, k]``, where
+        ``i``, ``j``, and ``k`` are the indices of the vertices of
+        the face in the ``kpoints`` array.
     periodic_projector : scipy.sparse.csr_array
         Projects quantities into the periodic k-space, where points that
         are periodic images of each other are mapped to the same point.
@@ -170,10 +164,10 @@ class BandStructure:
         """Discretize the Fermi surface.
 
         First, the surface is triangulated using the marching cubes
-        algorithm with `resolution` controlling the resolution of the
+        algorithm with ``resolution`` controlling the resolution of the
         grid. Next, to improve the accuracy of the isosurface,
-        `ncorrect` steps of the Newton--Raphson root-finding method are
-        applied to the output of marching cubes. Finally, after the
+        ``n_correct`` steps of the Newton--Raphson root-finding method
+        are applied to the output of marching cubes. Finally, after the
         surface construction, periodic boundary conditions are applied
         to "stitch" the open ends of the surface together.
         """
@@ -226,15 +220,15 @@ class BandStructure:
 
         Note that the surface needs to be discretized before calling
         this method. First, the filling fraction is calculated (see
-        `calculate_filling_fraction`). The electron density is obtained
-        by dividing the filling fraction by the volume of the unit cell
-        in real space.
+        ``calculate_filling_fraction``). The electron density is
+        obtained by dividing the filling fraction by the volume of
+        the unit cell in real space.
 
         Parameters
         ----------
         depth : int, optional
             The depth of the adaptive octree integration in
-            `calculate_filling_fraction`.
+            ``calculate_filling_fraction``.
 
         Returns
         -------
@@ -259,30 +253,6 @@ class BandStructure:
         """
         # Placeholder for actual calculation
         return 0.0
-
-    def _parse_dispersion(self):
-        """
-        Parse the dispersion relation and extract the necessary
-        information for further calculations.
-        """
-        ksymbols = sympy.symbols(self.wavevector_names)
-        all_symbols = (ksymbols + sympy.symbols(self.axis_names)
-                       + sympy.symbols(list(self.band_params.keys())))
-        # symbolic expressions
-        self._energy_sympy = sympy.sympify(self.dispersion)
-        self._velocities_sympy = [
-            sympy.diff(self._energy_sympy, k) * velocity_units
-            for k in sympy.symbols(self.wavevector_names)]
-        # replace zero velocities with zero arrays
-        for i, v in enumerate(self._velocities_sympy):
-            if v == 0:
-                self._velocities_sympy[i] = f"numpy.zeros_like({ksymbols[i]})"
-        # convert expressions into python functions
-        self._energy_func_full = sympy.lambdify(
-            all_symbols, self._energy_sympy)
-        self._velocity_funcs_full = [
-            sympy.lambdify(all_symbols, vexpr, 'numpy')
-            for vexpr in self._velocities_sympy]
     
     def energy_func(self, kx, ky, kz):
         """Calculate the energy at the given k-point.
@@ -315,6 +285,30 @@ class BandStructure:
         """
         return [vfunc(kx, ky, kz, *self.unit_cell, **self.band_params)
                 for vfunc in self._velocity_funcs_full]
+
+    def _parse_dispersion(self):
+        """
+        Parse the dispersion relation and extract the necessary
+        information for further calculations.
+        """
+        ksymbols = sympy.symbols(self.wavevector_names)
+        all_symbols = (ksymbols + sympy.symbols(self.axis_names)
+                       + sympy.symbols(list(self.band_params.keys())))
+        # symbolic expressions
+        self._energy_sympy = sympy.sympify(self.dispersion)
+        self._velocities_sympy = [
+            sympy.diff(self._energy_sympy, k) * velocity_units
+            for k in sympy.symbols(self.wavevector_names)]
+        # replace zero velocities with zero arrays
+        for i, v in enumerate(self._velocities_sympy):
+            if v == 0:
+                self._velocities_sympy[i] = f"numpy.zeros_like({ksymbols[i]})"
+        # convert expressions into python functions
+        self._energy_func_full = sympy.lambdify(
+            all_symbols, self._energy_sympy)
+        self._velocity_funcs_full = [
+            sympy.lambdify(all_symbols, vexpr, 'numpy')
+            for vexpr in self._velocities_sympy]
 
     def _sort_and_reindex(self, sort_axis):
         new_order, self.kfaces = self._generate_reindex(sort_axis)

@@ -24,7 +24,8 @@ class ScatteringFunction:
         Returns
         -------
         float
-            The value of the scattering function at the given wavevector.
+            The value of the scattering function at
+            the given wavevector.
         """
         raise NotImplementedError("Subclasses should implement this method.")
 
@@ -85,16 +86,16 @@ def build_scattering_function(
 
     Supported scattering models include:
 
-    * 'isotropic': Constant `gamma_0` everywhere
-    * | 'cos': `gamma_k * abs(cos(sym * phi))^power` where `phi` is
-      | the angle of the projection of the wavevector k in the x-y
+    * ``'isotropic'``: Constant ``gamma_0`` everywhere
+    * | ``'cos'``: ``gamma_k * abs(cos(sym * phi))^power`` where `phi`
+      | is the angle of the projection of the wavevector k in the x-y
       | plane with the x axis. The rest are parameters of the model.
-    * | 'sin', 'tan', and 'cot': Same as 'cos' but using different
-      | trigonometric functions.
-    * | 'cos[n]phi': Where [n] is some integer, e.g. 'cos2phi'. Alias
-      | for 'cos' with sym being set to the integer in [n].
-    * | 'sin[n]phi', 'tan[n]phi', and 'cot[n]phi': Same as 'cos[n]phi'
-      | but using different trigonometric functions.
+    * | ``'sin'``, ``'tan'``, and ``'cot'``: Same as ``'cos'`` but
+      | using different trigonometric functions.
+    * | ``'cos[n]phi'``: Where [n] is some integer, e.g. ``'cos2phi'``.
+      | Alias for ``'cos'`` with sym being set to the integer in [n].
+    * | ``'sin[n]phi'``, ``'tan[n]phi'``, and ``'cot[n]phi'``: Same as
+      | ``'cos[n]phi'`` but using different trigonometric functions.
 
     Parameters
     ----------

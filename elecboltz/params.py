@@ -1,10 +1,8 @@
-import numpy as np
 from .scattering import build_scattering_function
 
 
 def easy_params(params):
-    """
-    Convenience function to set parameters for the simulation.
+    """Convenience function to set parameters for the simulation.
 
     List of convenience features:
 

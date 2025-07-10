@@ -1,4 +1,4 @@
-Conductivity calculator
+Conductivity Calculator
 =======================
 
 .. autoclass:: elecboltz.Conductivity

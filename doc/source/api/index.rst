@@ -5,4 +5,7 @@ elecBoltz API reference
 
    bandstructure
    conductivity
+   scattering
    params
+   fit
+   load

@@ -1,6 +1,7 @@
-Quick Start Example
-===================
-First, import the module (and anything else you need)!
+Quickstart Example: Free Electrons
+==================================
+
+First, import the module (and anything else you need).
 
 .. code-block:: python
 

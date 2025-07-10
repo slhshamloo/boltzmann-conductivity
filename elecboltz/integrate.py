@@ -11,11 +11,12 @@ def adaptive_octree_integrate(
     Parameters
     ----------
     func : Callable
-        A function that takes three arguments (x, y, z) and returns
+        A function that takes three arguments ``(x, y, z)`` and returns
         a boolean value indicating whether the point is inside the
         volume of interest.
     bounds : Sequence[float]
-        A collection of six floats (xmin, xmax, ymin, ymax, zmin, zmax)
+        A collection of six floats
+        ``(xmin, xmax, ymin, ymax, zmin, zmax)``
         defining the bounds of the cubic volume to integrate over.
     depth : int, optional
         The maximum depth of the octree.

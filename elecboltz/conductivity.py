@@ -28,10 +28,10 @@ class Conductivity:
         kernel.
     scattering_kernel : Callable or None
         The scattering kernel as a function of a pair of coordinates
-        (kx, ky, kz) and (kx', ky', kz'), in units of angstrom THz. All
-        coordinates are given to the function in order, so the function
-        signature would be C(kx, ky, kz, kx', ky', kz'). If None, the
-        scattering rate should be specified instead.
+        ``(kx, ky, kz)`` and ``(kx', ky', kz')``, in units of angstrom
+        THz. All coordinates are given to the function in order, so the
+        function signature would be ``C(kx, ky, kz, kx', ky', kz')``.
+        If None, the scattering rate should be specified instead.
     scattering_params : dict[str, float or Sequence[float]], optional
         Extra parameters passed to the scattering kernel or the
         scattering rate function.
@@ -76,8 +76,8 @@ class Conductivity:
         The frequency of the applied field in units of THz.
         If non-zero, the conductivity output will be complex.
     sigma : numpy.ndarray
-        The conductivity tensor, which is a 3x3 matrix. Can be
-        calculated using the `solve` method. Elements that are not
+        The conductivity tensor, which is a 3 by 3 matrix. Can be
+        calculated using the ``solve`` method. Elements that are not
         calculated yet are set to zero.
     correct_curvature : bool
         Whether to correct for the curvature of the Fermi surface.
@@ -173,7 +173,7 @@ class Conductivity:
         Returns
         -------
         numpy.ndarray or float
-            The conductivity tensor component(s) as an ixj matrix.
+            The conductivity tensor component(s) as an i by j matrix.
         """
         if not self._are_elements_saved:
             self._build_elements()

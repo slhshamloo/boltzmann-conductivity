@@ -44,9 +44,6 @@ class Loader:
     
     Attributes
     ----------
-    All the parameters are stored as attributes of the class,
-    plus the following:
-
     x_data : Sequence[np.ndarray]
         x_data variable for the fitting procedure.
     y_data : Sequence[np.ndarray]

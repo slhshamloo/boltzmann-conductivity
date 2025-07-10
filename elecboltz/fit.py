@@ -28,7 +28,7 @@ class FittingRoutine:
     init_params : Mapping
         Initial parameters for the fitting routine, and also other
         parameters for initiallizing the classes. This is passed through
-        `easy_params` to the `BandStructure` and `Conductivity`.
+        ``easy_params`` to the ``BandStructure`` and ``Conductivity``.
     save_path : str, optional
         The directory where the fitting logs will be saved. If not
         provided, logs will not be saved.
@@ -36,9 +36,9 @@ class FittingRoutine:
         Label of the results.
     update_keys : Collection[str], optional
         The "flattened" keys of the parameters that will be updated
-        during the fitting. See `extract_keys` for more information.
-        Used for updating the `params` attribute and logging. If not
-        provided, `params` will not be updated and the parameter names
+        during the fitting. See ``extract_keys`` for more information.
+        Used for updating the ``params`` attribute and logging. If not
+        provided, ``params`` will not be updated and the parameter names
         will not be mentioned in the log.
     print_log : bool, optional
         If True, the fitting progress will be printed to the console.
@@ -235,7 +235,7 @@ def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
               worker_percentage: float = 0.0, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
-    This uses `scipy.optimize.differential_evolution` to perform a
+    This uses ``scipy.optimize.differential_evolution`` to perform a
     global fit. The optimizer is hard-coded, because the callback
     functions are highly specific to each optimizer.
     Saves the results to the specified path.
@@ -258,16 +258,16 @@ def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
         The labels for the dependent variables. Each label can
         start with "sigma" or "rho" (for conductivity or resistivity,
         respectively), and you can add a suffix to specify the component
-        (e.g. "sigma_xx", "rho_xy"). Note that, to avoid ambiguity, this
-        should be a sequence of strings (matching y_data), even if there
-        is only one dependent variable.
+        (e.g. ``"sigma_xx"``, ``"rho_xy"``). Note that, to avoid
+        ambiguity, this should be a sequence of strings (matching
+        ``y_data``), even if there is only one dependent variable.
     init_params : Mapping
         Initial parameters for the fitting routine, and also other
         parameters for initiallizing the classes. This is passed through
-        `easy_params` to the `BandStructure` and `Conductivity`.
+        ``easy_params`` to the ``BandStructure`` and ``Conductivity``.
     bounds : Mapping
         Bounds for the fitting parameters. This mapping has the same
-        structure as `init_params`, but only containing the variables
+        structure as ``init_params``, but only containing the variables
         that are to be fitted, and their values in the mapping must be
         a collection of the form (min, max).
     save_path : str, optional
@@ -275,7 +275,7 @@ def fit_model(x_data: Sequence, y_data: Sequence, x_label: Sequence[str],
         If not provided, results will not be saved.
     save_label : str, optional
         Label of the results. If not provided, will be set to
-        ``f"y_label_x_label"``. If `y_label` or `x_label` are
+        ``f"y_label_x_label"``. If ``y_label` or ``x_label`` are
         collections of string, they will be joined with an underscore.
     worker_percentage : float, optional
         The percentage of available workers to use for parallel
@@ -325,8 +325,9 @@ def _extract_flat_keys(params: Mapping) -> list[str]:
     This function recursively extracts keys from a nested dictionary
     containing dictionaries and lists, and returns a flat list of keys.
     Each key is represented as a string with dot-separated keys and
-    indices, e.g. "band_params.a", is params["band_params"]["a"]
-    or "scattering_params.nu.0" is params["scattering_params"]["nu"][0].
+    indices, e.g. ``"band_params.a"``, is ``params["band_params"]["a"]``
+    or ``"scattering_params.nu.0"`` is
+    ``params["scattering_params"]["nu"][0]``.
 
     Parameters
     ----------
@@ -366,7 +367,7 @@ def _extract_flat_value(params: Mapping, flat_key: str) -> Any:
     params : Mapping
         The nested dictionary from which to extract values.
     flat_key : str
-        The "flattened" key of the parameter. see `extract_flat_keys`
+        The "flattened" key of the parameter. see ``extract_flat_keys``
         for more information.
 
     Returns
@@ -395,16 +396,16 @@ def _build_params_from_flat(params_keys, params_values):
     Parameters
     ----------
     params_keys : Collection[str]
-        The "flattened" keys of the parameters. See `extract_keys`
+        The "flattened" keys of the parameters. See ``extract_keys``
         for more information.
     params_values : Sequence
-        The values corresponding to the keys in `params_keys`.
+        The values corresponding to the keys in ``params_keys``.
 
     Returns
     -------
     dict
         A nested dictionary where the keys are the flattened keys
-        and the values are the corresponding values from `params_values`.
+        and the values are the corresponding values from ``params_values``.
     """
     params = dict()
     for key in params_keys:
