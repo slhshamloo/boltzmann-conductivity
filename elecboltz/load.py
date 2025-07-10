@@ -272,15 +272,17 @@ def _extract_labels_and_values(file_name):
     parts[-1] = '.'.join(parts[-1].split('.')[:-1])
     for i, part in enumerate(parts):
         if '=' in part:
-            label, value = part.split('=', 1)
+            label, value = part.split('=')
+            value = re.search(r'([-+]?\d+\.?\d*)', value).group(0)
             value = float(value)
             if int(value) == value:
                 value = int(value)
             label_map[label] = value
         else:
-            value = re.search(r'([-+]?\d+\.?\d*)', part)
+            value = re.search(r'([-+]?\d+\.?\d*[a-zA-Z]+)', part)
             if value:
-                value = float(value.group(0))
+                value = float(re.search(r'([-+]?\d+\.?\d*)',
+                                        value.group(0)).group(0))
                 if int(value) == value:
                     value = int(value)
                 label = re.search(r'([a-zA-Z_]+)', part)
