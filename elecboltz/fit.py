@@ -180,7 +180,8 @@ class FittingRoutine:
             print(log_message)
         if self.save_path is not None:
             path = Path(self.save_path) / f"{self.save_label}.log"
-            with open(path, 'a') as log_file:
+            mode = 'w' if self.iteration == 1 else 'a'
+            with open(path, mode) as log_file:
                 log_file.write(log_message)
 
     def _build_obj(self, param_values: Sequence,
@@ -283,7 +284,7 @@ def fit_model(x_data: Mapping[str, Sequence],
                 "Cannot set both `worker_percentage` and `workers`.")
         kwargs["workers"] = int(np.ceil(worker_percentage / 100 * cpu_count()))
 
-    update_keys = _extract_flat_keys(bounds)
+    update_keys = _extract_flat_keys(bounds, bounds=True)
     bounds = [_extract_flat_value(bounds, key) for key in update_keys]
     x0 = [_extract_flat_value(init_params, key) for key in update_keys]
     for i in range(len(update_keys)):
@@ -295,16 +296,16 @@ def fit_model(x_data: Mapping[str, Sequence],
     fitter = FittingRoutine(init_params, save_path, save_label,
                             update_keys=update_keys)
     result = scipy.optimize.differential_evolution(
-        fitter.residual, bounds=bounds, x0=x0,
+        fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
         args=(update_keys, x_data, y_data), **kwargs)
     end_time = datetime.now()
 
     return _save_fit_result(
-        result, fitter, init_params, update_keys, begin_time, end_time,
+        result, init_params, update_keys, begin_time, end_time,
         save_path, save_label)
 
 
-def _extract_flat_keys(params: Mapping) -> list[str]:
+def _extract_flat_keys(params, bounds=False):
     """Extract dots-separated keys from a nested structure.
     
     This function recursively extracts keys from a nested dictionary
@@ -328,20 +329,32 @@ def _extract_flat_keys(params: Mapping) -> list[str]:
     keys = []
     if isinstance(params, Mapping):
         for key in params:
-            val = params[key]
-            if any(isinstance(v, Collection) for v in val):
-                for val_key in _extract_flat_keys(val):
+            value = params[key]
+            if _is_value_nested(value, bounds):
+                for val_key in _extract_flat_keys(value, bounds=bounds):
                     keys.append(f"{key}.{val_key}")
             else:
                 keys.append(key)
     elif isinstance(params, Sequence):
-        for (i, val) in enumerate(params):
-            if any(isinstance(v, Collection) for v in val):
-                for val_key in _extract_flat_keys(val):
+        for (i, value) in enumerate(params):
+            if _is_value_nested(value, bounds):
+                for val_key in _extract_flat_keys(value, bounds=bounds):
                     keys.append(f"{i}.{val_key}")
             else:
                 keys.append(str(i))
     return keys
+
+
+def _is_value_nested(value, bounds):
+    if bounds:
+        if isinstance(value, Mapping):
+            return any(isinstance(v, Collection) and
+                       not isinstance(v, str) for v in value.values())
+        elif isinstance(value, Collection):
+            return any(isinstance(v, Collection) and
+                       not isinstance(v, str) for v in value)
+    else:
+        return isinstance(value, Collection) and not isinstance(value, str)
 
 
 def _extract_flat_value(params: Mapping, flat_key: str) -> Any:
@@ -426,7 +439,7 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
     result['init_params'] = _build_params_from_flat(
         update_keys, [_extract_flat_value(init_params, key)
                       for key in update_keys])
-    all_keys = _extract_flat_keys(init_params)
+    all_keys = _extract_flat_keys(init_params, bounds=False)
     fixed_keys = set(all_keys) - set(update_keys)
     result['fixed_params'] = _build_params_from_flat(
         fixed_keys, [_extract_flat_value(init_params, key)
