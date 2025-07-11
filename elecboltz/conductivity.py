@@ -184,6 +184,8 @@ class Conductivity:
         # (A^{-1})^{ij} (v_b)_j
         linear_solution = self.solver(self._differential_operator,
                                       self._vhat_projections[:, j_calc])
+        if len(linear_solution.shape) == 1:
+            linear_solution = linear_solution[:, None]
         # reuse previously calculated solutions
         for col in j:
             if col in j_calc:
