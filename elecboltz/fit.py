@@ -7,12 +7,12 @@ import scipy.optimize
 import json
 from datetime import datetime
 from time import time
-from copy import copy, deepcopy
+from copy import deepcopy
 from multiprocessing import cpu_count
 from pathlib import Path
 from pprint import pformat
 
-from typing import Any, Union, Callable
+from typing import Any
 from collections.abc import Sequence, Collection, Mapping
 
 
@@ -61,8 +61,6 @@ class FittingRoutine:
         The timestamp of the last fitting iteration.
     total_time : float
         The total time spent on the fitting routine.
-    base_band : BandStructure
-        The base band structure object.
     base_cond : Conductivity
         The base conductivity object.
     """
@@ -77,10 +75,9 @@ class FittingRoutine:
         self.iteration = 0
         self.last_time = time()
         self.total_time = 0.0
-        self.base_band = BandStructure(**easy_params(init_params))
-        self.base_band.discretize()
-        self.base_cond = Conductivity(
-            self.base_band, **easy_params(init_params))
+        band = BandStructure(**easy_params(init_params))
+        band.discretize()
+        self.base_cond = Conductivity(band, **easy_params(init_params))
         self.base_cond._build_elements()
         self.base_cond._build_differential_operator()
 
@@ -189,9 +186,9 @@ class FittingRoutine:
         """
         Build the conductivity object with the given parameters.
         """
-        band = copy(self.base_band)
         cond = deepcopy(self.base_cond)
-        params = self.init_params.copy()
+        band = cond.band
+        params = deepcopy(self.init_params)
         params.update(_build_params_from_flat(param_keys, param_values))
         new_params = easy_params(params)
         update_band = False
