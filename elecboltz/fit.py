@@ -5,7 +5,7 @@ from .params import easy_params
 import numpy as np
 import scipy.optimize
 import json
-import datetime
+from datetime import datetime
 from time import time
 from copy import copy, deepcopy
 from multiprocessing import cpu_count
@@ -61,16 +61,11 @@ class FittingRoutine:
         The timestamp of the last fitting iteration.
     total_time : float
         The total time spent on the fitting routine.
-    base_band : BandStructure
-        The base band structure object.
-    base_cond : Conductivity
-        The base conductivity object.
-
     """
     def __init__(self, init_params: Mapping, save_path: str = None,
                  save_label: str = "fit", update_keys: Collection[str] = None,
                  print_log: bool = True):
-        self.params = init_params
+        self.init_params = init_params
         self.save_path = save_path
         self.save_label = save_label
         self.update_keys = update_keys
@@ -78,12 +73,6 @@ class FittingRoutine:
         self.iteration = 0
         self.last_time = time()
         self.total_time = 0.0
-        self.base_band = BandStructure(**easy_params(init_params))
-        self.base_band.discretize()
-        self.base_cond = Conductivity(
-            self.base_band, **easy_params(init_params))
-        self.base_cond._build_elements()
-        self.base_cond._build_differential_operator()
 
     def residual(self, param_values: Sequence, param_keys: Sequence[str],
                  x_data: Mapping[str, Sequence],
@@ -112,12 +101,15 @@ class FittingRoutine:
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
 
         y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
-        for i in range(len(x_data[0])):
+        for i in range(len(list(x_data.values())[0])):
             for label, x in x_data.items():
                 setattr(cond, label, x[i])
-            cond.calculate(sorted(set(y_label_i)), sorted(set(y_label_j)))
-            if 'rho' in name:
+            if 'rho' in name.values():
+                cond.calculate()
                 rho = np.linalg.inv(cond.sigma)
+            else:
+                cond.calculate(sorted(set(y_label_i.values())),
+                               sorted(set(y_label_j.values())))
             for label in y_data:
                 if name[label] == 'sigma':
                     y_fit[label][i] = cond.sigma[y_label_i[label],
@@ -158,7 +150,6 @@ class FittingRoutine:
         if self.update_keys is not None:
             update_params = _build_params_from_flat(
                 self.update_keys, param_values)
-            self.params.update(update_params)
             log_message += pformat(update_params) + "\n"
         else:
             log_message += pformat(param_values) + "\n"
@@ -189,19 +180,23 @@ class FittingRoutine:
         """
         band = copy(self.base_band)
         cond = deepcopy(self.base_cond)
-        params = _build_params_from_flat(param_values, param_keys)
+        params = self.init_params.copy()
+        params.update(_build_params_from_flat(param_keys, param_values))
         new_params = easy_params(params)
         update_band = False
         for key, value in new_params.items():
             if key == 'band_params':
-                update_band = True
                 for band_key, band_value in value.items():
-                    band.band_params[band_key] = band_value
+                    if band.band_params[band_key] != band_value:
+                        update_band = True
+                        band.band_params[band_key] = band_value
             if hasattr(band, key):
-                update_band = True
-                setattr(band, key, value)
+                if np.any(getattr(band, key) != value):
+                    update_band = True
+                    setattr(band, key, value)
             if hasattr(cond, key):
-                setattr(cond, key, value)
+                if np.any(getattr(cond, key) != value):
+                    setattr(cond, key, value)
         if update_band:
             band.discretize()
             cond.band = band
@@ -388,6 +383,7 @@ def _build_params_from_flat(params_keys, params_values):
         and the values are the corresponding values from ``params_values``.
     """
     params = dict()
+    params_values = list(params_values)
     for key in params_keys:
         key_parts = key.split('.')
         key = key_parts[0]
