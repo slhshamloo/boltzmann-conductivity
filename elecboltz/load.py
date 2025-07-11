@@ -198,15 +198,14 @@ class Loader:
         """
         self.x_data_interpolated = defaultdict(list)
         self.y_data_interpolated = defaultdict(list)
-        for i in range(len(self.x_data_raw[self.x_vary_label])):
-            for x in self.x_data_raw[self.x_vary_label]:
-                x_min = min(x[i]) if x_min is None else x_min
-                x_max = max(x[i]) if x_max is None else x_max
-                x_new = np.linspace(x_min, x_max, n_points)
-                self.x_data_interpolated[self.x_vary_label].append(x_new)
-                for y_label, y in self.y_data_raw.items():
-                    self.y_data_interpolated[y_label].append(
-                        np.interp(x_new, x[i], y[i]))
+        for i, x in enumerate(self.x_data_raw[self.x_vary_label]):
+            x_min = min(x) if x_min is None else x_min
+            x_max = max(x) if x_max is None else x_max
+            x_new = np.linspace(x_min, x_max, n_points)
+            self.x_data_interpolated[self.x_vary_label].append(x_new)
+            for y_label, y in self.y_data_raw.items():
+                self.y_data_interpolated[y_label].append(
+                    np.interp(x_new, x, y[i]))
         self.process_data()
 
     def process_data(self):
@@ -228,12 +227,16 @@ class Loader:
             x_vary_label = self.x_vary_label
         all_labels = x_vary_label + list(self.x_search.keys())
         x_data_stitched = {label: [] for label in all_labels}
+        if self.x_data_interpolated != {}:
+            x_separate = self.x_data_interpolated
+        else:
+            x_separate = self.x_data_raw
         for label in self.x_search:
             for i, value in enumerate(self.x_search[label]):
                 x_data_stitched[label].append(
-                    np.full(len(self.x_data_raw[x_vary_label[0]][i]), value))
+                    np.full(len(x_separate[x_vary_label[0]][i]), value))
         for label in x_vary_label:
-            for i, data in enumerate(self.x_data_raw[label]):
+            for i, data in enumerate(x_separate[label]):
                 while len(x_data_stitched[label]) <= i:
                     x_data_stitched[label].append(np.array([]))
                 x_data_stitched[label][i] = data
