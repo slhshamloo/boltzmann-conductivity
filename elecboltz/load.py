@@ -230,7 +230,11 @@ class Loader:
         """
         self.x_data = defaultdict(list)
         self.y_data = defaultdict(list)
-        for label, data in self.y_data_raw.items():
+        if self.y_data_interpolated != {}:
+            y_separate = self.y_data_interpolated
+        else:
+            y_separate = self.y_data_raw
+        for label, data in y_separate.items():
             self.y_data[label] = np.concatenate(data)
 
         if isinstance(self.x_vary_label, str):
