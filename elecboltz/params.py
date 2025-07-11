@@ -1,4 +1,5 @@
 from .scattering import build_scattering_function
+from copy import deepcopy
 
 
 def easy_params(params):
@@ -33,7 +34,7 @@ def easy_params(params):
     dict
         Parameters compatible with the classes in the package.
     """
-    new_params = params.copy()
+    new_params = deepcopy(params)
     # unit cell dimensions indicated by axis names
     if 'a' in params:
         unit_cell = [params['a'], params['a'], params['a']]
