@@ -110,6 +110,24 @@ class BandStructure:
         The names of the unit cell axes.
     wavevector_names : str or Sequence[str]
         The names of the wavevector components.
+    
+    Methods
+    -------
+    discretize()
+        Discretize the Fermi surface using the marching cubes algorithm
+        and apply periodic boundary conditions.
+    energy_func(kx, ky, kz)
+        Calculate the energy at the given k-point in milli eV.
+    velocity_func(kx, ky, kz)
+        Calculate the velocity at the given k-point in m/s.
+    calculate_filling_fraction(depth: int = 7) -> float
+        Calculate the filling fraction of the material by integrating
+        the volume in reciprocal space below the Fermi level.
+    calculate_electron_density(depth: int = 7) -> float
+        Calculate the electron density of the material by dividing the
+        filling fraction by the volume of the unit cell in real space.
+    calculate_mass()
+        Calculate the effective mass of the charge carriers.
     """
     def __init__(
             self, dispersion: str, chemical_potential: float,
@@ -159,6 +177,20 @@ class BandStructure:
                     isinstance(i, bool) for i in value):
                 value = [i for i, v in enumerate(value) if v]
         super().__setattr__(name, value)
+    
+    def __getstate__(self):
+        """Get the state of the object for pickling."""
+        state = self.__dict__.copy()
+        # remove the full energy and velocity functions
+        state['_energy_func_full'] = None
+        state['_velocity_funcs_full'] = None
+        return state
+    
+    def __setstate__(self, state):
+        """Set the state of the object after unpickling."""
+        self.__dict__.update(state)
+        # re-parse the dispersion relation to restore the full functions
+        self._parse_dispersion()
     
     def discretize(self):
         """Discretize the Fermi surface.
