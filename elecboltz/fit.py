@@ -61,6 +61,10 @@ class FittingRoutine:
         The timestamp of the last fitting iteration.
     total_time : float
         The total time spent on the fitting routine.
+    base_band : BandStructure
+        The base band structure object.
+    base_cond : Conductivity
+        The base conductivity object.
     """
     def __init__(self, init_params: Mapping, save_path: str = None,
                  save_label: str = "fit", update_keys: Collection[str] = None,
@@ -73,6 +77,12 @@ class FittingRoutine:
         self.iteration = 0
         self.last_time = time()
         self.total_time = 0.0
+        self.base_band = BandStructure(**easy_params(init_params))
+        self.base_band.discretize()
+        self.base_cond = Conductivity(
+            self.base_band, **easy_params(init_params))
+        self.base_cond._build_elements()
+        self.base_cond._build_differential_operator()
 
     def residual(self, param_values: Sequence, param_keys: Sequence[str],
                  x_data: Mapping[str, Sequence],
