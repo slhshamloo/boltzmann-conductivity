@@ -101,7 +101,10 @@ class Loader:
     def load(self, folder_path: str = '.', prefix: str = '',
              recursive: bool = True,
              x_columns: Union[Sequence[int], Sequence[str]] = None,
-             y_columns: Union[Sequence[int], Sequence[str]] = None, **kwargs):
+             y_columns: Union[Sequence[int], Sequence[str]] = None,
+             x_units: Union[Sequence[float], float] = 1.0,
+             y_units: Union[Sequence[float], float] = 1.0,
+             **kwargs):
         """Load the data from files in the specified folder.
 
         The function automatically determines which files to load based
@@ -135,8 +138,16 @@ class Loader:
             to load. If a sequence of strings, it specifies the column
             names (headers) to load. If not provided, all columns except
             the first one (independent variable) are loaded.
-        interpolate : bool, optional
-            If True, interpolate the data before post processing.
+        x_units : Union[Sequence[float], float], optional
+            Units for the independent variable(s). If a single float is
+            provided, it is applied to all independent variables. If a
+            sequence is provided, it must match the number of independent
+            variables.
+        y_units : Union[Sequence[float], float], optional
+            Units for the dependent variable(s). If a single float is
+            provided, it is applied to all dependent variables. If a
+            sequence is provided, it must match the number of dependent
+            variables.
         **kwargs : dict, optional
             Additional keyword arguments to pass to ``numpy.loadtxt``.
         """
@@ -170,7 +181,8 @@ class Loader:
                     first_label = list(self.x_data_raw.keys())[0]
                     idx = len(self.x_data_raw[first_label])
 
-            self._extract_data(file, idx, x_columns, y_columns, **kwargs)
+            self._extract_data(file, idx, x_columns, y_columns,
+                               x_units, y_units, **kwargs)
         self.process_data()
 
     def interpolate(self, n_points: int = 50, x_min: float = None,
@@ -258,7 +270,8 @@ class Loader:
                 np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi),
                 np.cos(theta)))}
 
-    def _extract_data(self, file, idx, x_columns, y_columns, **kwargs):
+    def _extract_data(self, file, idx, x_columns, y_columns,
+                      x_units, y_units, **kwargs):
         x_columns, y_columns = self._extract_xy_labels(
             file, x_columns, y_columns, **kwargs)
         data = np.loadtxt(file, **kwargs)
@@ -272,15 +285,19 @@ class Loader:
             y_label = [self.y_label]
         else:
             y_label = self.y_label
+        if isinstance(x_units, (int, float)):
+            x_units = [x_units] * len(x_columns)
+        if isinstance(y_units, (int, float)):
+            y_units = [y_units] * len(y_columns)
 
-        for label, col in zip(x_vary_label, x_columns):
+        for label, col, unit in zip(x_vary_label, x_columns, x_units):
             while len(self.x_data_raw[label]) <= idx:
                 self.x_data_raw[label].append(np.array([]))
-            self.x_data_raw[label][idx] = data[:, col]
-        for label, col in zip(y_label, y_columns):
+            self.x_data_raw[label][idx] = unit * data[:, col]
+        for label, col, unit in zip(y_label, y_columns, y_units):
             while len(self.y_data_raw[label]) <= idx:
                 self.y_data_raw[label].append(np.array([]))
-            self.y_data_raw[label][idx] = data[:, col]
+            self.y_data_raw[label][idx] = unit * data[:, col]
 
     def _extract_xy_labels(self, file, x_columns, y_columns, **kwargs):
         with open(file, 'r') as f:
