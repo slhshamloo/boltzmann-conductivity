@@ -131,7 +131,6 @@ class FittingRoutine:
                 y_fit[label] /= y_normalize[label]
 
         y_fit = np.concatenate(list(y_fit.values()))
-        print(np.min(y_fit), np.max(y_fit))
         y_data = np.concatenate(list(y_data.values()))
         if squared:
             return np.mean(np.abs(y_fit-y_data) ** 2) # abs for complex data
