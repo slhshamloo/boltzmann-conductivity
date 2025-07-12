@@ -186,7 +186,8 @@ class Loader:
         self.process_data()
 
     def interpolate(self, n_points: int = 50, x_min: float = None,
-                    x_max: float = None):
+                    x_max: float = None, x_normalize: float = None,
+                    x_shift: float = None):
         """
         Interpolate the loaded data to the specified number of points.
 
@@ -207,6 +208,13 @@ class Loader:
             (varying inside the files). If not provided, it is set to
             the maximum value of the independent variable in the loaded
             data.
+        x_shift : float, optional
+            If provided, the data will be shifted by the value at this
+            point.
+        x_normalize : float, optional
+            If provided, the data will be normalized by the value at
+            this point. Note that shifts are applied before
+            normalization.
         """
         self.x_data_interpolated = defaultdict(list)
         self.y_data_interpolated = defaultdict(list)
@@ -218,6 +226,13 @@ class Loader:
             for y_label, y in self.y_data_raw.items():
                 self.y_data_interpolated[y_label].append(
                     np.interp(x_new, x, y[i]))
+                if x_shift is not None:
+                    y_shift = np.interp(x_shift, x, y[i])
+                    self.y_data_interpolated[y_label][-1] -= y_shift
+                if x_normalize is not None:
+                    y_norm = np.interp(x_normalize, x, y[i])
+                    self.y_data_interpolated[y_label][-1] /= y_norm
+
         self.process_data()
 
     def process_data(self):

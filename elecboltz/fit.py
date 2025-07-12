@@ -11,8 +11,6 @@ from copy import deepcopy
 from multiprocessing import cpu_count
 from pathlib import Path
 from pprint import pformat
-
-from typing import Any
 from collections.abc import Sequence, Collection, Mapping
 
 
@@ -81,9 +79,11 @@ class FittingRoutine:
         self.base_cond._build_elements()
         self.base_cond._build_differential_operator()
 
-    def residual(self, param_values: Sequence, param_keys: Sequence[str],
-                 x_data: Mapping[str, Sequence],
-                 y_data: Mapping[str, Sequence], squared: bool = True):
+    def residual(
+            self, param_values: Sequence, param_keys: Sequence[str],
+            x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
+            x_shift: Mapping = None, x_normalize: Mapping = None,
+            squared: bool = True):
         """Compute the residual for the given parameters and data.
 
         Parameters
@@ -100,6 +100,13 @@ class FittingRoutine:
             The dependent variable data (e.g. conductivity). The name
             of the variable is mapped to the data, e.g.
             ``{'sigma_xx': [1.1, 2.4, 3.8]}``.
+        x_shift : Mapping, optional
+            If provided, the y values will be shifted by the y value at
+            this x point.
+        x_normalize : Mapping, optional
+            If provided, the y values will be normalized by the y value
+            at this x point.  Note that shifts are applied before
+            normalization.
         squared : bool, optional
             If True, the residual is computed as the mean squared error.
             If False, it returns the mean absolute difference.
@@ -109,24 +116,22 @@ class FittingRoutine:
 
         y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
         for i in range(len(list(x_data.values())[0])):
-            for label, x in x_data.items():
-                setattr(cond, label, x[i])
-            if 'rho' in name.values():
-                cond.calculate()
-                rho = np.linalg.inv(cond.sigma)
-            else:
-                cond.calculate(sorted(set(y_label_i.values())),
-                               sorted(set(y_label_j.values())))
-            for label in y_data:
-                if name[label] == 'sigma':
-                    y_fit[label][i] = cond.sigma[y_label_i[label],
-                                                 y_label_j[label]]
-                elif name[label] == 'rho':
-                    y_fit[label][i] = rho[y_label_i[label], y_label_j[label]]
-                else:
-                    raise ValueError(f"Unknown y_data key: {name[label]}")
+            x = {label: x[i] for label, x in x_data.items()}
+            y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+            for label in y_fit:
+                y_fit[label][i] = y[label]
+        if x_shift is not None:
+            y_shift = _get_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
+            for label in y_fit:
+                y_fit[label] -= y_shift[label]
+        if x_normalize is not None:
+            y_normalize = _get_y(
+                cond, x_normalize, y_data, name, y_label_i, y_label_j)
+            for label in y_fit:
+                y_fit[label] /= y_normalize[label]
 
         y_fit = np.concatenate(list(y_fit.values()))
+        print(np.min(y_fit), np.max(y_fit))
         y_data = np.concatenate(list(y_data.values()))
         if squared:
             return np.mean(np.abs(y_fit-y_data) ** 2) # abs for complex data
@@ -172,7 +177,6 @@ class FittingRoutine:
             log_message += f"{int(minutes)} minutes "
         log_message += f"{seconds:.1f} seconds\n"
 
-        
         if self.print_log:
             print(log_message)
         if self.save_path is not None:
@@ -220,9 +224,9 @@ class FittingRoutine:
         return name, i, j
 
 
-def fit_model(x_data: Mapping[str, Sequence],
-              y_data: Mapping[str, Sequence],
+def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
               init_params: Mapping, bounds: Mapping,
+              x_shift: Mapping = None, x_normalize: Mapping = None,
               save_path: str = None, save_label: str = None,
               worker_percentage: float = 0.0, **kwargs):
     """Convenience function to set up and run a fitting routine.
@@ -253,6 +257,17 @@ def fit_model(x_data: Mapping[str, Sequence],
         structure as ``init_params``, but only containing the variables
         that are to be fitted, and their values in the mapping must be
         a collection of the form (min, max).
+    x_shift : Mapping, optional
+        If provided, the y values will be shifted by the y value at
+        this x point. The mapping must have the same structure as
+        ``x_data``, but with single values instead of arrays as
+        the values.
+    x_normalize : Mapping, optional
+        If provided, the y values will be normalized by the y value
+        at this x point. Note that shifting will always be done
+        before normalization. The mapping must have the same structure
+        as ``x_data``, but with single values instead of arrays as
+        the values. Note that shifts are applied before normalization.
     save_path : str, optional
         The directory where the fitting results will be saved.
         If not provided, results will not be saved.
@@ -294,7 +309,7 @@ def fit_model(x_data: Mapping[str, Sequence],
                             update_keys=update_keys)
     result = scipy.optimize.differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
-        args=(update_keys, x_data, y_data), **kwargs)
+        args=(update_keys, x_data, y_data, x_shift, x_normalize), **kwargs)
     end_time = datetime.now()
 
     return _save_fit_result(
@@ -354,7 +369,7 @@ def _is_value_nested(value, bounds):
         return isinstance(value, Collection) and not isinstance(value, str)
 
 
-def _extract_flat_value(params: Mapping, flat_key: str) -> Any:
+def _extract_flat_value(params: Mapping, flat_key: str):
     """Extract value from a nested dictionary using a flattened key.
 
     Parameters
@@ -425,6 +440,26 @@ def _build_params_from_flat(params_keys, params_values):
             key = part
         level_params[key] = params_values.pop(0)
     return params
+
+
+def _get_y(cond, x_data, y_data, name, y_label_i, y_label_j):
+    y = {}
+    for label, x in x_data.items():
+        setattr(cond, label, x)
+    if 'rho' in name.values():
+        cond.calculate()
+        rho = np.linalg.inv(cond.sigma)
+    else:
+        cond.calculate(sorted(set(y_label_i.values())),
+                       sorted(set(y_label_j.values())))
+    for label in y_data:
+        if name[label] == 'sigma':
+            y[label] = cond.sigma[y_label_i[label], y_label_j[label]]
+        elif name[label] == 'rho':
+            y[label] = rho[y_label_i[label], y_label_j[label]]
+        else:
+            raise ValueError(f"Unknown y_data key: {name[label]}")
+    return y
 
 
 def _save_fit_result(result, init_params, update_keys, begin_time,
