@@ -192,7 +192,8 @@ class FittingRoutine:
         cond = deepcopy(self.base_cond)
         band = cond.band
         params = deepcopy(self.init_params)
-        params.update(_build_params_from_flat(param_keys, param_values))
+        for key, value in zip(param_keys, param_values):
+            _update_flat_value(params, key, value)
         new_params = easy_params(params)
         update_band = False
         for key, value in new_params.items():
@@ -369,22 +370,6 @@ def _is_value_nested(value, bounds):
 
 
 def _extract_flat_value(params: Mapping, flat_key: str):
-    """Extract value from a nested dictionary using a flattened key.
-
-    Parameters
-    ----------
-    params : Mapping
-        The nested dictionary from which to extract values.
-    flat_key : str
-        The "flattened" key of the parameter. see ``extract_flat_keys``
-        for more information.
-
-    Returns
-    -------
-    Any
-        The value corresponding to the flattened key in the nested
-        dictionary, or None if the key does not exist.
-    """
     value = params
     key_parts = flat_key.split('.')
     while key_parts:
@@ -399,26 +384,46 @@ def _extract_flat_value(params: Mapping, flat_key: str):
     return value
 
 
-def _build_params_from_flat(params_keys, params_values):
+def _update_flat_value(params: Mapping, flat_key: str, value):
+    level_params = params
+    key_parts = flat_key.split('.')
+    while len(key_parts) > 1:
+        key = key_parts.pop(0)
+        if str.isnumeric(key):
+            key = int(key)
+            if key >= len(level_params):
+                return
+        elif key not in level_params:
+            return
+        level_params = level_params[key]
+    key = key_parts[0]
+    if str.isnumeric(key):
+        key = int(key)
+        if key >= len(level_params):
+            return
+    level_params[key] = value
+
+
+def _build_params_from_flat(param_keys, param_values):
     """Build a nested dictionary from flattened keys and values.
 
     Parameters
     ----------
-    params_keys : Collection[str]
+    param_keys : Collection[str]
         The "flattened" keys of the parameters. See ``extract_keys``
         for more information.
-    params_values : Sequence
-        The values corresponding to the keys in ``params_keys``.
+    param_values : Sequence
+        The values corresponding to the keys in ``param_keys``.
 
     Returns
     -------
     dict
         A nested dictionary where the keys are the flattened keys
-        and the values are the corresponding values from ``params_values``.
+        and the values are the corresponding values from ``param_values``.
     """
     params = dict()
-    params_values = list(params_values)
-    for key in params_keys:
+    param_values = list(param_values)
+    for key in param_keys:
         key_parts = key.split('.')
         key = key_parts[0]
         level_params = params
@@ -437,7 +442,7 @@ def _build_params_from_flat(params_keys, params_values):
                 level_params[key] = dict()
             level_params = level_params[key]
             key = part
-        level_params[key] = params_values.pop(0)
+        level_params[key] = param_values.pop(0)
     return params
 
 
