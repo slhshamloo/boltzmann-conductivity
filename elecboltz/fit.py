@@ -3,7 +3,7 @@ from .conductivity import Conductivity
 from .params import easy_params
 
 import numpy as np
-import scipy.optimize
+from scipy.optimize import differential_evolution
 import json
 from datetime import datetime
 from time import time
@@ -11,6 +11,7 @@ from copy import deepcopy
 from multiprocessing import cpu_count
 from pathlib import Path
 from pprint import pformat
+from typing import Callable
 from collections.abc import Sequence, Collection, Mapping
 
 
@@ -59,8 +60,6 @@ class FittingRoutine:
         The timestamp of the last fitting iteration.
     total_time : float
         The total time spent on the fitting routine.
-    base_cond : Conductivity
-        The base conductivity object.
     """
     def __init__(self, init_params: Mapping, save_path: str = None,
                  save_label: str = "fit", update_keys: Collection[str] = None,
@@ -73,17 +72,13 @@ class FittingRoutine:
         self.iteration = 0
         self.last_time = time()
         self.total_time = 0.0
-        band = BandStructure(**easy_params(init_params))
-        band.discretize()
-        self.base_cond = Conductivity(band, **easy_params(init_params))
-        self.base_cond._build_elements()
-        self.base_cond._build_differential_operator()
 
     def residual(
             self, param_values: Sequence, param_keys: Sequence[str],
             x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
             x_shift: Mapping = None, x_normalize: Mapping = None,
-            squared: bool = True):
+            cond_obj: Conductivity = None, loss: Callable =
+                lambda y_fit, y_data: np.mean(np.abs(y_fit - y_data))):
         """Compute the residual for the given parameters and data.
 
         Parameters
@@ -110,8 +105,11 @@ class FittingRoutine:
         squared : bool, optional
             If True, the residual is computed as the mean squared error.
             If False, it returns the mean absolute difference.
+        cond_obj : Conductivity, optional
+            If provided, the fitter will try to salvage the calculations
+            already done from that object.
         """
-        cond = self._build_obj(param_values, param_keys)
+        cond = self._build_obj(param_values, param_keys, cond_obj)
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
 
         y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
@@ -132,10 +130,7 @@ class FittingRoutine:
 
         y_fit = np.concatenate(list(y_fit.values()))
         y_data = np.concatenate(list(y_data.values()))
-        if squared:
-            return np.mean(np.abs(y_fit-y_data) ** 2) # abs for complex data
-        else:
-            return np.mean(np.abs(y_fit-y_data))
+        return loss(y_fit, y_data)
 
     def log(self, param_values, convergence: float = None):
         """Log the current fitting iteration and parameters.
@@ -184,18 +179,23 @@ class FittingRoutine:
             with open(path, mode) as log_file:
                 log_file.write(log_message)
 
-    def _build_obj(self, param_values: Sequence,
-                   param_keys: Sequence[str]):
+    def _build_obj(self, param_values: Sequence, param_keys: Sequence[str],
+                   cond: Conductivity = None) -> Conductivity:
         """
         Build the conductivity object with the given parameters.
         """
-        cond = deepcopy(self.base_cond)
-        band = cond.band
+        if cond is None:
+            band = BandStructure(**easy_params(self.init_params))
+            cond = Conductivity(band, **easy_params(self.init_params))
+            update_band = True
+        else:
+            cond = deepcopy(cond)
+            band = cond.band
+            update_band = False
         params = deepcopy(self.init_params)
         for key, value in zip(param_keys, param_values):
             _update_flat_value(params, key, value)
         new_params = easy_params(params)
-        update_band = False
         for key, value in new_params.items():
             if key == 'band_params':
                 for band_key, band_value in value.items():
@@ -305,16 +305,27 @@ def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
             x0[i] = (x_min + x_max) / 2
 
     begin_time = datetime.now()
+    cond = _prebuild_cond(init_params)
     fitter = FittingRoutine(init_params, save_path, save_label,
                             update_keys=update_keys)
-    result = scipy.optimize.differential_evolution(
+    result = differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
-        args=(update_keys, x_data, y_data, x_shift, x_normalize), **kwargs)
+        args=(update_keys, x_data, y_data, x_shift, x_normalize, cond),
+        **kwargs)
     end_time = datetime.now()
 
     return _save_fit_result(
         result, init_params, update_keys, begin_time, end_time,
         save_path, save_label)
+
+
+def _prebuild_cond(init_params):
+    band = BandStructure(**easy_params(init_params))
+    band.discretize()
+    cond = Conductivity(band, **easy_params(init_params))
+    cond._build_elements()
+    cond._build_differential_operator()
+    return cond
 
 
 def _extract_flat_keys(params, bounds=False):
