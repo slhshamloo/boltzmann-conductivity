@@ -163,7 +163,7 @@ class Loader:
             for label, value in label_map.items():
                 if self.save_new_labels and label not in self.x_search:
                     self.x_search[label] = []
-                if self.save_new_values and value not in self.x_search[label]:
+                if self.save_new_values:
                     self.x_search[label].append(value)
 
             if self.x_search != {}:
@@ -173,7 +173,7 @@ class Loader:
                            for label in self.x_search):
                     continue
                 first_label = list(self.x_search.keys())[0]
-                idx = self.x_search[first_label].index(label_map[first_label])
+                idx = len(self.x_search[first_label]) - 1
             else:
                 if self.x_data_raw == {}:
                     idx = 0
