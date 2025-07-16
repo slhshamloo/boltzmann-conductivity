@@ -11,7 +11,7 @@ from copy import deepcopy
 from multiprocessing import cpu_count
 from pathlib import Path
 from pprint import pformat
-from typing import Callable
+from typing import Union, Callable
 from collections.abc import Sequence, Collection, Mapping
 
 
@@ -75,11 +75,13 @@ class FittingRoutine:
 
     def residual(
             self, param_values: Sequence, param_keys: Sequence[str],
-            x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
-            x_shift: Mapping = None, x_normalize: Mapping = None,
-            y_shift: Mapping = None, y_normalize: Mapping = None,
-            cond_obj: Conductivity = None, loss: Callable =
-                lambda y_fit, y_data: np.mean(np.abs(y_fit - y_data))):
+            x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
+            y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
+            multi_params: Collection = [], x_shift: Mapping = None,
+            x_normalize: Mapping = None, y_shift: Mapping = None,
+            y_normalize: Mapping = None, cond_obj: Conductivity = None,
+            loss: Callable = lambda y_fit, y_data: np.mean(
+                np.abs(y_fit - y_data))):
         """Compute the residual for the given parameters and data.
 
         Parameters
@@ -87,15 +89,38 @@ class FittingRoutine:
         param_values : Sequence
             The values of the parameters to update.
         param_keys : Sequence[str]
-            The keys of the parameters to update.
-        x_data : Mapping[str, Sequence]
+            The "flat keys of the parameters to update.
+        x_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
             The independent variable data (e.g. field). The name of the
             variable is mapped to the data, e.g.
-            ``{'field': [0, 1, 2]}``.
-        y_data : Mapping[str, Sequence]
-            The dependent variable data (e.g. conductivity). The name
-            of the variable is mapped to the data, e.g.
-            ``{'sigma_xx': [1.1, 2.4, 3.8]}``.
+            ``{'field': [[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
+            In case of nonempty ``multi_params``, the value must be a
+            collection of sequences, where each sequence corresponds to
+            a different parameter to be fitted,
+            e.g. ``{'field': [[0, 1, 2], [0, 1, 2]]}``.
+        y_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
+            The dependent variable data (e.g. conductivity). The name of
+            the variable is mapped to the data, e.g.
+            ``{'sigma_xx': [1.1, 2.4, 3.8]}``. The name of each variable
+            must start with "sigma" or "rho" (for conductivity or
+            resistivity, respectively), and you can add a suffix to
+            specify the component (e.g. ``"sigma_xx"``, ``"rho_xy"``).
+            In case of nonempty ``multi_params``, the value must be a
+            collection of sequences, where each sequence corresponds to
+            a different parameter to be fitted, e.g.
+            ``{'rho_zz': [[1.1, 2.4, 3.8], [1.2, 2.5, 3.9]]}``.
+        multi_params : Collection, optional
+            A collection of parameters that are to be fitted differently
+            for the different datasets in ``x_data`` and ``y_data``, if
+            there is more than one. To make it precise, each label must
+            be a dot-separated string, showing the "path" to the value
+            in the parameters dictionary, e.g. ``"band_params.mu"`` or
+            ``"scattering_params.nu.0"``. These parameters must
+            themselves be collections in the parameters dictionary,
+            showing the value for every dataset e.g. ``{'band_params':
+            {'mu': [0.1, 0.2, 0.3]}}`` in ``init_params`` or
+            ``{'band_params': {'mu': [(0.1, 0.9), (0.2, 0.8),
+            (0.3, 0.7)]}}`` in ``bounds``.
         x_shift : Mapping, optional
             If provided, the y values will be shifted by the y value at
             this x point.
@@ -116,33 +141,14 @@ class FittingRoutine:
             If provided, the fitter will try to salvage the calculations
             already done from that object.
         """
-        cond = self._build_obj(param_values, param_keys, cond_obj)
-        name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
-
-        y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
-        for i in range(len(list(x_data.values())[0])):
-            x = {label: x[i] for label, x in x_data.items()}
-            y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
-            for label in y_fit:
-                y_fit[label][i] = y[label]
-        if x_shift is not None:
-            y0 = _get_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
-            for label in y_fit:
-                y_fit[label] -= y0[label]
-            if y_shift is not None:
-                for label in y_fit:
-                    y_fit[label] += y_shift[label]
-        if x_normalize is not None:
-            y0 = _get_y(cond, x_normalize, y_data, name, y_label_i, y_label_j)
-            for label in y_fit:
-                y_fit[label] /= y0[label]
-            if y_normalize is not None:
-                for label in y_fit:
-                    y_fit[label] *= y_normalize[label]
-
-        y_fit = np.concatenate(list(y_fit.values()))
-        y_data = np.concatenate(list(y_data.values()))
-        return loss(y_fit, y_data)
+        if multi_params:
+            return self._calculate_multi(
+                param_values, param_keys, x_data, y_data, multi_params,
+                x_shift, x_normalize, y_shift, y_normalize, cond_obj, loss)
+        else:
+            return self._calculate_single(
+                param_values, param_keys, x_data, y_data,
+                x_shift, x_normalize, y_shift, y_normalize, cond_obj, loss)
 
     def log(self, param_values, convergence: float = None):
         """Log the current fitting iteration and parameters.
@@ -191,8 +197,85 @@ class FittingRoutine:
             with open(path, mode) as log_file:
                 log_file.write(log_message)
 
-    def _build_obj(self, param_values: Sequence, param_keys: Sequence[str],
-                   cond: Conductivity = None) -> Conductivity:
+    def _calculate_single(self, param_values, param_keys, x_data, y_data,
+                          x_shift, x_normalize, y_shift, y_normalize,
+                          cond_obj, loss):
+        params = deepcopy(self.init_params)
+        for key, value in zip(param_keys, param_values):
+            _update_flat_value(params, key, value)
+        params = easy_params(params)
+        cond = self._build_obj(params, cond_obj)
+
+        name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
+        y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
+        for i in range(len(list(x_data.values())[0])):
+            x = {label: x[i] for label, x in x_data.items()}
+            y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+            for label in y_fit:
+                y_fit[label][i] = y[label]
+        if x_shift is not None:
+            y0 = _get_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
+            for label in y_fit:
+                y_fit[label] -= y0[label]
+            if y_shift is not None:
+                for label in y_fit:
+                    y_fit[label] += y_shift[label]
+        if x_normalize is not None:
+            y0 = _get_y(cond, x_normalize, y_data, name, y_label_i, y_label_j)
+            for label in y_fit:
+                y_fit[label] /= y0[label]
+            if y_normalize is not None:
+                for label in y_fit:
+                    y_fit[label] *= y_normalize[label]
+
+        y_fit = np.concatenate(list(y_fit.values()))
+        y_data = np.concatenate(list(y_data.values()))
+        return loss(y_fit, y_data)
+    
+    def _calculate_multi(self, param_values, param_keys, x_data, y_data,
+                         multi_params, x_shift, x_normalize,
+                         y_shift, y_normalize, cond_obj, loss):
+        n_data_sets = len(list(x_data.values())[0])
+        total_loss = 0.0
+        name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
+        params = deepcopy(self.init_params)
+        for key, value in zip(param_keys, param_values):
+            _update_flat_value(params, key, value)
+        for i in range(n_data_sets):
+            y_fit = {label: np.zeros_like(y[i]) for label, y in y_data.items()}
+            params_data_set = deepcopy(params)
+            for multi_param in multi_params:
+                _update_flat_value(params_data_set, multi_param,
+                                   params[multi_param][i])
+            params_data_set = easy_params(params_data_set)
+            cond = self._build_obj(params_data_set, cond_obj)
+            for j in range(len(list(x_data.values())[0])):
+                x = {label: x[i][j] for label, x in x_data.items()}
+                y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+                for label in y_fit:
+                    y_fit[label][i][j] = y[label]
+            if x_shift is not None:
+                x = {label: x_shift[label][i] for label in x_shift}
+                y0 = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+                for label in y_fit:
+                    y_fit[label][i] -= y0[label]
+                if y_shift is not None:
+                    for label in y_fit:
+                        y_fit[label][i] += y_shift[label][i]
+            if x_normalize is not None:
+                x = {label: x_normalize[label][i] for label in x_normalize}
+                y0 = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+                for label in y_fit:
+                    y_fit[label][i] /= y0[label]
+                if y_normalize is not None:
+                    for label in y_fit:
+                        y_fit[label][i] *= y_normalize[label][i]
+            y_fit = np.concatenate(list(y_fit.values()))
+            y_data_set = np.concatenate([y[i] for y in y_data.values()])
+            total_loss += loss(y_fit, y_data_set) / n_data_sets
+        return total_loss
+
+    def _build_obj(self, params, cond):
         """
         Build the conductivity object with the given parameters.
         """
@@ -204,11 +287,7 @@ class FittingRoutine:
             cond = deepcopy(cond)
             band = cond.band
             update_band = False
-        params = deepcopy(self.init_params)
-        for key, value in zip(param_keys, param_values):
-            _update_flat_value(params, key, value)
-        new_params = easy_params(params)
-        for key, value in new_params.items():
+        for key, value in params.items():
             if key == 'band_params':
                 for band_key, band_value in value.items():
                     if band.band_params[band_key] != band_value:
@@ -236,9 +315,12 @@ class FittingRoutine:
         return name, i, j
 
 
-def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
+def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
+              y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               init_params: Mapping, bounds: Mapping,
+              multi_params: Collection[str] = [],
               x_shift: Mapping = None, x_normalize: Mapping = None,
+              y_shift: Mapping = None, y_normalize: Mapping = None,
               save_path: str = None, save_label: str = None,
               worker_percentage: float = 0.0, **kwargs):
     """Convenience function to set up and run a fitting routine.
@@ -250,16 +332,25 @@ def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
 
     Parameters
     ----------
-    x_data : Mapping[str, Sequence]
+    x_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
         The independent variable data (e.g. field). The name of the
-        variable is mapped to the data, e.g. ``{'field': [0, 1, 2]}``.
-    y_data : Mapping[str, Sequence]
+        variable is mapped to the data, e.g.
+        ``{'field': [[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
+        In case of nonempty ``multi_params``, the value must be a
+        collection of sequences, where each sequence corresponds to a
+        different parameter to be fitted,
+        e.g. ``{'field': [[0, 1, 2], [0, 1, 2]]}``.
+    y_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
         The dependent variable data (e.g. conductivity). The name of
         the variable is mapped to the data, e.g.
         ``{'sigma_xx': [1.1, 2.4, 3.8]}``. The name of each variable
         must start with "sigma" or "rho" (for conductivity or
         resistivity, respectively), and you can add a suffix to specify
-        the component (e.g. ``"sigma_xx"``, ``"rho_xy"``).
+        the component (e.g. ``"sigma_xx"``, ``"rho_xy"``). In case of
+        nonempty ``multi_params``, the value must be a collection of
+        sequences, where each sequence corresponds to a different
+        parameter to be fitted, e.g. ``{'rho_zz': [[1.1, 2.4, 3.8],
+        [1.2, 2.5, 3.9]]}``.
     init_params : Mapping
         Initial parameters for the fitting routine, and also other
         parameters for initiallizing the classes. This is passed through
@@ -269,6 +360,18 @@ def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
         structure as ``init_params``, but only containing the variables
         that are to be fitted, and their values in the mapping must be
         a collection of the form (min, max).
+    multi_params : Collection, optional
+        A collection of parameters that are to be fitted differently for
+        the different datasets in ``x_data`` and ``y_data``, if there is
+        more than one. To make it precise, each label must be a
+        dot-separated string, showing the "path" to the value in the
+        parameters dictionary, e.g. ``"band_params.mu"`` or
+        ``"scattering_params.nu.0"``. These parameters must themselves
+        be collections in the parameters dictionary, showing the value
+        for every dataset e.g.
+        ``{'band_params': {'mu': [0.1, 0.2, 0.3]}}`` in ``init_params``
+        or ``{'band_params': {'mu': [(0.1, 0.9), (0.2, 0.8),
+        (0.3, 0.7)]}}`` in ``bounds``.
     x_shift : Mapping, optional
         If provided, the y values will be shifted by the y value at
         this x point. The mapping must have the same structure as
@@ -280,6 +383,16 @@ def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
         before normalization. The mapping must have the same structure
         as ``x_data``, but with single values instead of arrays as
         the values. Note that shifts are applied before normalization.
+    y_shift : Mapping, optional
+        The y values will be normalized to this value (if
+        ``x_normalize`` is provided). The mapping must have the same
+        structure as ``y_data``, but with single values instead of
+        arrays as the values.
+    y_normalize : Mapping, optional
+        The y values will be shifted to this value (if ``x_shift`` is
+        provided). The mapping must have the same structure as
+        ``y_data``, but with single values instead of arrays as the
+        values.
     save_path : str, optional
         The directory where the fitting results will be saved.
         If not provided, results will not be saved.
@@ -322,7 +435,8 @@ def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
                             update_keys=update_keys)
     result = differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
-        args=(update_keys, x_data, y_data, x_shift, x_normalize, cond),
+        args=(update_keys, x_data, y_data, multi_params,
+              x_shift, x_normalize, y_shift, y_normalize, cond),
         **kwargs)
     end_time = datetime.now()
 
