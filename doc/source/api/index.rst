@@ -1,3 +1,5 @@
+.. _api:
+
 elecBoltz API reference
 =======================
 .. toctree::

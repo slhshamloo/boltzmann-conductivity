@@ -1,3 +1,5 @@
+.. _param:
+
 Convenience Parameter Setting
 =============================
 

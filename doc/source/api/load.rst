@@ -1,3 +1,5 @@
+.. _load:
+
 Convenience Loader
 ==================
 

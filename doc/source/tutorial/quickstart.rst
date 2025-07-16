@@ -46,8 +46,8 @@ Next, we can run the discretization to create the mesh used by the solver.
     band.discretize()
 
 Now we can create the conductivity calculator object. Let's just use a scattering rate of 1
-and a field of magnitude 1 in the z direction. Note that the scattering rate is in units of THz
-(or 1/ps) and the magnetic field is in units of Tesla.
+and a field of magnitude 1 in the z direction. Note that the scattering rate is in units of
+THz (or 1/ps) and the magnetic field is in units of Tesla.
 
 .. code-block:: python
 
@@ -90,6 +90,7 @@ you can have any arbitrary function as the scattering rate;
         band=band, scattering_rate=scattering_rate, field=(0, 0, 1.0))
 
 and even set a frequency for the fields, which gives you optical conductivity.
+
 .. code-block:: python
 
     conductivity = elecboltz.Conductivity(

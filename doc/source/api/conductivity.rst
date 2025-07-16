@@ -1,3 +1,5 @@
+.. _cond:
+
 Conductivity Calculator
 =======================
 
