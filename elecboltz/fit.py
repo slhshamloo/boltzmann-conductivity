@@ -77,6 +77,7 @@ class FittingRoutine:
             self, param_values: Sequence, param_keys: Sequence[str],
             x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
             x_shift: Mapping = None, x_normalize: Mapping = None,
+            y_shift: Mapping = None, y_normalize: Mapping = None,
             cond_obj: Conductivity = None, loss: Callable =
                 lambda y_fit, y_data: np.mean(np.abs(y_fit - y_data))):
         """Compute the residual for the given parameters and data.
@@ -102,6 +103,12 @@ class FittingRoutine:
             If provided, the y values will be normalized by the y value
             at this x point.  Note that shifts are applied before
             normalization.
+        y_shift : float, optional
+            The y values will be normalized to this value
+            (if ``x_normalize`` is provided).
+        y_normalize : float, optional
+            The y values will be shifted to this value (if ``x_shift``
+            is provided).
         squared : bool, optional
             If True, the residual is computed as the mean squared error.
             If False, it returns the mean absolute difference.
@@ -119,14 +126,19 @@ class FittingRoutine:
             for label in y_fit:
                 y_fit[label][i] = y[label]
         if x_shift is not None:
-            y_shift = _get_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
+            y0 = _get_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
             for label in y_fit:
-                y_fit[label] -= y_shift[label]
+                y_fit[label] -= y0[label]
+            if y_shift is not None:
+                for label in y_fit:
+                    y_fit[label] += y_shift[label]
         if x_normalize is not None:
-            y_normalize = _get_y(
-                cond, x_normalize, y_data, name, y_label_i, y_label_j)
+            y0 = _get_y(cond, x_normalize, y_data, name, y_label_i, y_label_j)
             for label in y_fit:
-                y_fit[label] /= y_normalize[label]
+                y_fit[label] /= y0[label]
+            if y_normalize is not None:
+                for label in y_fit:
+                    y_fit[label] *= y_normalize[label]
 
         y_fit = np.concatenate(list(y_fit.values()))
         y_data = np.concatenate(list(y_data.values()))
