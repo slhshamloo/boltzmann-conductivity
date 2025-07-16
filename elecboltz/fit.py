@@ -314,6 +314,7 @@ def fit_model(x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
         **kwargs)
     end_time = datetime.now()
 
+    print(result.message)
     return _save_fit_result(
         result, init_params, update_keys, begin_time, end_time,
         save_path, save_label)
@@ -481,7 +482,14 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
                      end_time, save_path, save_label):
     result = _result_to_serializable(result)
     result['fit_params'] = _build_params_from_flat(update_keys, result['x'])
+    result['residual'] = result['fun']
+    result['evaluations'] = result['nfev']
+    result['iterations'] = result['nit']
     result.pop('x')
+    result.pop('population')
+    result.pop('population_energies')
+    result.pop('fun')
+    result.pop('evalulations')
 
     result['init_params'] = _build_params_from_flat(
         update_keys, [_extract_flat_value(init_params, key)
@@ -499,7 +507,7 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
     if save_path is not None:
         path = Path(save_path) / f"{save_label}.json"
         with path.open('w') as f:
-            json.dump(result, f)
+            json.dump(result, f, indent=2)
     return result
 
 
