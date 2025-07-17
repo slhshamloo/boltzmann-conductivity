@@ -615,7 +615,8 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
     result.pop('population')
     result.pop('population_energies')
     result.pop('fun')
-    result.pop('evalulations')
+    result.pop('nfev')
+    result.pop('nit')
 
     result['init_params'] = _build_params_from_flat(
         update_keys, [_extract_flat_value(init_params, key)
