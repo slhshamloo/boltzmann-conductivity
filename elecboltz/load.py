@@ -295,12 +295,16 @@ class Loader:
 
         if self.split_by is not None:
             split_values = np.unique(np.array(self.x_search[self.split_by]))
-            separated_data = {label: [] for label in self.x_data}
+            x_split = {label: [] for label in self.x_data}
+            y_split = {label: [] for label in self.y_data}
             for value in split_values:
                 mask = self.x_data[self.split_by] == value
                 for label, data in self.x_data.items():
-                    separated_data[label].append(data[mask])
-            self.x_data = separated_data
+                    x_split[label].append(data[mask])
+                for label, data in self.y_data.items():
+                    y_split[label].append(data[mask])
+            self.x_data = x_split
+            self.y_data = y_split
 
         for label in self.x_data:
             if label in ['B', 'Bmag', 'Bamp', 'H', 'Hmag', 'Hamp']:
