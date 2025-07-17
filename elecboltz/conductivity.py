@@ -228,7 +228,7 @@ class Conductivity:
                     linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
         sigma_result = self._vhat_projections[:, i].T @ linear_solution
-        sigma_result *= e**2 / (4 * np.pi**3 * hbar)
+        sigma_result *= e**2 / (4 * np.pi**3 * hbar) / self.band.bz_ratio
 
         for idx_row, row in enumerate(i):
             for idx_col, col in enumerate(j):

@@ -82,6 +82,10 @@ class BandStructure:
         of the numbers in this collection must be equal to the number
         of atoms in the conventional unit cell specified by
         ``unit_cell``.
+    bz_ratio : float
+        The ratio of the volume of the domain in reciprocal space to
+        the volume of the Brillouin zone. This is used to scale the
+        results to the correct values (e.g. the conductivity).
     periodic : Sequence[int]
         The periodic axes.
     band_params : dict
@@ -114,7 +118,7 @@ class BandStructure:
     def __init__(
             self, dispersion: str, chemical_potential: float,
             unit_cell: Sequence[float], band_params: dict = {},
-            domain_size: Sequence[float] = [1.0, 1.0, 1.0],
+            domain_size: Sequence[float] = np.ones(3), bz_ratio: float = 1.0,
             periodic: Union[bool, Sequence[Union[int, bool]]] = True,
             axis_names: Union[Sequence[str], str] = ['a', 'b', 'c'],
             wavevector_names: Union[Sequence[str], str] = ['kx', 'ky', 'kz'],
@@ -126,6 +130,7 @@ class BandStructure:
         self.chemical_potential = chemical_potential
         self.unit_cell = unit_cell
         self.domain_size = domain_size
+        self.bz_ratio = bz_ratio
         self.periodic = periodic
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
@@ -227,7 +232,7 @@ class BandStructure:
                                 < self.chemical_potential),
             (-self._gvec[0], self._gvec[0], -self._gvec[1], self._gvec[1],
              -self._gvec[2], self._gvec[2]), depth=depth
-            ) / 8 / np.prod(self._gvec)
+            ) / 8 / np.prod(self._gvec) / self.bz_ratio
 
     def calculate_electron_density(self, depth: int = 7) -> float:
         """Calculate the electron density n_e of the material.
