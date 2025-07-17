@@ -29,17 +29,17 @@ class Loader:
         See ``elecboltz.fit.fit_model`` for details about the allowed
         labels. If None, will be inferred from the file contents
         (column headers).
+    split_by : str, optional
+        If provided, the processed data will be split into separate
+        sequences by this label. This is useful for fitting models that
+        require separate data sets for different values of a variable
+        (e.g. when fitting band parameters to different temperatures).
     save_new_labels : bool, optional
         If True, new labels found in the file names will be saved to
         ``x_search``.
     save_new_values : bool, optional
         If True, new values for existing labels in ``x_search`` will be
         added to the list of values for that label.
-    data_type : {'plain', 'admr'}, optional
-        Type of data to load. If ``'plain'``, no processing is done on
-        the data and the x_data is constructed directly from the
-        collected values. If ``'admr'``, the x_data is constructed
-        such that it contains the field vector at each index.
     
     Attributes
     ----------
@@ -72,14 +72,14 @@ class Loader:
     """
     def __init__(self, x_vary_label: Union[str, Sequence[str]] = None,
                  x_search: Mapping[str, Sequence[Union[int, float]]] = {},
-                 y_label: Sequence[str] = None, save_new_labels: bool = False,
-                 save_new_values: bool = False, data_type: str = 'admr'):
+                 y_label: Sequence[str] = None, split_by: str = None,
+                 save_new_labels: bool = False, save_new_values: bool = False):
         self.x_vary_label = x_vary_label
         self.x_search = x_search
         self.y_label = y_label
+        self.split_by = split_by
         self.save_new_labels = save_new_labels
         self.save_new_values = save_new_values
-        self.data_type = data_type
         self.x_data = defaultdict(list)
         self.y_data = defaultdict(list)
         self.x_data_raw = defaultdict(list)
@@ -253,7 +253,6 @@ class Loader:
                     y = np.interp(x_normalize, x, y[i])
                     self.y_data_interpolated[y_label][-1] /= y
                     self.y_data_interpolated[y_label][-1] *= y_normalize
-
         self.process_data()
 
     def process_data(self):
@@ -278,37 +277,40 @@ class Loader:
         else:
             x_vary_label = self.x_vary_label
         all_labels = x_vary_label + list(self.x_search.keys())
-        x_data_stitched = {label: [] for label in all_labels}
+        self.x_data = {label: [] for label in all_labels}
         if self.x_data_interpolated != {}:
             x_separate = self.x_data_interpolated
         else:
             x_separate = self.x_data_raw
+
         for label in self.x_search:
             for i, value in enumerate(self.x_search[label]):
-                x_data_stitched[label].append(
+                self.x_data[label].append(
                     np.full(len(x_separate[x_vary_label[0]][i]), value))
         for label in x_vary_label:
             for i, data in enumerate(x_separate[label]):
-                while len(x_data_stitched[label]) <= i:
-                    x_data_stitched[label].append(np.array([]))
-                x_data_stitched[label][i] = data
-        x_data_stitched = {label: np.concatenate(data)
-                           for label, data in x_data_stitched.items()}
-        if self.data_type == 'plain':
-            self.x_data = x_data_stitched
-        elif self.data_type == 'admr':
-            indexing_labels = dict()
-            for label in x_data_stitched:
-                if label in ['B', 'Bmag', 'Bamp', 'H', 'Hmag', 'Hamp']:
-                    indexing_labels['field'] = label
-                else:
-                    indexing_labels[label.lower()] = label
-            field = x_data_stitched[indexing_labels['field']]
-            phi = np.deg2rad(x_data_stitched[indexing_labels['phi']])
-            theta = np.deg2rad(x_data_stitched[indexing_labels['theta']])
-            self.x_data = {'field': field[:, None] * np.column_stack((
-                np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi),
-                np.cos(theta)))}
+                while len(self.x_data[label]) <= i:
+                    self.x_data[label].append(np.array([]))
+                self.x_data[label][i] = data
+
+        self.x_data = {label: np.concatenate(data)
+                       for label, data in self.x_data.items()}
+        if self.split_by is not None:
+            split_values = np.unique(np.array(self.x_search[self.split_by]))
+            separated_data = {label: [] for label in self.x_data}
+            for value in split_values:
+                mask = self.x_data[self.split_by] == value
+                for label, data in self.x_data.items():
+                    separated_data[label].append(data[mask])
+            self.x_data = separated_data
+
+        for label in self.x_data:
+            if label in ['B', 'Bmag', 'Bamp', 'H', 'Hmag', 'Hamp']:
+                self.x_data['Bamp'] = self.x_data.pop(label, None)
+            elif label in ['phi', 'Bphi', 'Hphi']:
+                self.x_data['Bphi'] = self.x_data.pop(label, None)
+            elif label in ['theta', 'Btheta', 'Htheta']:
+                self.x_data['Btheta'] = self.x_data.pop(label, None)
 
     def _extract_data(self, file, idx, x_columns, y_columns,
                       x_units, y_units, **kwargs):
