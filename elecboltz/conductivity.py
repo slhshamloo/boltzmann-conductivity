@@ -46,6 +46,15 @@ class Conductivity:
         the right-hand side might not be a vector. So, solvers that
         only work with vectors need to be adapted to solve each column
         of the right-hand side separately.
+    Bamp : float, optional
+        The amplitude of the magnetic field in units of Tesla. If
+        provided, it will be used to set the field.
+    Btheta : float, optional
+        The polar angle of the magnetic field in units of radians. If
+        provided, it will be used to set the field.
+    Bphi : float, optional
+        The azimuthal angle of the magnetic field in units of radians.
+        If provided, it will be used to set the field.
     
     Attributes
     ----------
@@ -90,7 +99,9 @@ class Conductivity:
             scattering_kernel: Union[Callable, None] = None,
             scattering_params: dict[str, Union[float, Sequence[float]]] = {},
             frequency: float = 0.0, correct_curvature: bool = True,
-            solver: Callable = scipy.sparse.linalg.spsolve, **kwargs):
+            solver: Callable = scipy.sparse.linalg.spsolve,
+            Bamp: float = None, Btheta: float = None, Bphi: float = None,
+            **kwargs):
         self.solver = solver
         self.correct_curvature = correct_curvature
         # avoid triggering setattr in the constructor
@@ -99,12 +110,8 @@ class Conductivity:
         super().__setattr__('scattering_kernel', scattering_kernel)
         super().__setattr__('scattering_params', scattering_params)
         super().__setattr__('frequency', frequency)
-        super().__setattr__('field', np.array(field))
-        self._field_magnitude = np.linalg.norm(field)
-        if self._field_magnitude != 0:
-            self._field_direction = field / self._field_magnitude
-        else:
-            self._field_direction = np.zeros(3)
+        self._field_direction = None
+        self.set_field(field, Bamp, Btheta, Bphi)
         self.sigma = np.zeros((3, 3))
         self._saved_solutions = [None, None, None]
         self._velocities = None
@@ -124,37 +131,61 @@ class Conductivity:
         self._saved_solutions = [None, None, None]
 
     def __setattr__(self, name, value):
+        super().__setattr__(name, value)
         if name == 'band':
             self.erase_memory()
         if name in ['frequency', 'scattering_rate',
                     'scattering_kernel', 'scattering_params']:
             self.erase_memory(elements=False, scattering=True,
                               derivative=False)
-        if name == 'field' and value is not None:
-            self.set_field(value)
-        super().__setattr__(name, value)
-    
-    def set_field(self, field):
+        if name in ['field', 'Bamp', 'Btheta', 'Bphi']:
+            self.erase_memory(elements=False, scattering=False,
+                              derivative=True)
+            if name == 'field':
+                super().__setattr__('Bamp', None)
+                super().__setattr__('Btheta', None)
+                super().__setattr__('Bphi', None)
+            self.set_field(
+                field=self.field, Bamp=self.Bamp,
+                Btheta=self.Btheta, Bphi=self.Bphi)
+
+    def set_field(self, field: Sequence[float] = np.zeros(3),
+                  Bamp: float = None, Btheta: float = None,
+                  Bphi: float = None):
+        if Bamp is not None:
+            Btheta = Btheta or 0.0
+            Bphi = Bphi or 0.0
+            field = [Bamp * np.sin(Btheta) * np.cos(Bphi),
+                     Bamp * np.sin(Btheta) * np.sin(Bphi),
+                     Bamp * np.cos(Btheta)]
         field = np.array(field)
         new_magnitude = np.linalg.norm(field)
         if new_magnitude != 0:
             new_direction = field / new_magnitude
         else:
             new_direction = np.zeros(3)
-        if np.all(self._field_direction == new_direction):
-            if self._derivative_term is not None:
-                self._derivative_term *= \
-                    new_magnitude / self._field_magnitude
-            if self._differential_operator is not None:
-                self._differential_operator = \
+        if self._field_direction is not None:
+            if np.all(self._field_direction == new_direction):
+                if self._derivative_term is not None:
+                    self._derivative_term *= \
+                        new_magnitude / self._field_magnitude
+                if self._differential_operator is not None:
+                    self._differential_operator = \
                     self._out_scattering - e/hbar*self._derivative_term
                 self._saved_solutions = [None, None, None]
-        else:
-            self.erase_memory(elements=False, scattering=False,
-                              derivative=True)
+            else:
+                self.erase_memory(elements=False, scattering=False,
+                                derivative=True)
         self._field_magnitude = new_magnitude
         self._field_direction = new_direction
+        if Bamp is None:
+            Bamp = new_magnitude
+            Btheta = np.arccos(new_direction[2])
+            Bphi = np.arctan2(new_direction[1], new_direction[0])
         super().__setattr__('field', field)
+        super().__setattr__('Bamp', Bamp)
+        super().__setattr__('Btheta', Btheta)
+        super().__setattr__('Bphi', Bphi)
 
     def calculate(self, i: Union[Sequence[int], int, None] = None,
                   j: Union[Sequence[int], int, None] = None
