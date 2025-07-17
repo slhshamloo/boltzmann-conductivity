@@ -1,5 +1,6 @@
 from .scattering import build_scattering_function
 from copy import deepcopy
+import json
 
 
 def easy_params(params):
@@ -7,22 +8,26 @@ def easy_params(params):
 
     List of convenience features:
 
-    * | Set unit cell dimensions with named parameters `a`, `b`, and
-      | `c`. If `b` or `c` are not given, they are assumed to be equal
-      | to `a`.
-    * Define an `energy_scale` which scales all energy parameters.
-    * | Set the chemical potential with `mu` in `band_params`. If `mu`
-      | is set in `band_params`, it is assumed the energy dispersion is
-      | shifted by the chemical potential, so the associated variable
-      | is set to 0.0 in the returned parameters.
-    * | Set the dispersion relation with a default tight-binding model.
-      | See `get_tight_binding_dispersion` for the list of parameters
+    * | Load parameters from the output of a fit from the path indicated
+      | by the ``load_fit`` parameter.
+    * | Set unit cell dimensions with named parameters ``a``, ``b``,
+      | and ``c``. If ``b`` or ``c`` are not given, they are assumed
+      | to be equal to ``a``.
+    * Define an ``energy_scale`` which scales all energy parameters.
+    * | Set the chemical potential with ``mu`` in ``band_params``. If
+      | ``mu`` is set in ``band_params``, it is assumed the energy
+      | dispersion is shifted by the chemical potential, so the
+      | associated variable is set to 0.0 in the returned parameters.
+    * | Set the dispersion relation with a default tight-binding model;
+      | If ``dispersion`` is not given, it is automatically generated
+      | from the ``band_params`` using ``get_tight_binding_dispersion``.
+      | See ``get_tight_binding_dispersion`` for the list of parameters
       | and the resulting expression.
     * | Build the scattering function using predefined
-      | `scattering_models` and the `scattering_params` associated with
-      | them. See `build_scattering_function` for supported scattering
-      | models and their parameters. `scattering_models` is assumed to
-      | be only one `isotropic` model if not specified.
+      | `scattering_models` and the ``scattering_params`` associated
+      | with them. See ``build_scattering_function`` for supported
+      | scattering models and their parameters. ``scattering_models``
+      | is assumed to be only one ``isotropic`` model if not specified.
 
     Parameters
     ----------
@@ -35,6 +40,12 @@ def easy_params(params):
         Parameters compatible with the classes in the package.
     """
     new_params = deepcopy(params)
+    # load parameters from a fit
+    if 'load_fit' in params:
+        with open(params['load_fit'], 'r') as f:
+            all_params = json.load(f)
+            new_params.update(all_params['fixed_params'])
+            new_params.update(all_params['fit_params'])
     # unit cell dimensions indicated by axis names
     if 'a' in params:
         unit_cell = [params['a'], params['a'], params['a']]
