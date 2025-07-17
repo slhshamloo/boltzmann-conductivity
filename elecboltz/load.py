@@ -276,8 +276,6 @@ class Loader:
             x_vary_label = [self.x_vary_label]
         else:
             x_vary_label = self.x_vary_label
-        all_labels = x_vary_label + list(self.x_search.keys())
-        self.x_data = {label: [] for label in all_labels}
         if self.x_data_interpolated != {}:
             x_separate = self.x_data_interpolated
         else:
@@ -292,9 +290,9 @@ class Loader:
                 while len(self.x_data[label]) <= i:
                     self.x_data[label].append(np.array([]))
                 self.x_data[label][i] = data
-
         self.x_data = {label: np.concatenate(data)
                        for label, data in self.x_data.items()}
+
         if self.split_by is not None:
             split_values = np.unique(np.array(self.x_search[self.split_by]))
             separated_data = {label: [] for label in self.x_data}
