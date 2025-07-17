@@ -50,10 +50,10 @@ class Conductivity:
         The amplitude of the magnetic field in units of Tesla. If
         provided, it will be used to set the field.
     Btheta : float, optional
-        The polar angle of the magnetic field in units of radians. If
+        The polar angle of the magnetic field in units of degrees. If
         provided, it will be used to set the field.
     Bphi : float, optional
-        The azimuthal angle of the magnetic field in units of radians.
+        The azimuthal angle of the magnetic field in units of degrees.
         If provided, it will be used to set the field.
     
     Attributes
@@ -155,9 +155,10 @@ class Conductivity:
         if Bamp is not None:
             Btheta = Btheta or 0.0
             Bphi = Bphi or 0.0
-            field = [Bamp * np.sin(Btheta) * np.cos(Bphi),
-                     Bamp * np.sin(Btheta) * np.sin(Bphi),
-                     Bamp * np.cos(Btheta)]
+            field = [
+                Bamp * np.sin(np.deg2rad(Btheta)) * np.cos(np.deg2rad(Bphi)),
+                Bamp * np.sin(np.deg2rad(Btheta)) * np.sin(np.deg2rad(Bphi)),
+                Bamp * np.cos(np.deg2rad(Btheta))]
         field = np.array(field)
         new_magnitude = np.linalg.norm(field)
         if new_magnitude != 0:
@@ -180,8 +181,8 @@ class Conductivity:
         self._field_direction = new_direction
         if Bamp is None:
             Bamp = new_magnitude
-            Btheta = np.arccos(new_direction[2])
-            Bphi = np.arctan2(new_direction[1], new_direction[0])
+            Btheta = np.rad2deg(np.arccos(new_direction[2]))
+            Bphi = np.rad2deg(np.arctan2(new_direction[1], new_direction[0]))
         super().__setattr__('field', field)
         super().__setattr__('Bamp', Bamp)
         super().__setattr__('Btheta', Btheta)
