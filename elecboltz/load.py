@@ -238,9 +238,9 @@ class Loader:
         self.x_data_interpolated = defaultdict(list)
         self.y_data_interpolated = defaultdict(list)
         for i, x in enumerate(self.x_data_raw[self.x_vary_label]):
-            x_min = min(x) if x_min is None else x_min
-            x_max = max(x) if x_max is None else x_max
-            x_new = np.linspace(x_min, x_max, n_points)
+            x_min_i = min(x) if x_min is None else x_min
+            x_max_i = max(x) if x_max is None else x_max
+            x_new = np.linspace(x_min_i, x_max_i, n_points)
             self.x_data_interpolated[self.x_vary_label].append(x_new)
             for y_label, y in self.y_data_raw.items():
                 self.y_data_interpolated[y_label].append(
