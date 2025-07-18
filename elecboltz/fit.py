@@ -241,35 +241,36 @@ class FittingRoutine:
         params = deepcopy(self.init_params)
         for key, value in zip(param_keys, param_values):
             _update_flat_value(params, key, value)
+        params_data_set = deepcopy(params)
         for i in range(n_data_sets):
             y_fit = {label: np.zeros_like(y[i]) for label, y in y_data.items()}
-            params_data_set = deepcopy(params)
             for multi_param in multi_params:
-                _update_flat_value(params_data_set, multi_param,
-                                   params[multi_param][i])
+                _update_flat_value(
+                    params_data_set, multi_param,
+                    _extract_flat_value(params, multi_param)[i])
             params_data_set = easy_params(params_data_set)
             cond = self._build_obj(params_data_set, cond_obj)
             for j in range(len(list(x_data.values())[0])):
                 x = {label: x[i][j] for label, x in x_data.items()}
                 y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
-                    y_fit[label][i][j] = y[label]
+                    y_fit[label][j] = y[label]
             if x_shift is not None:
                 x = {label: x_shift[label][i] for label in x_shift}
                 y0 = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
-                    y_fit[label][i] -= y0[label]
+                    y_fit[label] -= y0[label]
                 if y_shift is not None:
                     for label in y_fit:
-                        y_fit[label][i] += y_shift[label][i]
+                        y_fit[label] += y_shift[label][i]
             if x_normalize is not None:
                 x = {label: x_normalize[label][i] for label in x_normalize}
                 y0 = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
-                    y_fit[label][i] /= y0[label]
+                    y_fit[label] /= y0[label]
                 if y_normalize is not None:
                     for label in y_fit:
-                        y_fit[label][i] *= y_normalize[label][i]
+                        y_fit[label] *= y_normalize[label][i]
             y_fit = np.concatenate(list(y_fit.values()))
             y_data_set = np.concatenate([y[i] for y in y_data.values()])
             total_loss += loss(y_fit, y_data_set) / n_data_sets
@@ -293,11 +294,16 @@ class FittingRoutine:
                     if band.band_params[band_key] != band_value:
                         update_band = True
                         band.band_params[band_key] = band_value
-            if hasattr(band, key):
+            elif key == 'scattering_params':
+                for cond_key, cond_value in value.items():
+                    if hasattr(cond, cond_key):
+                        if np.any(getattr(cond, cond_key) != cond_value):
+                            setattr(cond, cond_key, cond_value)
+            elif hasattr(band, key):
                 if np.any(getattr(band, key) != value):
                     update_band = True
                     setattr(band, key, value)
-            if hasattr(cond, key):
+            elif hasattr(cond, key):
                 if np.any(getattr(cond, key) != value):
                     setattr(cond, key, value)
         if update_band:
