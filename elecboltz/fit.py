@@ -8,7 +8,6 @@ import json
 from datetime import datetime
 from time import time
 from copy import deepcopy
-from multiprocessing import cpu_count
 from pathlib import Path
 from pprint import pformat
 from typing import Union, Callable
@@ -208,7 +207,7 @@ class FittingRoutine:
 
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
         y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
-        for i in range(len(list(x_data.values())[0])):
+        for i in range(len(next(iter(x_data.values())))):
             x = {label: x[i] for label, x in x_data.items()}
             y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
             for label in y_fit:
@@ -235,7 +234,7 @@ class FittingRoutine:
     def _calculate_multi(self, param_values, param_keys, x_data, y_data,
                          multi_params, x_shift, x_normalize,
                          y_shift, y_normalize, cond_obj, loss):
-        n_data_sets = len(list(x_data.values())[0])
+        n_data_sets = len(next(iter(x_data.values())))
         total_loss = 0.0
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
         params = deepcopy(self.init_params)
@@ -250,7 +249,7 @@ class FittingRoutine:
                     _extract_flat_value(params, multi_param)[i])
             params_data_set = easy_params(params_data_set)
             cond = self._build_obj(params_data_set, cond_obj)
-            for j in range(len(list(x_data.values())[0])):
+            for j in range(len(next(iter(y_fit.values())))):
                 x = {label: x[i][j] for label, x in x_data.items()}
                 y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
@@ -327,8 +326,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               multi_params: Collection[str] = [],
               x_shift: Mapping = None, x_normalize: Mapping = None,
               y_shift: Mapping = None, y_normalize: Mapping = None,
-              save_path: str = None, save_label: str = None,
-              worker_percentage: float = 0.0, **kwargs):
+              save_path: str = None, save_label: str = None, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
     This uses ``scipy.optimize.differential_evolution`` to perform a
@@ -406,11 +404,6 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         Label of the results. If not provided, will be set to
         ``f"y_label_x_label"``. If ``y_label` or ``x_label`` are
         collections of string, they will be joined with an underscore.
-    worker_percentage : float, optional
-        The percentage of available workers to use for parallel
-        computation. If set to 0, it will not be used for setting the
-        number of workers. The number of workers can also be set by
-        the `workers` keyword argument of differential evolution.
     log_format : str, optional
         The format for logging parameter values.
     **kwargs : dict, optional
@@ -421,15 +414,14 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         x_string = x_label if isinstance(x_label, str) else "_".join(x_label)
         y_string = y_label if isinstance(y_label, str) else "_".join(y_label)
         save_label = f"{y_string}_{x_string}"
-    if worker_percentage > 0:
-        if "workers" in kwargs:
-            raise ValueError(
-                "Cannot set both `worker_percentage` and `workers`.")
-        kwargs["workers"] = int(np.ceil(worker_percentage / 100 * cpu_count()))
-
+    
     update_keys = _extract_flat_keys(bounds, bounds=True)
     bounds = [_extract_flat_value(bounds, key) for key in update_keys]
     x0 = [_extract_flat_value(init_params, key) for key in update_keys]
+    if multi_params:
+        update_keys, bounds, x0, init_params = _multiply_multi_params(
+            update_keys, bounds, x0, init_params,
+            multi_params, len(next(iter(x_data.values()))))
     for i in range(len(update_keys)):
         if x0[i] is None:
             x_min, x_max = bounds[i]
@@ -450,6 +442,43 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     return _save_fit_result(
         result, init_params, update_keys, begin_time, end_time,
         save_path, save_label)
+
+
+def _multiply_multi_params(update_keys, bounds, x0, init_params,
+                           multi_params, n):
+    i = 0
+    while i < len(update_keys):
+        if update_keys[i] in multi_params: # multi-parameter with single bound
+            if not isinstance(x0[i], Sequence):
+                init_param_list = []
+            for j in range(n):
+                update_keys.insert(i + j + 1, f"{update_keys[i]}.{j}")
+                bounds.insert(i + j + 1, bounds[i])
+                if isinstance(x0[i], Sequence):
+                    x0.insert(i + j + 1, x0[i][j])
+                else:
+                    x0.insert(i + j + 1, x0[i])
+                    init_param_list.append(x0[i])
+            if not isinstance(x0[i], Sequence):
+                _update_flat_value(init_params, update_keys[i],
+                                   init_param_list)
+            update_keys.pop(i)
+            bounds.pop(i)
+            x0.pop(i)
+            i += n
+        else:
+            parent = '.'.join(update_keys[i].split('.')[:-1])
+            if parent in multi_params and x0[i] is None:
+                parent_value = _extract_flat_value(init_params, parent)
+                if isinstance(parent_value, Sequence):
+                    _update_flat_value(init_params, parent,
+                                       parent_value + [parent_value[0]])
+                    x0[i] = parent_value[0]
+                elif parent_value is not None:
+                    _update_flat_value(init_params, parent, [parent_value])
+                    x0[i] = parent_value
+            i += 1
+    return update_keys, bounds, x0, init_params
 
 
 def _prebuild_cond(init_params):
@@ -518,9 +547,12 @@ def _extract_flat_value(params: Mapping, flat_key: str):
     key_parts = flat_key.split('.')
     while key_parts:
         key = key_parts.pop(0)
-        if str.isnumeric(key):
+        if str.isnumeric(key) and not isinstance(value, Mapping):
             key = int(key)
-            if key >= len(value):
+            if isinstance(value, Sequence):
+                if key >= len(value):
+                    return None
+            else:
                 return None
         elif key not in value:
             return None
