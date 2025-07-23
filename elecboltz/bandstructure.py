@@ -122,7 +122,7 @@ class BandStructure:
             periodic: Union[bool, Sequence[Union[int, bool]]] = True,
             axis_names: Union[Sequence[str], str] = ['a', 'b', 'c'],
             wavevector_names: Union[Sequence[str], str] = ['kx', 'ky', 'kz'],
-            resolution: Union[int, Sequence[int]] = 21, n_correct: int = 2,
+            resolution: Union[int, Sequence[int]] = 31, n_correct: int = 2,
             sort_axis: int = None, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
