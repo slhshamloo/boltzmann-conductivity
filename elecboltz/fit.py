@@ -326,10 +326,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               multi_params: Collection[str] = [],
               x_shift: Mapping = None, x_normalize: Mapping = None,
               y_shift: Mapping = None, y_normalize: Mapping = None,
-              save_path: str = None, save_label: str = None, 
-              loss: Callable = lambda y_fit, y_data:
-                  np.mean(np.abs((y_fit - y_data))),
-              **kwargs):
+              save_path: str = None, save_label: str = None, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
     This uses ``scipy.optimize.differential_evolution`` to perform a
@@ -437,7 +434,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     result = differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
         args=(update_keys, x_data, y_data, multi_params,
-              x_shift, x_normalize, y_shift, y_normalize, cond, loss),
+              x_shift, x_normalize, y_shift, y_normalize, cond),
         **kwargs)
     end_time = datetime.now()
 
