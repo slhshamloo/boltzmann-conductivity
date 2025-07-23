@@ -137,7 +137,8 @@ Then, you can do a multi-parameter fit with parameters varying over the temperat
     loader = elecboltz.Loader(
         x_vary_label='theta', y_label='rho_zz',
         x_search={'phi': [0, 0, 15, 15, 30, 30, 45, 45],
-                  'B': [2, 5, 2, 5, 2, 5, 2, 5]})
+                  'T': [2, 5, 2, 5, 2, 5, 2, 5]},
+        split_by='T')
     loader.load("data/ADMR_NdLSCO", "ADMR_",
                 x_columns=[0], y_columns=[1], y_units=1e-5)
 
@@ -169,3 +170,10 @@ Then, you can do a multi-parameter fit with parameters varying over the temperat
             'power': [(1, 20), (1, 20), (1, 20), (1, 20)],
         },
     }
+
+    elecboltz.fit_model(
+        loader.x_data, loader.y_data, init_params=init_params, bounds=bounds,
+        x_normalize={'Btheta': [0, 0, 0, 0]}, multi_params={
+            'scattering_params.gamma_0', 'scattering_params.gamma_k',
+            'scattering_params.power'},
+        save_path="../fits", save_label="NdLSCO_25K", workers=-1)
