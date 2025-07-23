@@ -24,7 +24,7 @@ def easy_params(params):
       | See ``get_tight_binding_dispersion`` for the list of parameters
       | and the resulting expression.
     * | Build the scattering function using predefined
-      | `scattering_models` and the ``scattering_params`` associated
+      | ``scattering_models`` and the ``scattering_params`` associated
       | with them. See ``build_scattering_function`` for supported
       | scattering models and their parameters. ``scattering_models``
       | is assumed to be only one ``isotropic`` model if not specified.
@@ -80,7 +80,7 @@ def easy_params(params):
 def get_tight_binding_dispersion(band_params) -> str:
     """
     Get the tight-binding dispersion relation containing terms relating
-    to the parameters in `band_params`.
+    to the parameters in ``band_params``.
 
     The full tight-binding dispersion relation is given by::
 
@@ -92,13 +92,13 @@ def get_tight_binding_dispersion(band_params) -> str:
 
     The list of parameters is as follows:
 
-    * mu: Chemical potential.
-    * t: Nearest-neighbor hopping parameter in the x-y plane.
-    * tp: Next-nearest-neighbor hopping parameter in the x-y plane.
-    * | tpp: Next-next-nearest-neighbor hopping parameter
-      | in the x-y plane.
-    * | tz: Nearest-neighbor hopping parameter between
-      | the different layers in the z direction.
+    * ``mu``: Chemical potential.
+    * ``t``: Nearest-neighbor hopping parameter in the x-y plane.
+    * ``tp``: Next-nearest-neighbor hopping parameter in the x-y plane.
+    * ``tpp``: Next-next-nearest-neighbor hopping parameter
+      in the x-y plane.
+    * ``tz``: Nearest-neighbor hopping parameter between
+      the different layers in the z direction.
 
     Parameters
     ----------
