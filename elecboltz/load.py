@@ -173,13 +173,24 @@ class Loader:
             for label, value in label_map.items():
                 if self.save_new_labels:
                     if label not in self.x_search:
-                        self.x_search[label] = [value] * len(
-                            next(iter(self.x_search.values())))
+                        if self.x_search != {}:
+                            self.x_search[label] = [value] * len(
+                                next(iter(self.x_search.values())))
+                        else:
+                            self.x_search[label] = []
                         self._new_labels.add(label)
-                if self.save_new_values and label not in self._new_labels:
+                if (self.save_new_values and label not in self._new_labels
+                        and label in self.x_search):
                     self.x_search[label].append(value)
 
-            if self.x_search != {}:
+            if self.save_new_values and (set(self.x_search.keys())
+                                         == self._new_labels):
+                # If all labels are new, we need to add a new index
+                for label in self.x_search:
+                    if label in label_map:
+                        self.x_search[label].append(label_map[label])
+                idx = len(next(iter(self.x_search.values()))) - 1
+            else:
                 possible_idx = set()
                 for label in set(self.x_search.keys()) - self._new_labels:
                     if label in label_map:
@@ -205,14 +216,10 @@ class Loader:
                         idx = len(next(iter(self.x_search.values()))) - 1
                     if self.save_new_labels:
                         for label in self._new_labels:
+                            while len(self.x_search[label]) <= idx:
+                                self.x_search[label].append(label_map[label])
                             self.x_search[label][idx] = label_map[label]
                     self._found_idx.add(idx)
-            else:
-                if self.x_data_raw == {}:
-                    idx = 0
-                else:
-                    first_label = list(self.x_data_raw.keys())[0]
-                    idx = len(self.x_data_raw[first_label])
 
             self._extract_data(file, idx, x_columns, y_columns,
                                x_units, y_units, **kwargs)
