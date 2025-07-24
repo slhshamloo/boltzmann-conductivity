@@ -36,7 +36,15 @@ class Loader:
         (e.g. when fitting band parameters to different temperatures).
     save_new_labels : bool, optional
         If True, new labels found in the file names will be saved to
-        ``x_search``.
+        ``x_search``. If there are multiple values for the new labels
+        for each indicated label in ``x_search``, then the values of
+        those labels in ``x_search`` will be repeated for each new value
+        of the new label. For example, if ``x_search`` is
+        ``{'phi': [30, 60]}`` and files with label ``phi=30_field=1``,
+        ``phi=60_field=1``, ``phi=30_field=2``, and ``phi=60_field=2``
+        are found, then ``x_search`` will be updated to
+        ``{'phi': [30, 60, 30, 60], 'field': [1, 1, 2, 2]}`` (probably;
+        it depends on the order that the files are read).
     save_new_values : bool, optional
         If True, new values for existing labels in ``x_search`` will be
         added to the list of values for that label.
@@ -76,6 +84,8 @@ class Loader:
                  save_new_labels: bool = False, save_new_values: bool = False):
         self.x_vary_label = x_vary_label
         self.x_search = x_search
+        self._new_labels = set()
+        self._found_idx = set()
         self.y_label = y_label
         self.split_by = split_by
         self.save_new_labels = save_new_labels
@@ -161,19 +171,17 @@ class Loader:
 
             label_map = _extract_labels_and_values(file.name)
             for label, value in label_map.items():
-                if self.save_new_labels and label not in self.x_search:
-                    self.x_search[label] = []
-                if self.save_new_values:
+                if self.save_new_labels:
+                    if label not in self.x_search:
+                        self.x_search[label] = [value] * len(
+                            next(iter(self.x_search.values())))
+                        self._new_labels.add(label)
+                if self.save_new_values and label not in self._new_labels:
                     self.x_search[label].append(value)
 
             if self.x_search != {}:
-                if not all(label in label_map for label in self.x_search):
-                    continue
-                if not all(label_map[label] in self.x_search[label]
-                           for label in self.x_search):
-                    continue
                 possible_idx = set()
-                for label in self.x_search:
+                for label in set(self.x_search.keys()) - self._new_labels:
                     if label in label_map:
                         new_idx = [
                             i for i, value in enumerate(self.x_search[label])
@@ -186,6 +194,19 @@ class Loader:
                     continue
                 else:
                     idx = min(possible_idx)
+                    while possible_idx and idx in self._found_idx:
+                        possible_idx.remove(idx)
+                        idx = min(possible_idx, default=idx)
+                    # If the index is still repeated, add new index
+                    if idx in self._found_idx:
+                        for label in self.x_search:
+                            if label in label_map:
+                                self.x_search[label].append(label_map[label])
+                        idx = len(next(iter(self.x_search.values()))) - 1
+                    if self.save_new_labels:
+                        for label in self._new_labels:
+                            self.x_search[label][idx] = label_map[label]
+                    self._found_idx.add(idx)
             else:
                 if self.x_data_raw == {}:
                     idx = 0
@@ -306,7 +327,7 @@ class Loader:
             self.x_data = x_split
             self.y_data = y_split
 
-        for label in self.x_data:
+        for label in list(self.x_data.keys()):
             if label in ['B', 'Bmag', 'Bamp', 'H', 'Hmag', 'Hamp']:
                 self.x_data['Bamp'] = self.x_data.pop(label, None)
             elif label in ['phi', 'Bphi', 'Hphi']:
