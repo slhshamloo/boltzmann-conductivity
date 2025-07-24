@@ -39,13 +39,14 @@ def easy_params(params):
     dict
         Parameters compatible with the classes in the package.
     """
-    new_params = deepcopy(params)
+    params = deepcopy(params)
     # load parameters from a fit
     if 'load_fit' in params:
         with open(params['load_fit'], 'r') as f:
             all_params = json.load(f)
-            new_params.update(all_params['fixed_params'])
-            new_params.update(all_params['fit_params'])
+            params.update(all_params['fixed_params'])
+            params.update(all_params['fit_params'])
+    new_params = deepcopy(params)
     # unit cell dimensions indicated by axis names
     if 'a' in params:
         unit_cell = [params['a'], params['a'], params['a']]
