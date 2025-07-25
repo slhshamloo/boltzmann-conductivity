@@ -192,13 +192,15 @@ class Loader:
                 idx = len(next(iter(self.x_search.values()))) - 1
             else:
                 possible_idx = set()
+                first_set = True
                 for label in set(self.x_search.keys()) - self._new_labels:
                     if label in label_map:
                         new_idx = [
                             i for i, value in enumerate(self.x_search[label])
                             if value == label_map[label]]
-                        if possible_idx == set():
+                        if first_set:
                             possible_idx = set(new_idx)
+                            first_set = False
                         else:
                             possible_idx.intersection_update(new_idx)
                 if not possible_idx:
