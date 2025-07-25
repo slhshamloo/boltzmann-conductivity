@@ -44,8 +44,8 @@ def easy_params(params):
     if 'load_fit' in params:
         with open(params['load_fit'], 'r') as f:
             all_params = json.load(f)
-            params.update(all_params['fixed_params'])
-            params.update(all_params['fit_params'])
+            _deep_update(params, all_params['fixed_params'])
+            _deep_update(params, all_params['fit_params'])
     new_params = deepcopy(params)
     # unit cell dimensions indicated by axis names
     if 'a' in params:
@@ -124,3 +124,13 @@ def get_tight_binding_dispersion(band_params) -> str:
         dispersion += "-2*tz*(cos(a*kx)-cos(b*ky))**2"
         dispersion += "*cos(a*kx/2)*cos(b*ky/2)*cos(c*kz/2)"
     return dispersion
+
+
+def _deep_update(d, u):
+    """Recursively update dictionary `d` with values from `u`."""
+    for k, v in u.items():
+        if isinstance(v, dict):
+            d[k] = _deep_update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
