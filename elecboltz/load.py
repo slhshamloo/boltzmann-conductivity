@@ -268,19 +268,22 @@ class Loader:
         self.x_data_interpolated = defaultdict(list)
         self.y_data_interpolated = defaultdict(list)
         for i, x in enumerate(self.x_data_raw[self.x_vary_label]):
+            sorted_x_idx = np.argsort(x)
+            x = x[sorted_x_idx]
             x_min_i = min(x) if x_min is None else x_min
             x_max_i = max(x) if x_max is None else x_max
             x_new = np.linspace(x_min_i, x_max_i, n_points)
             self.x_data_interpolated[self.x_vary_label].append(x_new)
             for y_label, y in self.y_data_raw.items():
+                y = y[i][sorted_x_idx]
                 self.y_data_interpolated[y_label].append(
-                    np.interp(x_new, x, y[i]))
+                    np.interp(x_new, x, y))
                 if x_shift is not None:
-                    y = np.interp(x_shift, x, y[i])
+                    y = np.interp(x_shift, x, y)
                     self.y_data_interpolated[y_label][-1] -= y
                     self.y_data_interpolated[y_label][-1] += y_shift
                 if x_normalize is not None:
-                    y = np.interp(x_normalize, x, y[i])
+                    y = np.interp(x_normalize, x, y)
                     self.y_data_interpolated[y_label][-1] /= y
                     self.y_data_interpolated[y_label][-1] *= y_normalize
         self.process_data()
