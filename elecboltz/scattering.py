@@ -118,7 +118,7 @@ def build_scattering_function(
         if model == 'isotropic':
             scattering_functions.append(IsotropicScattering(
                 {'gamma_0': _get_param(scattering_params, 'gamma_0', i)}))
-        elif model.startswith('cos') or model.startswith('sin'):
+        elif any(model.startswith(trig) for trig in ['cos', 'sin', 'tan', 'cot']):
             params = _get_params(scattering_params, ['gamma_k', 'power'], i)
             params['trig'] = model[:3]
             if len(model) > 3:
