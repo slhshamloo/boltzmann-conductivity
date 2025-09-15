@@ -1,5 +1,6 @@
 # figures
 **/*.pdf
+!introduction/document/**/*.pdf
 
 # data
 data/
