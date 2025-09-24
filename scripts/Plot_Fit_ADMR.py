@@ -442,10 +442,10 @@ def plot_fit(fig, axs, fit_path, data_path, temperature, n_interp=100,
              name=None, units_data=1, units_fit=1, units_label=None,
              save_rho=False, load_rho=False, theta_norm=None, ticks=None,
              **kwargs):
-    params, loader, rho_zz = _load_and_calculate_fit(
+    params, loader, theta_range, rho_zz = _load_and_calculate_fit(
         fit_path, data_path, temperature, n_interp,
         theta_norm, save_rho, load_rho)
-    _plot_data_and_fit_curves(axs, rho_zz, loader, n_interp,
+    _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader,
                               units_data, units_fit, **kwargs)
     _set_fit_plot_labels(fig, axs, name, temperature, loader,
                          theta_norm, units_label, ticks)
@@ -461,6 +461,9 @@ def _load_and_calculate_fit(fit_path, data_path, temperature, n_interp,
         x_search={'T': [temperature] * 3}, save_new_labels=True)
     loader.load(data_path, x_columns=[0], y_columns=[1])
     loader.interpolate(n_interp, x_normalize=theta_norm)
+    theta_min = min(np.min(x) for x in loader.x_data_raw['theta'])
+    theta_max = max(np.max(x) for x in loader.x_data_raw['theta'])
+    theta_range = np.linspace(theta_min, theta_max, n_interp)
 
     if save_rho:
         path = pathlib.Path(fit_path)
@@ -480,17 +483,13 @@ def _load_and_calculate_fit(fit_path, data_path, temperature, n_interp,
             params, loader.x_search['phi'], theta_range,
             field=loader.x_data['Bamp'][0], theta_norm=theta_norm,
             save_directory=save_directory)
-    return params, loader, rho_zz
+    return params, loader, theta_range, rho_zz
 
 
-def _plot_data_and_fit_curves(axs, rho_zz, loader, n_interp,
+def _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader,
                               units_data, units_fit, **kwargs):
-    theta_min = min(np.min(x) for x in loader.x_data_raw['theta'])
-    theta_max = max(np.max(x) for x in loader.x_data_raw['theta'])
-    theta_range = np.linspace(theta_min, theta_max, n_interp)
-
     palette = mpl.colormaps.get_cmap(kwargs.get('cmap', 'Blues'))
-
+    kwargs.pop('cmap', None)
     for i, phi in enumerate(loader.x_search['phi']):
         color = palette((i+1) / len(loader.x_search['phi']))
         axs[0].plot(loader.x_data_interpolated['theta'][i],
@@ -560,8 +559,8 @@ def plot_fit_and_info(
         plt.close(fig2)
 
 def main():
-    folder_name = "ADMR_PdCoO2_normalized_band=t+tp+tz+tzp_scat" \
-                  "=iso+tan3phi_free=g0+gk+nu+tzp"
+    folder_name = "ADMR_PdCoO2_absolute_band=t+tp+tz+tzp_scat" \
+                  "=iso_free=g0+tz+tzp"
     filedir = os.path.dirname(os.path.relpath(__file__))
     Ts = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100]
     ns = [250, 250, 250, 250, 235, 235, 225, 170, 135, 110, 95, 85, 65]
