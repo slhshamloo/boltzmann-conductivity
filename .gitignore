@@ -1,3 +1,7 @@
+# Temporary files
+temp/
+**/tempCodeRunnerFile.py
+
 # figures
 **/*.pdf
 !introduction/document/**/*.pdf
