@@ -6,8 +6,8 @@ import matplotlib as mpl
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-import pathlib
-import os
+import os, pathlib
+import json
 
 
 # matplotlib settings
@@ -442,24 +442,25 @@ def plot_fit(fig, axs, fit_path, data_path, temperature, n_interp=100,
              name=None, units_data=1, units_fit=1, units_label=None,
              save_rho=False, load_rho=False, theta_norm=None, ticks=None,
              **kwargs):
-    params, loader, theta_range, rho_zz = _load_and_calculate_fit(
-        fit_path, data_path, temperature, n_interp,
-        theta_norm, save_rho, load_rho)
+    loader, theta_range, rho_zz = _load_and_calculate_fit(
+        fit_path, data_path, temperature, units_data,
+        n_interp, theta_norm, save_rho, load_rho)
     _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader,
-                              units_data, units_fit, **kwargs)
+                              units_fit, **kwargs)
     _set_fit_plot_labels(fig, axs, name, temperature, loader,
                          theta_norm, units_label, ticks)
-    _set_fit_plot_legend(axs, params)
+    fit_params = json.load(open(fit_path))['fit_params']
+    _set_fit_plot_legend(axs, fit_params)
     fig.tight_layout(pad=0.3)
 
 
-def _load_and_calculate_fit(fit_path, data_path, temperature, n_interp,
-                            theta_norm, save_rho, load_rho):
+def _load_and_calculate_fit(fit_path, data_path, temperature, units_data,
+                            n_interp, theta_norm, save_rho, load_rho):
     params = elecboltz.easy_params({'load_fit': fit_path})
     loader = elecboltz.Loader(
         x_vary_label='theta', y_label='rho_zz',
         x_search={'T': [temperature] * 3}, save_new_labels=True)
-    loader.load(data_path, x_columns=[0], y_columns=[1])
+    loader.load(data_path, x_columns=[0], y_columns=[1], y_units=units_data)
     loader.interpolate(n_interp, x_normalize=theta_norm)
     theta_min = min(np.min(x) for x in loader.x_data_raw['theta'])
     theta_max = max(np.max(x) for x in loader.x_data_raw['theta'])
@@ -483,17 +484,17 @@ def _load_and_calculate_fit(fit_path, data_path, temperature, n_interp,
             params, loader.x_search['phi'], theta_range,
             field=loader.x_data['Bamp'][0], theta_norm=theta_norm,
             save_directory=save_directory)
-    return params, loader, theta_range, rho_zz
+    return loader, theta_range, rho_zz
 
 
 def _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader,
-                              units_data, units_fit, **kwargs):
+                              units_fit, **kwargs):
     palette = mpl.colormaps.get_cmap(kwargs.get('cmap', 'Blues'))
     kwargs.pop('cmap', None)
     for i, phi in enumerate(loader.x_search['phi']):
         color = palette((i+1) / len(loader.x_search['phi']))
         axs[0].plot(loader.x_data_interpolated['theta'][i],
-                    units_data * loader.y_data_interpolated['rho_zz'][i],
+                    loader.y_data_interpolated['rho_zz'][i],
                     label=f"${phi}$°", color=color, **kwargs)
         axs[1].plot(theta_range, units_fit * rho_zz[i, :],
                     label=f"${phi}$°", color=color, **kwargs)
@@ -502,16 +503,17 @@ def _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader,
 def _set_fit_plot_legend(axs, params):
     axs[0].legend(frameon=False, handlelength=1.5, handletextpad=0.5,
                   fontsize='medium', title=r"$\phi$")
-    axs[1].text(
-        0.95, 0.94,
-        fr"$\Gamma_0={params['scattering_params']['gamma_0']:.3g}$"
-        + " THz\n"
-        + fr"$\Gamma_k={params['scattering_params']['gamma_k']:.3g}$"
-        + " THz\n"
-        + fr"$\nu={params['scattering_params']['power']:.3g}$"
-        + "\n$t_z'="
-        + f"{params['band_params']['tzp']/params['energy_scale']:.3g}t$",
-        transform=axs[1].transAxes, va='top', ha='right', fontsize='medium')
+    params_text = ""
+    for param, value in sorted(params['scattering_params'].items()):
+        params_text += f"${label_to_latex.get(param, param)} = {value:.3g}$"
+        if param.startswith('gamma'):
+            params_text += " THz"
+        params_text += "\n"
+    for param, value in sorted(params['band_params'].items()):
+        params_text += f"${label_to_latex.get(param, param)} = {value:.3g}t$\n"
+
+    axs[1].text(0.95, 0.94, params_text, fontsize='medium',
+                transform=axs[1].transAxes, va='top', ha='right')
 
 
 def _set_fit_plot_labels(fig, axs, name, temperature, loader,
@@ -570,9 +572,9 @@ def main():
                      + folder_name + f"_T{T}")
         plot_fit_and_info(
             save_path + ".json", filedir + "/../data/ADMR_PdCoO2",
-            save_path + ".pdf", T, name="PdCoO$_2$", n_interp_fit=n,
-            save_rho=True, cmap=cmaps[i % len(cmaps)], theta_norm=180,
-            ticks=[60, 90, 120, 150, 180, 210])
+            save_path + ".pdf", T, units_data=0.004226, n_interp_fit=n,
+            name="PdCoO$_2$", save_rho=True, # theta_norm=180,
+            cmap=cmaps[i % len(cmaps)], ticks=[60, 90, 120, 150, 180, 210])
 
 if __name__ == "__main__":
     main()
