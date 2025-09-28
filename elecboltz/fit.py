@@ -80,7 +80,8 @@ class FittingRoutine:
             x_normalize: Mapping = None, y_shift: Mapping = None,
             y_normalize: Mapping = None, cond_obj: Conductivity = None,
             loss: Callable = lambda y_fit, y_data: np.mean(
-                np.abs(y_fit - y_data))):
+                np.abs(y_fit - y_data)),
+            postprocess: Callable = lambda x, y: y):
         """Compute the residual for the given parameters and data.
 
         Parameters
@@ -92,11 +93,11 @@ class FittingRoutine:
         x_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
             The independent variable data (e.g. field). The name of the
             variable is mapped to the data, e.g.
-            ``{'field': [[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
-            In case of nonempty ``multi_params``, the value must be a
-            collection of sequences, where each sequence corresponds to
-            a different parameter to be fitted,
-            e.g. ``{'field': [[0, 1, 2], [0, 1, 2]]}``.
+            ``{'field': [0.5, 1.5, 2.5]}``. In case of a nonempty
+            ``multi_params``, the value must be a collection of
+            sequences, where each sequence corresponds to a different
+            parameter to be fitted,
+            e.g. ``{'field': [[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
         y_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
             The dependent variable data (e.g. conductivity). The name of
             the variable is mapped to the data, e.g.
@@ -133,21 +134,32 @@ class FittingRoutine:
         y_normalize : float, optional
             The y values will be shifted to this value (if ``x_shift``
             is provided).
-        squared : bool, optional
-            If True, the residual is computed as the mean squared error.
-            If False, it returns the mean absolute difference.
         cond_obj : Conductivity, optional
-            If provided, the fitter will try to salvage the calculations
-            already done from that object.
+            If provided, the fitter will try to salvage the
+            calculations already done from that object.
+        loss : Callable, optional
+            A function that takes the fit and data y values, and
+            returns a scalar loss value. By default, the mean absolute
+            error is used.
+        postprocess : Callable, optional
+            This callable is applied to the data and fit y values
+            before calculating the loss. It takes ``x_data`` and
+            a ``y`` with a format similar to ``y_data``, and returns
+            the processed ``y``, again with a format similar to
+            ``y_data``. By default, no postprocessing is applied. An
+            example use case is filtering out parts of the values
+            where the data can be unreliable.
         """
         if multi_params:
             return self._calculate_multi(
                 param_values, param_keys, x_data, y_data, multi_params,
-                x_shift, x_normalize, y_shift, y_normalize, cond_obj, loss)
+                x_shift, x_normalize, y_shift, y_normalize, cond_obj,
+                loss, postprocess)
         else:
             return self._calculate_single(
                 param_values, param_keys, x_data, y_data,
-                x_shift, x_normalize, y_shift, y_normalize, cond_obj, loss)
+                x_shift, x_normalize, y_shift, y_normalize, cond_obj,
+                loss, postprocess)
 
     def log(self, param_values, convergence: float = None):
         """Log the current fitting iteration and parameters.
@@ -198,7 +210,7 @@ class FittingRoutine:
 
     def _calculate_single(self, param_values, param_keys, x_data, y_data,
                           x_shift, x_normalize, y_shift, y_normalize,
-                          cond_obj, loss):
+                          cond_obj, loss, postprocess):
         params = deepcopy(self.init_params)
         for key, value in zip(param_keys, param_values):
             _update_flat_value(params, key, value)
@@ -209,31 +221,32 @@ class FittingRoutine:
         y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
         for i in range(len(next(iter(x_data.values())))):
             x = {label: x[i] for label, x in x_data.items()}
-            y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+            y = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
             for label in y_fit:
                 y_fit[label][i] = y[label]
         if x_shift is not None:
-            y0 = _get_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
+            y0 = _calc_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
             for label in y_fit:
                 y_fit[label] -= y0[label]
             if y_shift is not None:
                 for label in y_fit:
                     y_fit[label] += y_shift[label]
         if x_normalize is not None:
-            y0 = _get_y(cond, x_normalize, y_data, name, y_label_i, y_label_j)
+            y0 = _calc_y(cond, x_normalize, y_data, name, y_label_i, y_label_j)
             for label in y_fit:
                 y_fit[label] /= y0[label]
             if y_normalize is not None:
                 for label in y_fit:
                     y_fit[label] *= y_normalize[label]
-
+        y_fit = postprocess(x_data, y_fit)
+        y_data = postprocess(x_data, y_data)
         y_fit = np.concatenate(list(y_fit.values()))
         y_data = np.concatenate(list(y_data.values()))
         return loss(y_fit, y_data)
     
     def _calculate_multi(self, param_values, param_keys, x_data, y_data,
                          multi_params, x_shift, x_normalize,
-                         y_shift, y_normalize, cond_obj, loss):
+                         y_shift, y_normalize, cond_obj, loss, postprocess):
         n_data_sets = len(next(iter(x_data.values())))
         total_loss = 0.0
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
@@ -251,12 +264,12 @@ class FittingRoutine:
             cond = self._build_obj(params_data_set, cond_obj)
             for j in range(len(next(iter(y_fit.values())))):
                 x = {label: x[i][j] for label, x in x_data.items()}
-                y = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+                y = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
                     y_fit[label][j] = y[label]
             if x_shift is not None:
                 x = {label: x_shift[label][i] for label in x_shift}
-                y0 = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+                y0 = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
                     y_fit[label] -= y0[label]
                 if y_shift is not None:
@@ -264,14 +277,15 @@ class FittingRoutine:
                         y_fit[label] += y_shift[label][i]
             if x_normalize is not None:
                 x = {label: x_normalize[label][i] for label in x_normalize}
-                y0 = _get_y(cond, x, y_data, name, y_label_i, y_label_j)
+                y0 = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
                     y_fit[label] /= y0[label]
                 if y_normalize is not None:
                     for label in y_fit:
                         y_fit[label] *= y_normalize[label][i]
-            y_fit = np.concatenate(list(y_fit.values()))
-            y_data_set = np.concatenate([y[i] for y in y_data.values()])
+            x_data_set = {label: x[i] for label, x in x_data.items()}
+            y_fit = postprocess(x_data_set, y_fit)
+            y_data_set = postprocess(x_data_set, y_data_set)
             total_loss += loss(y_fit, y_data_set) / n_data_sets
         return total_loss
 
@@ -446,6 +460,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
 
 def _multiply_multi_params(update_keys, bounds, x0, init_params,
                            multi_params, n):
+    """Expand multi-parameters in the update keys, bounds, and x0 lists."""
     i = 0
     while i < len(update_keys):
         if update_keys[i] in multi_params: # multi-parameter with single bound
@@ -622,7 +637,7 @@ def _build_params_from_flat(param_keys, param_values):
     return params
 
 
-def _get_y(cond, x_data, y_data, name, y_label_i, y_label_j):
+def _calc_y(cond, x_data, y_data, name, y_label_i, y_label_j):
     y = {}
     for label, x in x_data.items():
         setattr(cond, label, x)
