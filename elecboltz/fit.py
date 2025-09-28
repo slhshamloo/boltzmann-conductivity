@@ -334,12 +334,26 @@ class FittingRoutine:
         return name, i, j
 
 
+def _mean_absolute_error(y_fit, y_data):
+    """Mean absolute error loss function."""
+    return np.mean(np.abs(y_fit - y_data))
+
+
+def _dummy_postprocess(x, y):
+    """A dummy postprocessing function that does nothing.
+    Exists because lambdas cannot be pickled, and so cannot be used in
+    multiprocessed fitting routines."""
+    return y
+
+
 def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               init_params: Mapping, bounds: Mapping,
               multi_params: Collection[str] = [],
               x_shift: Mapping = None, x_normalize: Mapping = None,
               y_shift: Mapping = None, y_normalize: Mapping = None,
+              loss: Callable = _mean_absolute_error,
+              postprocess: Callable = _dummy_postprocess,
               save_path: str = None, save_label: str = None, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
@@ -411,6 +425,16 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         provided). The mapping must have the same structure as
         ``y_data``, but with single values instead of arrays as the
         values.
+    loss : Callable, optional
+        A function that takes the fit and data y values, and returns a
+        scalar loss value. By default, the mean absolute error is used.
+    postprocess : Callable, optional
+        This callable is applied to the data and fit y values before
+        calculating the loss. It takes ``x_data`` and a ``y`` with a
+        format similar to ``y_data``, and returns the processed ``y``,
+        again with a format similar to ``y_data``. By default, no
+        postprocessing is applied. An example use case is filtering out
+        parts of the values where the data can be unreliable.
     save_path : str, optional
         The directory where the fitting results will be saved.
         If not provided, results will not be saved.
@@ -418,8 +442,6 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         Label of the results. If not provided, will be set to
         ``f"y_label_x_label"``. If ``y_label` or ``x_label`` are
         collections of string, they will be joined with an underscore.
-    log_format : str, optional
-        The format for logging parameter values.
     **kwargs : dict, optional
         Additional keyword arguments passed to
         `scipy.optimize.differential_evolution`.
@@ -448,7 +470,8 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     result = differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
         args=(update_keys, x_data, y_data, multi_params,
-              x_shift, x_normalize, y_shift, y_normalize, cond),
+              x_shift, x_normalize, y_shift, y_normalize, cond,
+              loss, postprocess),
         **kwargs)
     end_time = datetime.now()
 
