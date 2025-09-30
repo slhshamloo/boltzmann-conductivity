@@ -8,7 +8,7 @@ from skimage.measure import marching_cubes
 from typing import Union
 from collections.abc import Sequence
 
-from scipy.constants import hbar, eV, angstrom
+from scipy.constants import hbar, eV, angstrom, m_e
 # conversion from energy gradient units to m/s for velocity
 velocity_units = 1e-3 * eV * angstrom / hbar
 
@@ -91,6 +91,16 @@ class BandStructure:
     band_params : dict
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
+    n : float
+        The electron filling fraction of the material. Only available
+        after calling ``calculate_filling_fraction``.
+    p : float
+        The hole filling fraction of the material. Only available
+        after calling ``calculate_filling_fraction``.
+    m : float
+        The effective mass of the charge carriers divided by the
+        rest mass of the electron, m_e. Only available after calling
+        ``calculate_mass``.
     kpoints : (N, 3) numpy.ndarray
         The discretized k-points on the Fermi surface. Each row
         corresponds to a k-point in the form ``[kx, ky, kz]``.
@@ -143,6 +153,7 @@ class BandStructure:
         self.sort_axis = sort_axis
         self.n = None
         self.p = None
+        self.m = None
 
     def __setattr__(self, name, value):
         if name == 'dispersion':
@@ -275,8 +286,25 @@ class BandStructure:
             the electron, m_e.
         """
         # Placeholder for actual calculation
-        return 0.0
-    
+        triangle_points = self.kpoints[self.kfaces] / angstrom
+        vs = np.column_stack(self.velocity_func(
+            self.kpoints[:, 0], self.kpoints[:, 1], self.kpoints[:, 2]))
+        vhats = vs / np.linalg.norm(vs, axis=-1)[:, None]
+        normals = vhats[self.kfaces]
+        triangle_points = self._curvature_correct_points(
+            triangle_points, normals)
+        dks = np.linalg.norm(
+            np.cross(triangle_points[:, 1] - triangle_points[:, 0],
+                     triangle_points[:, 2] - triangle_points[:, 0]),
+            axis=-1)
+        ks = np.mean(triangle_points, axis=1)
+        vs = self.velocity_func(
+            ks[:, 0] * angstrom, ks[:, 1] * angstrom, ks[:, 2] * angstrom)
+        k_perp = np.sqrt(ks[:, 0]**2 + ks[:, 1]**2)
+        v_perp = np.sqrt(vs[0]**2 + vs[1]**2)
+        self.m = np.sum(hbar * k_perp / v_perp * dks) / np.sum(dks) / m_e
+        return self.m
+
     def energy_func(self, kx, ky, kz):
         """Calculate the energy at the given k-point.
 
@@ -426,8 +454,7 @@ class BandStructure:
         kcenters = np.mean(points, axis=1) * angstrom
         kcenters_tangent = kcenters.copy()
         for _ in range(2):
-            kcenters_tangent = self._apply_newton_correction(
-                kcenters_tangent)
+            kcenters_tangent = self._apply_newton_correction(kcenters_tangent)
         center_diff = (kcenters_tangent - kcenters) / angstrom
         projected_diff = np.linalg.norm(center_diff, axis=-1)
 
