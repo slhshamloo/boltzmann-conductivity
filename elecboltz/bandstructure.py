@@ -417,3 +417,22 @@ class BandStructure:
             points[:, 0], points[:, 1], points[:, 2])) / velocity_units
         gradient_norms = np.linalg.norm(gradients, axis=-1)
         return points - (residuals/gradient_norms**2)[:, None]*gradients
+    
+    def _curvature_correct_points(self, points, normals):
+        kcenters = np.mean(points, axis=1) * angstrom
+        kcenters_tangent = kcenters.copy()
+        for _ in range(2):
+            kcenters_tangent = self._apply_newton_correction(
+                kcenters_tangent)
+        center_diff = (kcenters_tangent - kcenters) / angstrom
+        projected_diff = np.linalg.norm(center_diff, axis=-1)
+
+        # Turn off warnings for division by zero
+        with np.errstate(divide='ignore', invalid='ignore'):
+            # cosine = nhat.cdiff / |cdiff||nhat| and |nhat| = 1
+            cosines = np.einsum('ijk,ik->ij', normals, center_diff
+                                ) / projected_diff[:, None]
+            # Handle division by zero
+            np.nan_to_num(cosines, copy=False, nan=1.0)
+        diff = projected_diff[:, None] / cosines
+        return points + normals*diff[:, :, None]

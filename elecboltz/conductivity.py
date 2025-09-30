@@ -303,33 +303,13 @@ class Conductivity:
 
         triangle_points = self.band.kpoints[self.band.kfaces] / angstrom
         if self.correct_curvature:
-            triangle_points = self._curvature_correct_points(triangle_points)
+            triangle_points = self.band._curvature_correct_points(
+                triangle_points, self._vhats[self.band.kfaces])
     
         self._calculate_jacobian_sums(triangle_points)
         self._calculate_derivative_sums(triangle_points)
         self._calculate_velocity_projections()
         self._are_elements_saved = True
-    
-    def _curvature_correct_points(self, triangle_points):
-        """Take the curvature into account for the areas and lengths"""
-        kcenters = np.mean(triangle_points, axis=1) * angstrom
-        kcenters_tangent = kcenters.copy()
-        for _ in range(2):
-            kcenters_tangent = self.band._apply_newton_correction(
-                kcenters_tangent)
-        center_diff = (kcenters_tangent - kcenters) / angstrom
-        projected_diff = np.linalg.norm(center_diff, axis=-1)
-
-        point_normals = self._vhats[self.band.kfaces]
-        # Turn off warnings for division by zero
-        with np.errstate(divide='ignore', invalid='ignore'):
-            # cosine = nhat.cdiff / |cdiff||nhat| and |nhat| = 1
-            cosines = np.einsum('ijk,ik->ij', point_normals, center_diff
-                                ) / projected_diff[:, None]
-            # Handle division by zero
-            np.nan_to_num(cosines, copy=False, nan=1.0)
-        diff = projected_diff[:, None] / cosines
-        return triangle_points + point_normals*diff[:, :, None]
 
     def _calculate_jacobian_sums(self, triangle_points):
         """Calculate the Jacobian sums for each point and point pair."""
