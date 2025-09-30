@@ -141,6 +141,8 @@ class BandStructure:
         self.kfaces = None
         self.periodic_projector = None
         self.sort_axis = sort_axis
+        self.n = None
+        self.p = None
 
     def __setattr__(self, name, value):
         if name == 'dispersion':
@@ -227,12 +229,14 @@ class BandStructure:
         """
         self._gvec = self.domain_size * np.pi / self.unit_cell
         # the extra factor of 2 is the spin degeneracy
-        return 2 * adaptive_octree_integrate(
+        self.n =  2 * adaptive_octree_integrate(
             lambda kx, ky, kz: (self.energy_func(kx, ky, kz)
                                 < self.chemical_potential),
             (-self._gvec[0], self._gvec[0], -self._gvec[1], self._gvec[1],
              -self._gvec[2], self._gvec[2]), depth=depth
             ) / 8 / np.prod(self._gvec) / self.bz_ratio
+        self.p = 1 - self.n
+        return self.n
 
     def calculate_electron_density(self, depth: int = 7) -> float:
         """Calculate the electron density n_e of the material.
