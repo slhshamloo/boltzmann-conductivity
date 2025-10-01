@@ -1,13 +1,16 @@
 import elecboltz
 import numpy as np
 import sympy
+import scipy.signal as sig
 from skimage.measure import find_contours
+import os, pathlib
+import json
+from copy import copy
+
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-import os, pathlib
-import json
 
 
 # matplotlib settings
@@ -441,16 +444,16 @@ def calculate_fit(params, phis, thetas, field,
 def plot_fit(fig, axs, fit_path, data_path, temperature, n_interp=100,
              name=None, units_data=1, units_fit=1, units_label=None,
              save_rho=False, load_rho=False, theta_norm=None, ticks=None,
-             **kwargs):
+             filt=None, **kwargs):
     loader, theta_range, rho_zz = _load_and_calculate_fit(
         fit_path, data_path, temperature, units_data,
         n_interp, theta_norm, save_rho, load_rho)
-    _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader,
-                              units_fit, **kwargs)
+    unfiltered_handles, filtered_handles, labels = _plot_data_and_fit_curves(
+        axs, theta_range, rho_zz, loader, units_fit, filt=filt, **kwargs)
     _set_fit_plot_labels(fig, axs, name, temperature, loader,
                          theta_norm, units_label, ticks)
     fit_params = json.load(open(fit_path))['fit_params']
-    _set_fit_plot_legend(axs, fit_params)
+    _set_fit_plot_legend(axs, fit_params, unfiltered_handles, filtered_handles, labels)
     fig.tight_layout(pad=0.3)
 
 
@@ -487,22 +490,61 @@ def _load_and_calculate_fit(fit_path, data_path, temperature, units_data,
     return loader, theta_range, rho_zz
 
 
-def _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader,
-                              units_fit, **kwargs):
+def _plot_data_and_fit_curves(axs, theta_range, rho_zz, loader, units_fit,
+                              filt=None, cmap_filt=None, **kwargs):
     palette = mpl.colormaps.get_cmap(kwargs.get('cmap', 'Blues'))
     kwargs.pop('cmap', None)
+    
+    unfiltered_handles = []
+    filtered_handles = []
+    labels = []
+
     for i, phi in enumerate(loader.x_search['phi']):
         color = palette((i+1) / len(loader.x_search['phi']))
-        axs[0].plot(loader.x_data_interpolated['theta'][i],
-                    loader.y_data_interpolated['rho_zz'][i],
-                    label=f"${phi}$°", color=color, **kwargs)
+        h1 = axs[0].plot(loader.x_data_interpolated['theta'][i],
+                         loader.y_data_interpolated['rho_zz'][i],
+                         color=color, **kwargs)[0]
         axs[1].plot(theta_range, units_fit * rho_zz[i, :],
-                    label=f"${phi}$°", color=color, **kwargs)
+                    color=color, **kwargs)
+        unfiltered_handles.append(h1)
+        labels.append(f"${phi}$°")
+        
+    if filt is not None:
+        for i, phi in enumerate(loader.x_search['phi']):
+            filtered_data = filt(
+                loader.x_data_interpolated['theta'][i],
+                loader.y_data_interpolated['rho_zz'][i])
+            filtered_fit = filt(theta_range, units_fit * rho_zz[i, :])
+            cmap_filt = cmap_filt or mpl.colormaps.get_cmap('Reds')
+            color_filt = cmap_filt((i+1) / len(loader.x_search['phi']))
+            h2 = axs[0].plot(
+                loader.x_data_interpolated['theta'][i],
+                filtered_data, ls='--', color=color_filt, **kwargs)[0]
+            axs[1].plot(theta_range, filtered_fit,
+                        ls='--', color=color_filt, **kwargs)
+            filtered_handles.append(h2)
+    
+    return unfiltered_handles, filtered_handles, labels
 
 
-def _set_fit_plot_legend(axs, params):
-    axs[0].legend(frameon=False, handlelength=1.5, handletextpad=0.5,
-                  fontsize='medium', title=r"$\phi$")
+def _set_fit_plot_legend(axs, params, unfiltered_handles=None,
+                         filtered_handles=None, labels=None):
+    if unfiltered_handles is None:
+        axs[0].legend(frameon=False, handlelength=1.5, handletextpad=0.5,
+                      fontsize='medium', title=r"$\phi$")
+    elif filtered_handles:
+        # Create custom legend with side-by-side markers
+        from matplotlib.legend_handler import HandlerTuple
+        legend_handles = [(unfiltered_handles[i], filtered_handles[i]) 
+                          for i in range(len(unfiltered_handles))]
+        axs[0].legend(legend_handles, labels, 
+                     handler_map={tuple: HandlerTuple(ndivide=None, pad=0.3)},
+                     frameon=False, handlelength=3.0, 
+                     handletextpad=0.5, fontsize='medium', title=r"$\phi$")
+    else:
+        axs[0].legend(unfiltered_handles, labels, frameon=False, handlelength=1.5,
+                     handletextpad=0.5, fontsize='medium', title=r"$\phi$")
+    
     params_text = ""
     for param, value in sorted(params['scattering_params'].items()):
         params_text += f"${label_to_latex.get(param, param)} = {value:.3g}$"
@@ -560,9 +602,25 @@ def plot_fit_and_info(
         plt.close(fig1)
         plt.close(fig2)
 
+
+class RemovePeaksADMR:
+    def __init__(self, width_deg=5, butter_order=3, butter_freq=0.1):
+        self.width_deg = width_deg
+        self.butter_order = butter_order
+        self.butter_freq = butter_freq
+
+    def __call__(self, theta, y):
+        width_medfilt = int(np.ceil(len(theta) * self.width_deg
+                            / (np.max(theta)-np.min(theta))))
+        if width_medfilt % 2 == 0:
+            width_medfilt += 1
+        return sig.filtfilt(*sig.butter(self.butter_order, self.butter_freq),
+                            sig.medfilt(y, width_medfilt))
+
+
 def main():
-    folder_name = "ADMR_PdCoO2_absolute_band=t+tp+tz+tzp_scat" \
-                  "=iso_free=g0+tz+tzp"
+    folder_name = "ADMR_PdCoO2_absolute_filt=med20deg+butter-3-0.1" \
+                  "_band=t+tp+tz+tzp_scat=iso_free=g0+tz+tzp"
     filedir = os.path.dirname(os.path.relpath(__file__))
     Ts = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100]
     ns = [250, 250, 250, 250, 235, 235, 225, 170, 135, 110, 95, 85, 65]
@@ -574,7 +632,9 @@ def main():
             save_path + ".json", filedir + "/../data/ADMR_PdCoO2",
             save_path + ".pdf", T, units_data=0.004226, n_interp_fit=n,
             name="PdCoO$_2$", save_rho=True, # theta_norm=180,
-            cmap=cmaps[i % len(cmaps)], ticks=[60, 90, 120, 150, 180, 210])
+            ticks=[60, 90, 120, 150, 180, 210],
+            cmap='Blues', # cmaps[i % len(cmaps)],
+            filt=RemovePeaksADMR(width_deg=20))
 
 if __name__ == "__main__":
     main()
