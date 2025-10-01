@@ -367,18 +367,17 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     x_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
         The independent variable data (e.g. field). The name of the
         variable is mapped to the data, e.g.
-        ``{'field': [[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
-        In case of nonempty ``multi_params``, the value must be a
-        collection of sequences, where each sequence corresponds to a
-        different parameter to be fitted,
-        e.g. ``{'field': [[0, 1, 2], [0, 1, 2]]}``.
+        ``{'field': [0, 1, 2]}``. In case of nonempty ``multi_params``,
+        the value must be a collection of sequences, where each sequence
+        corresponds to a different parameter to be fitted,
+        e.g. ``{'field': [[[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
     y_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
         The dependent variable data (e.g. conductivity). The name of
         the variable is mapped to the data, e.g.
         ``{'sigma_xx': [1.1, 2.4, 3.8]}``. The name of each variable
         must start with "sigma" or "rho" (for conductivity or
         resistivity, respectively), and you can add a suffix to specify
-        the component (e.g. ``"sigma_xx"``, ``"rho_xy"``). In case of
+        the component (e.g. ``'sigma_xx'``, ``'rho_xy'``). In case of
         nonempty ``multi_params``, the value must be a collection of
         sequences, where each sequence corresponds to a different
         parameter to be fitted, e.g. ``{'rho_zz': [[1.1, 2.4, 3.8],
