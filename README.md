@@ -2,7 +2,7 @@
 Conductivity calculated using Boltzmann Transport theory, using a Finite Element Method (FEM).
 In addition to arbitrary Fermi surfaces, arbitrary scattering kernels are also supported.
 
-Developed and maintained by the [Grissonnanche group](https://gaelgrissonnanche.com).
+Developed and maintained by the [Grissonnanche group](https://gaelgrissonnanche.com). Based on a method proposed by Chaitanya Murthy.
 
 ## Installation
 ```
