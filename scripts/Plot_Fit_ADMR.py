@@ -37,8 +37,11 @@ mpl.rcParams['lines.markersize'] = 20
 label_to_latex = {
     "tp": "t'",
     "tpp": "t''",
+    "tppp": "t'''",
     "tz": "t_z",
     "tzp": "t_z'",
+    "tzpp": "t_z''",
+    "tzppp": "t_z'''",
     "gamma_0": "\\Gamma_0",
     "gamma_k": "\\Gamma_k",
     "power": "\\nu",
@@ -66,7 +69,9 @@ def get_init_params():
         'c': 18.06,
         'energy_scale': -789,
         'band_params': {'mu': -0.22, 't': 1, 'tp': -0.23,
-                        'tz': 0.03, 'tzp': 0.0},
+                        'tz': 0.03, 'tzp': 0.0,
+                        'tpp': 0.0, 'tppp': 0.0, 'tzpp': 0.0,
+                        'tzppp': 0.0, 'tzz': 0.0},
         'periodic': True,
         'resolution': [41, 41, 41],
         'domain_size': [1.0, 1.0, 3.0],
@@ -75,11 +80,20 @@ def get_init_params():
         'dispersion': (
             "mu + t*(2*cos(sqrt(3)/2*a*kx)*cos(1/2*b*ky) + cos(b*ky))"
             " + tp*(2*cos(sqrt(3)/2*a*kx)*cos(3/2*b*ky) + cos(sqrt(3)*a*kx))"
-            " + tz*(cos(sqrt(3)*a*kx/3+c*kz/3) + cos(-sqrt(3)*a*kx/6+a*ky/2+c*kz/3) + cos(-sqrt(3)*a*kx/6-a*ky/2+c*kz/3))"
-            " + tzp*(cos(-2*sqrt(3)*a*kx/3+c*kz/3) + cos(sqrt(3)*a*kx/3 - a*ky + c*kz/3) + cos(sqrt(3)*a*kx/3+a*ky + c*kz/3))"),
+            " + tpp*(2*cos(sqrt(3)*a*kx)*cos(b*ky) + cos(2*b*ky))"
+            " + tppp*(2*cos(sqrt(3)/2*a*kx)*cos(5/2*b*ky) + 2*cos(sqrt(3)*a*kx)*cos(2*b*ky)"
+            "         + 2*cos(3*sqrt(3)/2*a*kx)*cos(b*ky/2))"
+            " + tz*(2*cos(-sqrt(3)*a*kx/6+c*kz/3)*cos(a*ky/2) + cos(sqrt(3)*a*kx/3+c*kz/3))"
+            " + tzp*(2*cos(sqrt(3)*a*kx/3+c*kz/3)*cos(a*ky) + cos(-2*sqrt(3)*a*kx/3+c*kz/3))"
+            " + tzpp*(2*cos(5*sqrt(3)*a*kx/6+c*kz/3)*cos(a*ky/2) + 2*cos(-sqrt(3)*a*kx/6+c*kz/3)*cos(3*a*ky/2)"
+            "         + 2*cos(-2*sqrt(3)*a*kx/3+c*kz/3)*cos(a*ky))"
+            " + tzppp*(2*cos(5*sqrt(3)*a*kx/6+c*kz/3)*cos(3*a*ky/2) + 2*cos(sqrt(3)*a*kx/3+c*kz/3)*cos(2*a*ky)"
+            "          + 2*cos(-7*sqrt(3)*a*kx/6+c*kz/3)*cos(a*ky/2))"
+            " + tzz*(cos(sqrt(3)*a*kx/3+2*c*kz/3) + cos(-sqrt(3)*a*kx/6+a*ky/2+2*c*kz/3) + cos(-sqrt(3)*a*kx/6-a*ky/2+2*c*kz/3))"
+        ),
         'scattering_models': [
             'isotropic',
-            'tan3phi'
+            'cos3phi'
         ],
         'scattering_params': {
             'gamma_0': 2.5,
@@ -163,33 +177,33 @@ def print_equations(ax, renderer, band, params, xshift=0.05):
     bbox = t.get_window_extent(renderer=renderer)
     ypos -= ax.transAxes.inverted().transform_bbox(bbox).height + 0.03
 
-    t = ax.text(xshift, ypos, "Dispersion Relation", color="darkturquoise",
-                fontsize='small', ha='left', va='top', transform=ax.transAxes)
-    bbox = t.get_window_extent(renderer=renderer)
-    ypos -= ax.transAxes.inverted().transform_bbox(bbox).height
-    latex_dispersion = sympy.latex(band._energy_sympy)
-    for direction in ['x', 'y', 'z']:
-        latex_dispersion = latex_dispersion.replace(
-            f"k{direction}", f"k_{direction}")
-    yshift = _print_wrapped_equation(
-        ax, renderer, xshift, ypos, "\\varepsilon_{\\mathbf{k}}",
-        latex_dispersion, fontsize='xx-small')
-    ypos -= yshift + 0.03
+    # t = ax.text(xshift, ypos, "Dispersion Relation", color="darkturquoise",
+    #             fontsize='small', ha='left', va='top', transform=ax.transAxes)
+    # bbox = t.get_window_extent(renderer=renderer)
+    # ypos -= ax.transAxes.inverted().transform_bbox(bbox).height
+    # latex_dispersion = sympy.latex(band._energy_sympy)
+    # for direction in ['x', 'y', 'z']:
+    #     latex_dispersion = latex_dispersion.replace(
+    #         f"k{direction}", f"k_{direction}")
+    # yshift = _print_wrapped_equation(
+    #     ax, renderer, xshift, ypos, "\\varepsilon_{\\mathbf{k}}",
+    #     latex_dispersion, fontsize='xx-small')
+    # ypos -= yshift + 0.03
 
-    t = ax.text(xshift, ypos, "Scattering Rate", color="darkturquoise",
-                fontsize='small', ha='left', va='top', transform=ax.transAxes)
-    bbox = t.get_window_extent(renderer=renderer)
-    ypos -= ax.transAxes.inverted().transform_bbox(bbox).height
-    latex_scattering = get_scattering_latex(
-        params['scattering_models'][0], params['scattering_params'])
-    for model in params['scattering_models'][1:]:
-        part = get_scattering_latex(model, params['scattering_params'])
-        if part.startswith('+') or part.startswith('-'):
-            latex_scattering += part
-        else:
-            latex_scattering += " + " + part
-    _print_wrapped_equation(ax, renderer, xshift, ypos,
-                            "\\Gamma_{\\mathrm{tot}}", latex_scattering)
+    # t = ax.text(xshift, ypos, "Scattering Rate", color="darkturquoise",
+    #             fontsize='small', ha='left', va='top', transform=ax.transAxes)
+    # bbox = t.get_window_extent(renderer=renderer)
+    # ypos -= ax.transAxes.inverted().transform_bbox(bbox).height
+    # latex_scattering = get_scattering_latex(
+    #     params['scattering_models'][0], params['scattering_params'])
+    # for model in params['scattering_models'][1:]:
+    #     part = get_scattering_latex(model, params['scattering_params'])
+    #     if part.startswith('+') or part.startswith('-'):
+    #         latex_scattering += part
+    #     else:
+    #         latex_scattering += " + " + part
+    # _print_wrapped_equation(ax, renderer, xshift, ypos,
+    #                         "\\Gamma_{\\mathrm{tot}}", latex_scattering)
 
 
 def _print_wrapped_equation(ax, renderer, xpos, ypos, lhs, equation,
@@ -554,7 +568,7 @@ def _set_fit_plot_legend(axs, params, unfiltered_handles=None,
     for param, value in sorted(params['band_params'].items()):
         params_text += f"${label_to_latex.get(param, param)} = {value:.3g}t$\n"
 
-    axs[1].text(0.95, 0.94, params_text, fontsize='medium',
+    axs[1].text(0.95, 0.94, params_text, fontsize='small',
                 transform=axs[1].transAxes, va='top', ha='right')
 
 
@@ -619,8 +633,10 @@ class RemovePeaksADMR:
 
 
 def main():
-    folder_name = "ADMR_PdCoO2_absolute_filt=med20deg+butter-3-0.1" \
-                  "_band=t+tp+tz+tzp_scat=iso_free=g0+tz+tzp"
+    folder_name = \
+        "ADMR_PdCoO2_absolute_msr" \
+        "_band=t+tp+tpp+tppp+tz+tzp+tzpp" \
+        "_scat=iso_free=g0+mu+tp+tpp+tppp+tz+tzp+tzpp" # _filt=med20deg+butter-3-0.1
     filedir = os.path.dirname(os.path.relpath(__file__))
     Ts = [15, 20, 25, 30, 35, 40, 45, 50, 60, 70, 80, 90, 100]
     ns = [250, 250, 250, 250, 235, 235, 225, 170, 135, 110, 95, 85, 65]
@@ -633,8 +649,8 @@ def main():
             save_path + ".pdf", T, units_data=0.004226, n_interp_fit=n,
             name="PdCoO$_2$", save_rho=True, # theta_norm=180,
             ticks=[60, 90, 120, 150, 180, 210],
-            cmap='Blues', # cmaps[i % len(cmaps)],
-            filt=RemovePeaksADMR(width_deg=20))
+            cmap=cmaps[i % len(cmaps)])
+            # filt=RemovePeaksADMR(width_deg=20))
 
 if __name__ == "__main__":
     main()
