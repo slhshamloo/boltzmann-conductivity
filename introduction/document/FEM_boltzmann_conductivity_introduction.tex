@@ -637,9 +637,13 @@ the different matrices can be expressed as
         + \qty(\frac{\alpha_{ij}}{60}(\gamma^i+\gamma^j) + \sum_k\frac{\alpha(i,j,k)\gamma^k}{120}
             \delta_{\expval{ik}}\delta_{\expval{jk}})\delta_{\expval{ij}}\\
     (D_{\vu{v}\cross\vu{B}})_{ij} = \frac{1}{6}\vu{B}\vdot\vb{d}_{ij}\delta_{\expval{ij}}. \\
-    S_{ij} = \frac{\alpha_i\alpha_j}{12}s^{ij} + \alpha_i\sum_n\alpha_{jn}s^{in}\delta_{\expval{jn}}
-    + \alpha_j\sum_m\alpha_{im}s^{mj}\delta_{\expval{im}}
-    + \sum_{m,n}\alpha_{im}\alpha_{jn}s^{mn}\delta_{\expval{im}}\delta_{\expval{jn}}.
+    \begin{aligned}
+    S_{ij} = \frac{1}{144}&\left(\frac{1}{4}\sum_{m,n} \alpha_{im} \alpha_{jn}
+        s^{mn} \delta_{\expval{im}}\delta_{\expval{jn}}
+        + \sum_{i,j} \alpha_i\alpha_j s^{ij} \right.\\
+        &\quad+ \left.\frac{1}{2}\sum_{i,n} \alpha_i\alpha_{jn} s^{in} \delta_{\expval{jn}}
+        + \frac{1}{2}\sum_{m, j} \alpha_{im}\alpha_j s^{mj} \delta_{\expval{im}}\right).
+    \end{aligned}
 \end{gather}
 $\delta_{\expval{ij}}$ is equal to 1 if $i$ and $j$ are neighboring points, and 0 otherwise.
 Technically, due to the definitions, it is not really needed, but I include it to make things
