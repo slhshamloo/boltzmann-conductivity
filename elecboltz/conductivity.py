@@ -7,6 +7,7 @@ from typing import Callable, Union
 from collections.abc import Sequence
 
 from scipy.constants import e, hbar, angstrom
+THz = 1e12
 
 
 class Conductivity:
@@ -30,7 +31,10 @@ class Conductivity:
         The scattering kernel as a function of a pair of coordinates
         ``(kx, ky, kz)`` and ``(kx', ky', kz')``, in units of angstrom
         THz. All coordinates are given to the function in order, so the
-        function signature would be ``C(kx, ky, kz, kx', ky', kz')``.
+        function signature would be
+        ``C(kx, ky, kz, kx', ky', kz', **kwargs)``. Be sure to collect
+        the scattering parameters in ``**kwargs`` regardless of whether
+        you use any, to keep the function signature consistent.
         If None, the scattering rate should be specified instead.
     scattering_params : dict[str, float or Sequence[float]], optional
         Extra parameters passed to the scattering kernel or the
@@ -69,9 +73,9 @@ class Conductivity:
         as None, it will be calculated from the scattering kernel upon
         the next calculation.
     scattering_kernel : Callable or None
-        The scattering kernel as a function of a pair of coordinates
+        The scattering kernel, as a function of a pair of coordinates
         ``(kx, ky, kz)`` and ``(kx', ky', kz')`` in units of angstrom,
-        which returns values in units of angstrom THz. All coordinates
+        which returns values in units of angstrom^2 THz. All coordinates
         are given to the function in order, so the function signature
         would be ``C(kx, ky, kz, kx', ky', kz')``. If None, the
         scattering rate should be specified instead. The out-scattering
@@ -79,8 +83,7 @@ class Conductivity:
         scattering rate is not provided.
     scattering_params : dict[str, float or Sequence[float]], optional
         Extra parameters passed to the scattering kernel or the
-        scattering rate function. If, for instance, you also want the
-        scattering to depend on the velocities, you can set them here.
+        scattering rate function.
     frequency : float
         The frequency of the applied field in units of THz.
         If non-zero, the conductivity output will be complex.
@@ -120,6 +123,7 @@ class Conductivity:
         self._vhat_projections = None
         self._jacobians = None
         self._jacobian_sums = None
+        self._m_projector = None
         self._derivative_components = None
         self._derivatives = None
         self._scattering_invlen = None
@@ -171,8 +175,9 @@ class Conductivity:
                     self._derivative_term *= \
                         new_magnitude / self._field_magnitude
                 if self._differential_operator is not None:
-                    self._differential_operator = \
-                    self._out_scattering - e/hbar*self._derivative_term
+                    self._differential_operator = (
+                        self._out_scattering - e/hbar*self._derivative_term
+                        - self._in_scattering)
                 self._saved_solutions = [None, None, None]
             else:
                 self.erase_memory(elements=False, scattering=False,
@@ -262,6 +267,7 @@ class Conductivity:
             self._vhats = None
             self._jacobians = None
             self._jacobian_sums = None
+            self._m_projector = None
             self._derivative_components = None
             self._derivatives = None
             self._vhat_projections = None
@@ -323,15 +329,13 @@ class Conductivity:
         j_idx = self.band.kfaces[:, 1]
         k_idx = self.band.kfaces[:, 2]
         rows = np.concatenate((i_idx, j_idx, k_idx, i_idx, i_idx,
-                                j_idx, j_idx, k_idx, k_idx))
+                               j_idx, j_idx, k_idx, k_idx))
         cols = np.concatenate((i_idx, j_idx, k_idx, j_idx, k_idx,
-                                i_idx, k_idx, i_idx, j_idx))
+                               i_idx, k_idx, i_idx, j_idx))
         self._jacobian_sums = scipy.sparse.csr_array(
             (np.tile(self._jacobians, 9), (rows, cols)), shape=(n, n))
-        self._jacobian_diagonal = np.zeros(n)
-        np.add.at(self._jacobian_diagonal, i_idx, self._jacobians)
-        np.add.at(self._jacobian_diagonal, j_idx, self._jacobians)
-        np.add.at(self._jacobian_diagonal, k_idx, self._jacobians)
+        self._m_projector = self._jacobian_sums / 24
+        self._m_projector.setdiag(2 * self._m_projector.diagonal())
 
     def _calculate_derivative_sums(self, triangle_points):
         """
@@ -355,9 +359,7 @@ class Conductivity:
                 for derivative in self._derivatives]
 
     def _calculate_velocity_projections(self):
-        self._vhat_projections = self._jacobian_sums @ self._vhats / 24
-        self._vhat_projections += (
-            self._jacobian_diagonal[:, None] * self._vhats / 24)
+        self._vhat_projections = self._m_projector @ self._vhats
         if self.band.periodic:
             self._vhat_projections = \
                 self.band.periodic_projector @ self._vhat_projections
@@ -370,20 +372,32 @@ class Conductivity:
         if not self._is_scattering_saved:
             self._discretize_scattering()
             self._build_out_scattering_matrix()
-            # TODO: calculate the in-scattering matrix
+            self._build_in_scattering_matrix()
             self._is_scattering_saved = True
         if self._derivative_term is None:
             self._derivative_term = sum(
                 Bi / 6 * Di for Bi, Di in zip(self.field, self._derivatives))
         self._differential_operator = (
-            self._out_scattering - e/hbar*self._derivative_term)
-            # - self._in_scattering_term when implemented
+            self._out_scattering - e/hbar*self._derivative_term
+            - self._in_scattering)
 
     def _discretize_scattering(self):
         """
         Discretize the scattering rate and the scattering kernel
         for each element.
         """
+        if self.scattering_kernel is not None:
+            self.scattering_matrix = self.scattering_kernel(
+                self.band.kpoints[:, 0][:, None],
+                self.band.kpoints[:, 1][:, None],
+                self.band.kpoints[:, 2][:, None],
+                self.band.kpoints[:, 0], self.band.kpoints[:, 1],
+                self.band.kpoints[:, 2], **self.scattering_params)
+            # s_mn = C_mn / v_m
+            self.scattering_matrix /= self._velocities[:, None]
+            # get rid of extra units
+            self.scattering_matrix *= angstrom * THz
+
         if self.scattering_rate is None:
             if self.scattering_kernel is None:
                 raise ValueError(
@@ -397,15 +411,14 @@ class Conductivity:
                 self.band.kpoints[:, 2], **self.scattering_params)
         else:
             scattering = self.scattering_rate
+        # scattering_invlen is the inverse scattering length gamma
         # separate the optical conductivity case to avoid making
         # the number complex when it is not needed
         if self.frequency == 0.0:
-            self._scattering_invlen = 1e12 * scattering / self._vmags
+            self._scattering_invlen = THz * scattering / self._vmags
         else:
             self._scattering_invlen = \
-                1e12 * (scattering - 2j*np.pi*self.frequency) / self._vmags
-        # scattering_invlen is the inverse scattering length gamma
-        # TODO: discretize the scattering kernel
+                THz * (scattering - 2j*np.pi*self.frequency) / self._vmags
 
     def _calculate_out_scattering_from_kernel(self):
         """
@@ -446,3 +459,11 @@ class Conductivity:
             self._out_scattering = (
                 self.band.periodic_projector @ self._out_scattering
                 @ self.band.periodic_projector.T).tocsc()
+
+    def _build_in_scattering_matrix(self):
+        if self.scattering_kernel is not None:
+            self._in_scattering = (
+                self._m_projector @ self.scattering_matrix @ self._m_projector)
+        else:
+            self._in_scattering = scipy.sparse.csc_array(
+                self._out_scattering.shape)
