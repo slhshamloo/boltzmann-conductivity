@@ -81,6 +81,7 @@ class FittingRoutine:
             y_normalize: Mapping = None, cond_obj: Conductivity = None,
             loss: Callable = lambda y_fit, y_data: np.mean(
                 np.abs(y_fit - y_data)),
+            preprocess: Callable = lambda x, y: y,
             postprocess: Callable = lambda x, y: y):
         """Compute the residual for the given parameters and data.
 
@@ -141,25 +142,28 @@ class FittingRoutine:
             A function that takes the fit and data y values, and
             returns a scalar loss value. By default, the mean absolute
             error is used.
+        preprocess : Callable, optional
+            This callable is applied to the data y values before
+            calculating the loss. It takes ``x_data`` and a ``y`` with
+            a format similar to ``y_data``, and returns the processed
+            ``y``, again with a format similar to ``y_data``.
+            By default, no postprocessing is applied. An example
+            use case is filtering out parts of the values where the
+            data can be unreliable.
         postprocess : Callable, optional
-            This callable is applied to the data and fit y values
-            before calculating the loss. It takes ``x_data`` and
-            a ``y`` with a format similar to ``y_data``, and returns
-            the processed ``y``, again with a format similar to
-            ``y_data``. By default, no postprocessing is applied. An
-            example use case is filtering out parts of the values
-            where the data can be unreliable.
+            Like ``preprocess``, but applied to the fit y values.
+            By default, no postprocessing is applied.
         """
         if multi_params:
             return self._calculate_multi(
                 param_values, param_keys, x_data, y_data, multi_params,
                 x_shift, x_normalize, y_shift, y_normalize, cond_obj,
-                loss, postprocess)
+                loss, preprocess, postprocess)
         else:
             return self._calculate_single(
                 param_values, param_keys, x_data, y_data,
                 x_shift, x_normalize, y_shift, y_normalize, cond_obj,
-                loss, postprocess)
+                loss, preprocess, postprocess)
 
     def log(self, param_values, convergence: float = None):
         """Log the current fitting iteration and parameters.
@@ -210,7 +214,7 @@ class FittingRoutine:
 
     def _calculate_single(self, param_values, param_keys, x_data, y_data,
                           x_shift, x_normalize, y_shift, y_normalize,
-                          cond_obj, loss, postprocess):
+                          cond_obj, loss, preprocess, postprocess):
         params = deepcopy(self.init_params)
         for key, value in zip(param_keys, param_values):
             _update_flat_value(params, key, value)
@@ -238,15 +242,16 @@ class FittingRoutine:
             if y_normalize is not None:
                 for label in y_fit:
                     y_fit[label] *= y_normalize[label]
+        y_data = preprocess(x_data, y_data)
         y_fit = postprocess(x_data, y_fit)
-        y_data = postprocess(x_data, y_data)
         y_fit = np.concatenate(list(y_fit.values()))
         y_data = np.concatenate(list(y_data.values()))
         return loss(y_fit, y_data)
     
-    def _calculate_multi(self, param_values, param_keys, x_data, y_data,
-                         multi_params, x_shift, x_normalize,
-                         y_shift, y_normalize, cond_obj, loss, postprocess):
+    def _calculate_multi(
+            self, param_values, param_keys, x_data, y_data, multi_params,
+            x_shift, x_normalize, y_shift, y_normalize, cond_obj, loss,
+            preprocess, postprocess):
         n_data_sets = len(next(iter(x_data.values())))
         total_loss = 0.0
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
@@ -284,8 +289,8 @@ class FittingRoutine:
                     for label in y_fit:
                         y_fit[label] *= y_normalize[label][i]
             x_data_set = {label: x[i] for label, x in x_data.items()}
+            y_data_set = preprocess(x_data_set, y_data_set)
             y_fit = postprocess(x_data_set, y_fit)
-            y_data_set = postprocess(x_data_set, y_data_set)
             total_loss += loss(y_fit, y_data_set) / n_data_sets
         return total_loss
 
@@ -339,8 +344,8 @@ def _mean_absolute_error(y_fit, y_data):
     return np.mean(np.abs(y_fit - y_data))
 
 
-def _dummy_postprocess(x, y):
-    """A dummy postprocessing function that does nothing.
+def _dummy_processor(x, y):
+    """A dummy processing function that does nothing.
     Exists because lambdas cannot be pickled, and so cannot be used in
     multiprocessed fitting routines."""
     return y
@@ -353,7 +358,8 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               x_shift: Mapping = None, x_normalize: Mapping = None,
               y_shift: Mapping = None, y_normalize: Mapping = None,
               loss: Callable = _mean_absolute_error,
-              postprocess: Callable = _dummy_postprocess,
+              preprocess: Callable = _dummy_processor,
+              postprocess: Callable = _dummy_processor,
               save_path: str = None, save_label: str = None, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
@@ -427,13 +433,16 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     loss : Callable, optional
         A function that takes the fit and data y values, and returns a
         scalar loss value. By default, the mean absolute error is used.
-    postprocess : Callable, optional
-        This callable is applied to the data and fit y values before
+    preprocess : Callable, optional
+        This callable is applied to the data y values before
         calculating the loss. It takes ``x_data`` and a ``y`` with a
         format similar to ``y_data``, and returns the processed ``y``,
         again with a format similar to ``y_data``. By default, no
         postprocessing is applied. An example use case is filtering out
         parts of the values where the data can be unreliable.
+    postprocess : Callable, optional
+        Like ``preprocess``, but applied to the fit y values.
+        By default, no postprocessing is applied.
     save_path : str, optional
         The directory where the fitting results will be saved.
         If not provided, results will not be saved.
@@ -470,7 +479,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
         args=(update_keys, x_data, y_data, multi_params,
               x_shift, x_normalize, y_shift, y_normalize, cond,
-              loss, postprocess),
+              loss, preprocess, postprocess),
         **kwargs)
     end_time = datetime.now()
 
