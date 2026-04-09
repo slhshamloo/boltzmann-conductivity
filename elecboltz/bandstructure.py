@@ -3,6 +3,7 @@ from .integrate import adaptive_octree_integrate
 import numpy as np
 import sympy
 import scipy.sparse
+import scipy.optimize
 from skimage.measure import marching_cubes
 
 from typing import Union
@@ -34,6 +35,11 @@ class BandStructure:
     band_params : dict, optional
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
+    fixed_filling : float or None
+        The fixed electronic filling fraction (``n``) of the material.
+        If not None, this is used to set the chemical potential upon
+        discretization of the Feri surface. The actual ``n`` value
+        might be slightly different.
     domain_size : Sequence[float]
         The ratio of the reciprocal space domain sidelengths to simple
         cubic unit cell dimensions in reciprocal space. The product
@@ -91,6 +97,8 @@ class BandStructure:
     band_params : dict
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
+    fixed_filling : float or None
+        Electronic filling fraction (``n``) target.
     n : float
         The electron filling fraction of the material. Only available
         after calling ``calculate_filling_fraction``.
@@ -128,6 +136,7 @@ class BandStructure:
     def __init__(
             self, dispersion: str, chemical_potential: float,
             unit_cell: Sequence[float], band_params: dict = {},
+            fixed_filling: Union[float, None] = None,
             domain_size: Sequence[float] = np.ones(3), bz_ratio: float = 1.0,
             periodic: Union[bool, Sequence[Union[int, bool]]] = True,
             axis_names: Union[Sequence[str], str] = ['a', 'b', 'c'],
@@ -137,6 +146,7 @@ class BandStructure:
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         self.band_params = band_params
+        self.fixed_filling = fixed_filling
         self.chemical_potential = chemical_potential
         self.unit_cell = unit_cell
         self.domain_size = domain_size
@@ -203,18 +213,10 @@ class BandStructure:
         surface construction, periodic boundary conditions are applied
         to "stitch" the open ends of the surface together.
         """
-        self._gvec = self.domain_size * np.pi / self.unit_cell
-        self.kpoints, self.kfaces, _, _ = marching_cubes(
-            self.energy_func(*np.mgrid[
-                -self._gvec[0]:self._gvec[0]:1j*self.resolution[0],
-                -self._gvec[1]:self._gvec[1]:1j*self.resolution[1],
-                -self._gvec[2]:self._gvec[2]:1j*self.resolution[2]]),
-            level=self.chemical_potential)
-        self.kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
-        self.kpoints -= self._gvec[None, :]
-        for _ in range(self.n_correct):
-            self.kpoints = self._apply_newton_correction(self.kpoints)
-        if self.sort_axis:
+        self._build_fermi_surface()
+        if self.fixed_filling is not None:
+            self.tune_chemical_potential()
+        if self.sort_axis is not None:
             self._sort_and_reindex(self.sort_axis)
         self._stitch_periodic_boundaries()
 
@@ -304,6 +306,34 @@ class BandStructure:
         v_perp = np.sqrt(vs[0]**2 + vs[1]**2)
         self.m = np.sum(hbar * k_perp / v_perp * dks) / np.sum(dks) / m_e
         return self.m
+    
+    def tune_chemical_potential(self, depth: int = 6) -> float:
+        """Tune the ``chemical_potential`` to match the electron
+        ``fixed_filling`` fraction.
+        
+        Parameters
+        ----------
+        depth : int, optional
+            The depth of the adaptive octree integration in
+            ``calculate_filling_fraction``.
+        
+        Returns
+        -------
+        float
+            The tuned chemical potential in milli eV.
+        """
+        def filling_diff(mu):
+            if 'mu' in self.band_params:
+                self.band_params['mu'] = mu
+            else:
+                self.chemical_potential = mu
+            return (self.calculate_filling_fraction(depth=depth)
+                    - self.fixed_filling)
+        energy_scale_guess = max(np.abs(self.energy_func(0, 0, 0)),
+                                 np.abs(self.energy_func(*self._gvec)))
+        bracket = [-10 * energy_scale_guess, 10 * energy_scale_guess]
+        self.chemical_potential = scipy.optimize.brentq(filling_diff, *bracket)
+        return self.chemical_potential
 
     def energy_func(self, kx, ky, kz):
         """Calculate the energy at the given k-point.
@@ -360,6 +390,19 @@ class BandStructure:
         self._velocity_funcs_full = [
             sympy.lambdify(all_symbols, vexpr, 'numpy')
             for vexpr in self._velocities_sympy]
+    
+    def _build_fermi_surface(self):
+        self._gvec = self.domain_size * np.pi / self.unit_cell
+        self.kpoints, self.kfaces, _, _ = marching_cubes(
+            self.energy_func(*np.mgrid[
+                -self._gvec[0]:self._gvec[0]:1j*self.resolution[0],
+                -self._gvec[1]:self._gvec[1]:1j*self.resolution[1],
+                -self._gvec[2]:self._gvec[2]:1j*self.resolution[2]]),
+            level=self.chemical_potential)
+        self.kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
+        self.kpoints -= self._gvec[None, :]
+        for _ in range(self.n_correct):
+            self.kpoints = self._apply_newton_correction(self.kpoints)
 
     def _sort_and_reindex(self, sort_axis):
         new_order, self.kfaces = self._generate_reindex(sort_axis)
