@@ -710,6 +710,9 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
     result['fixed_params'] = _build_params_from_flat(
         fixed_keys, [_extract_flat_value(init_params, key)
                      for key in fixed_keys])
+    
+    if 'fixed_filling' in init_params:
+        _update_result_chemical_potential(result)
 
     result['begin_time'] = begin_time.isoformat()
     result['end_time'] = end_time.isoformat()
@@ -720,6 +723,21 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
         with path.open('w') as f:
             json.dump(result, f, indent=2)
     return result
+
+
+def _update_result_chemical_potential(result):
+    band = BandStructure(**easy_params(
+        dict(result['fit_params'], **result['fixed_params'])))
+    band.discretize()
+    if 'mu' in band.band_params:
+        result['fit_params']['band_params']['mu'] = band.band_params['mu']
+        result['init_params']['band_params']['mu'] = \
+            result['fixed_params']['band_params'].pop('mu')
+        if len(result['fixed_params']['band_params']) == 0:
+            del result['fixed_params']['band_params'] 
+    else:
+        result['fit_params']['chemical_potential'] = band.chemical_potential
+        del result['fixed_params']['chemical_potential']
 
 
 def _result_to_serializable(result):
