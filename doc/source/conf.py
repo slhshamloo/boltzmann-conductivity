@@ -1,12 +1,14 @@
 import os, sys
-from importlib.metadata import version
+from setuptools_scm import get_version
 
 sys.path.insert(0, os.path.abspath('../..'))
 
 project = 'elecBoltz'
 copyright = '2025, Saleh Shamloo Ahmadi'
 author = 'Saleh Shamloo Ahmadi'
-release = version("elecboltz")
+
+release = get_version(root='../../')
+version = release.split("+")[0]
 
 extensions = [
     'sphinx.ext.autodoc',
