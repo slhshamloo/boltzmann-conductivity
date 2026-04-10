@@ -1,13 +1,12 @@
-import os
-import sys
-
+import os, sys
+from importlib.metadata import version
 
 sys.path.insert(0, os.path.abspath('../..'))
 
 project = 'elecBoltz'
 copyright = '2025, Saleh Shamloo Ahmadi'
 author = 'Saleh Shamloo Ahmadi'
-release = '0.3.10'
+release = version("your-package-name")
 
 extensions = [
     'sphinx.ext.autodoc',

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "elecboltz"
-version = "0.3.10"
+dynamic = ["version"]
 authors=[{name = "Saleh Shamloo Ahmadi", email = "slhshamloo@gmail.com"}]
 description = "Boltzmann transport for conductivity of materials using an FEM"
 requires-python = ">=3.9"
@@ -25,3 +25,7 @@ issues = "https://github.com/slhshamloo/boltzmann-conductivity/issues"
 
 [tool.setuptools]
 packages = ["elecboltz"]
+
+[tool.setuptools_scm]
+version_scheme = "guess-next-dev"
+local_scheme = "no-local-version"
