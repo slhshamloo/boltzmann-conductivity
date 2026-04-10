@@ -4,3 +4,4 @@ sympy>=1.10.1
 scikit-image>=0.22.0
 pydata-sphinx-theme>=0.16.1
 sphinx>=8.2.3
+setuptools-scm>=8.0.0
