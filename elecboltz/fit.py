@@ -1,6 +1,6 @@
 from .bandstructure import BandStructure
 from .conductivity import Conductivity
-from .params import easy_params
+from .params import easy_params, _deep_update
 
 import numpy as np
 from scipy.optimize import differential_evolution
@@ -726,8 +726,9 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
 
 
 def _update_result_chemical_potential(result):
-    band = BandStructure(**easy_params(
-        dict(result['fit_params'], **result['fixed_params'])))
+    params = deepcopy(result['fit_params'])
+    _deep_update(params, result['fixed_params'])
+    band = BandStructure(**easy_params(params))
     band.discretize()
     if 'mu' in band.band_params:
         result['fit_params']['band_params']['mu'] = band.band_params['mu']
