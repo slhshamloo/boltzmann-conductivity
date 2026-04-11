@@ -332,8 +332,12 @@ class BandStructure:
         energy_scale_guess = max(np.abs(self.energy_func(0, 0, 0)),
                                  np.abs(self.energy_func(*self._gvec)))
         bracket = [-10 * energy_scale_guess, 10 * energy_scale_guess]
-        self.chemical_potential = scipy.optimize.brentq(filling_diff, *bracket)
-        return self.chemical_potential
+        mu = scipy.optimize.brentq(filling_diff, *bracket)
+        if 'mu' in self.band_params:
+            self.band_params['mu'] = mu
+        else:
+            self.chemical_potential = mu
+        return mu
 
     def energy_func(self, kx, ky, kz):
         """Calculate the energy at the given k-point.
