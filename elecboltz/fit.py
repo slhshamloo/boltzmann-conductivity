@@ -78,7 +78,7 @@ class FittingRoutine:
             y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
             multi_params: Collection = [], x_shift: Mapping = None,
             x_normalize: Mapping = None, y_shift: Mapping = None,
-            y_normalize: Mapping = None, cond_obj: Conductivity = None,
+            y_normalize: Mapping = None,
             loss: Callable = lambda y_fit, y_data: np.mean(
                 np.abs(y_fit - y_data)),
             preprocess: Callable = lambda x, y: y,
@@ -135,9 +135,6 @@ class FittingRoutine:
         y_normalize : float, optional
             The y values will be shifted to this value (if ``x_shift``
             is provided).
-        cond_obj : Conductivity, optional
-            If provided, the fitter will try to salvage the
-            calculations already done from that object.
         loss : Callable, optional
             A function that takes the fit and data y values, and
             returns a scalar loss value. By default, the mean absolute
@@ -157,12 +154,12 @@ class FittingRoutine:
         if multi_params:
             return self._calculate_multi(
                 param_values, param_keys, x_data, y_data, multi_params,
-                x_shift, x_normalize, y_shift, y_normalize, cond_obj,
+                x_shift, x_normalize, y_shift, y_normalize,
                 loss, preprocess, postprocess)
         else:
             return self._calculate_single(
                 param_values, param_keys, x_data, y_data,
-                x_shift, x_normalize, y_shift, y_normalize, cond_obj,
+                x_shift, x_normalize, y_shift, y_normalize,
                 loss, preprocess, postprocess)
 
     def log(self, param_values, convergence: float = None):
@@ -214,12 +211,12 @@ class FittingRoutine:
 
     def _calculate_single(self, param_values, param_keys, x_data, y_data,
                           x_shift, x_normalize, y_shift, y_normalize,
-                          cond_obj, loss, preprocess, postprocess):
+                          loss, preprocess, postprocess):
         params = deepcopy(self.init_params)
         for key, value in zip(param_keys, param_values):
             _update_flat_value(params, key, value)
         params = easy_params(params)
-        cond = self._build_obj(params, cond_obj)
+        cond = self._build_obj(params)
 
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
         y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
@@ -250,7 +247,7 @@ class FittingRoutine:
     
     def _calculate_multi(
             self, param_values, param_keys, x_data, y_data, multi_params,
-            x_shift, x_normalize, y_shift, y_normalize, cond_obj, loss,
+            x_shift, x_normalize, y_shift, y_normalize, loss,
             preprocess, postprocess):
         n_data_sets = len(next(iter(x_data.values())))
         total_loss = 0.0
@@ -266,7 +263,7 @@ class FittingRoutine:
                     params_data_set, multi_param,
                     _extract_flat_value(params, multi_param)[i])
             params_data_set = easy_params(params_data_set)
-            cond = self._build_obj(params_data_set, cond_obj)
+            cond = self._build_obj(params_data_set)
             for j in range(len(next(iter(y_fit.values())))):
                 x = {label: x[i][j] for label, x in x_data.items()}
                 y = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
@@ -294,39 +291,21 @@ class FittingRoutine:
             total_loss += loss(y_fit, y_data_set) / n_data_sets
         return total_loss
 
-    def _build_obj(self, params, cond):
+    def _build_obj(self, params):
         """
         Build the conductivity object with the given parameters.
         """
-        if cond is None:
-            band = BandStructure(**easy_params(self.init_params))
-            cond = Conductivity(band, **easy_params(self.init_params))
-            update_band = True
-        else:
-            cond = deepcopy(cond)
-            band = cond.band
-            update_band = False
+        band = BandStructure(**easy_params(self.init_params))
+        cond = Conductivity(band, **easy_params(self.init_params))
         for key, value in params.items():
             if key == 'band_params':
                 for band_key, band_value in value.items():
-                    if band.band_params[band_key] != band_value:
-                        update_band = True
-                        band.band_params[band_key] = band_value
-            elif key == 'scattering_params':
-                for cond_key, cond_value in value.items():
-                    if hasattr(cond, cond_key):
-                        if np.any(getattr(cond, cond_key) != cond_value):
-                            setattr(cond, cond_key, cond_value)
+                    band.band_params[band_key] = band_value
             elif hasattr(band, key):
-                if np.any(getattr(band, key) != value):
-                    update_band = True
-                    setattr(band, key, value)
+                setattr(band, key, value)
             elif hasattr(cond, key):
-                if np.any(getattr(cond, key) != value):
-                    setattr(cond, key, value)
-        if update_band:
-            band.discretize()
-            cond.band = band
+                setattr(cond, key, value)
+        band.discretize()
         return cond
 
     def _get_label_indices(self, labels: Collection[str]):
@@ -472,13 +451,12 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
             x0[i] = (x_min + x_max) / 2
 
     begin_time = datetime.now()
-    cond = _prebuild_cond(init_params)
     fitter = FittingRoutine(init_params, save_path, save_label,
                             update_keys=update_keys)
     result = differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
         args=(update_keys, x_data, y_data, multi_params,
-              x_shift, x_normalize, y_shift, y_normalize, cond,
+              x_shift, x_normalize, y_shift, y_normalize,
               loss, preprocess, postprocess),
         **kwargs)
     end_time = datetime.now()
@@ -525,15 +503,6 @@ def _multiply_multi_params(update_keys, bounds, x0, init_params,
                     x0[i] = parent_value
             i += 1
     return update_keys, bounds, x0, init_params
-
-
-def _prebuild_cond(init_params):
-    band = BandStructure(**easy_params(init_params))
-    band.discretize()
-    cond = Conductivity(band, **easy_params(init_params))
-    cond._build_elements()
-    cond._build_differential_operator()
-    return cond
 
 
 def _extract_flat_keys(params, bounds=False):
