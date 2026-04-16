@@ -75,30 +75,6 @@ class BandStructure:
 
     Attributes
     ----------
-    dispersion : str
-        The dispersion relation. Updating this will automatically
-        update ``energy_func`` and ``velocity_func``.
-    chemical_potential : float
-        The chemical potential in milli eV.
-    unit_cell : Sequence[float]
-        The dimensions of the unit cell in angstrom.
-    domain_size : Sequence[float]
-        The ratio of the reciprocal space domain sidelengths to simple
-        cubic unit cell dimensions in reciprocal space. The product
-        of the numbers in this collection must be equal to the number
-        of atoms in the conventional unit cell specified by
-        ``unit_cell``.
-    bz_ratio : float
-        The ratio of the volume of the domain in reciprocal space to
-        the volume of the Brillouin zone. This is used to scale the
-        results to the correct values (e.g. the conductivity).
-    periodic : Sequence[int]
-        The periodic axes.
-    band_params : dict
-        The parameters of the dispersion relation. Energy units are
-        milli eV and distance units are angstrom.
-    fixed_filling : float or None
-        Electronic filling fraction (``n``) target.
     n : float
         The electron filling fraction of the material. Only available
         after calling ``calculate_filling_fraction``.
@@ -126,12 +102,6 @@ class BandStructure:
     ncorrect : int
         The number of Newton--Raphson steps applied to correct the
         triangulated surface after the marching cubes algorithm.
-    sort_axis : int or None
-        The axis along which to sort the points after triangulation.
-    axis_names : str or Sequence[str]
-        The names of the unit cell axes.
-    wavevector_names : str or Sequence[str]
-        The names of the wavevector components.
     """
     def __init__(
             self, dispersion: str, chemical_potential: float,

@@ -45,9 +45,6 @@ class Conductivity:
         the scattering parameters in ``**kwargs`` regardless of whether
         you use any, to keep the function signature consistent.
         If None, the scattering rate should be specified instead.
-    scattering_params : dict[str, float or Sequence[float]], optional
-        Extra parameters passed to the scattering kernel or the
-        scattering rate function.
     frequency : float
         The frequency of the applied field in units of THz.
     correct_curvature : bool, optional
@@ -71,45 +68,15 @@ class Conductivity:
     
     Attributes
     ----------
-    band : BandStructure
-        The class holding band structure information of the material.
-    field : Sequence[float] or None
-        The magnetic field in the x, y, and z directions in units of
-        Tesla.
-    scattering_rate : Callable or float or Sequence[float] or None
-        The (out-)scattering rate as a function of kx, ky, and kz. Can
-        also be a constant value instead of a function. If initialized
-        as None, it will be calculated from the scattering kernel upon
-        the next calculation.
-    scattering_kernel : Callable or None
-        The scattering kernel, as a function of a pair of coordinates
-        ``(kx, ky, kz)`` and ``(kx', ky', kz')`` in units of angstrom,
-        which returns values in units of angstrom^2 THz. All coordinates
-        are given to the function in order, so the function signature
-        would be ``C(kx, ky, kz, kx', ky', kz')``. If None, the
-        scattering rate should be specified instead. The out-scattering
-        rate will be calculated from the scattering kernel if the
-        scattering rate is not provided.
-    scattering_params : dict[str, float or Sequence[float]], optional
-        Extra parameters passed to the scattering kernel or the
-        scattering rate function.
-    frequency : float
-        The frequency of the applied field in units of THz.
-        If non-zero, the conductivity output will be complex.
     sigma : numpy.ndarray
         The conductivity tensor, which is a 3 by 3 matrix. Can be
         calculated using the ``solve`` method. Elements that are not
         calculated yet are set to zero.
-    correct_curvature : bool
-        Whether to correct for the curvature of the Fermi surface.
-    solver : Callable
-        The solver used to solve the linear system.
     """
     def __init__(
             self, band: BandStructure, field: Sequence[float] = np.zeros(3),
             scattering_rate: Union[Callable, float, None] = None,
             scattering_kernel: Union[Callable, None] = None,
-            scattering_params: dict[str, Union[float, Sequence[float]]] = {},
             frequency: float = 0.0, correct_curvature: bool = True,
             solver: Callable = scipy.sparse.linalg.spsolve,
             Bamp: float = None, Btheta: float = None, Bphi: float = None,
@@ -120,7 +87,6 @@ class Conductivity:
         super().__setattr__('band', band)
         super().__setattr__('scattering_rate', scattering_rate)
         super().__setattr__('scattering_kernel', scattering_kernel)
-        super().__setattr__('scattering_params', scattering_params)
         super().__setattr__('frequency', frequency)
         self._field_direction = None
         self.set_field(field, Bamp, Btheta, Bphi)
@@ -132,7 +98,7 @@ class Conductivity:
         self._vhat_projections = None
         self._jacobians = None
         self._jacobian_sums = None
-        self._m_projector = None
+        self._overlap_matrix = None
         self._derivative_components = None
         self._derivatives = None
         self._scattering_invlen = None
@@ -147,8 +113,7 @@ class Conductivity:
         super().__setattr__(name, value)
         if name == 'band':
             self.erase_memory()
-        if name in ['frequency', 'scattering_rate',
-                    'scattering_kernel', 'scattering_params']:
+        if name in ['frequency', 'scattering_rate', 'scattering_kernel']:
             self.erase_memory(elements=False, scattering=True,
                               derivative=False)
         if name in ['field', 'Bamp', 'Btheta', 'Bphi']:
@@ -190,7 +155,7 @@ class Conductivity:
                 self._saved_solutions = [None, None, None]
             else:
                 self.erase_memory(elements=False, scattering=False,
-                                derivative=True)
+                                  derivative=True)
         self._field_magnitude = new_magnitude
         self._field_direction = new_direction
         if Bamp is None:
@@ -276,7 +241,7 @@ class Conductivity:
             self._vhats = None
             self._jacobians = None
             self._jacobian_sums = None
-            self._m_projector = None
+            self._overlap_matrix = None
             self._derivative_components = None
             self._derivatives = None
             self._vhat_projections = None
@@ -343,8 +308,8 @@ class Conductivity:
                                i_idx, k_idx, i_idx, j_idx))
         self._jacobian_sums = scipy.sparse.csr_array(
             (np.tile(self._jacobians, 9), (rows, cols)), shape=(n, n))
-        self._m_projector = self._jacobian_sums / 24
-        self._m_projector.setdiag(2 * self._m_projector.diagonal())
+        self._overlap_matrix = self._jacobian_sums / 24
+        self._overlap_matrix.setdiag(2 * self._overlap_matrix.diagonal())
 
     def _calculate_derivative_sums(self, triangle_points):
         """
@@ -368,7 +333,7 @@ class Conductivity:
                 for derivative in self._derivatives]
 
     def _calculate_velocity_projections(self):
-        self._vhat_projections = self._m_projector @ self._vhats
+        self._vhat_projections = self._overlap_matrix @ self._vhats
         if self.band.periodic:
             self._vhat_projections = \
                 self.band.periodic_projector @ self._vhat_projections
@@ -474,7 +439,7 @@ class Conductivity:
     def _build_in_scattering_matrix(self):
         if self.scattering_kernel is not None:
             self._in_scattering = (
-                self._m_projector @ self.scattering_matrix @ self._m_projector)
+                self._overlap_matrix @ self.scattering_matrix @ self._overlap_matrix)
         else:
             self._in_scattering = scipy.sparse.csc_array(
                 self._out_scattering.shape)
