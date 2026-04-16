@@ -13,13 +13,19 @@ class ScatteringFunction:
     def __init__(self, params):
         self.params = params
     
-    def __call__(self, kx, ky, kz, **kwargs):
+    def __call__(self, kx, ky, kz, vx, vy, vz, epsilon, **kwargs):
         """Evaluate the scattering function at the given wavevector.
 
         Parameters
         ----------
         kx, ky, kz : float
             The components of the wavevector in Cartesian coordinates.
+        vx, vy, vz : float
+            The components of the velocity at the given wavevector.
+        epsilon : float
+            The energy at the given wavevector.
+        **kwargs
+            Additional parameters that may be needed for specific scattering models.
 
         Returns
         -------
@@ -36,7 +42,7 @@ class IsotropicScattering(ScatteringFunction):
     This class represents a scattering function that is constant
     everywhere, defined by the parameter `gamma_0`.
     """
-    def __call__(self, kx, ky, kz, **kwargs):
+    def __call__(self, **kwargs):
         return self.params['gamma_0']
 
 
@@ -57,7 +63,7 @@ class AzimuthalScattering(ScatteringFunction):
         self.trig_func = trig_funcs[params['trig']]
         if 'sym' not in params:
             self.params['sym'] = 1
-    def __call__(self, kx, ky, kz, **kwargs):
+    def __call__(self, kx, ky, **kwargs):
         phi = np.arctan2(ky, kx)
         return (self.params['gamma_k'] * np.abs(self.trig_func(
             self.params['sym']*phi)) ** self.params['power'])
@@ -75,8 +81,8 @@ class ScatteringSum(ScatteringFunction):
         super().__init__(params={})
         self.scattering_functions = scattering_functions
     
-    def __call__(self, kx, ky, kz, **kwargs):
-        return sum(s(kx, ky, kz, **kwargs) for s in self.scattering_functions)
+    def __call__(self, **kwargs):
+        return sum(s(**kwargs) for s in self.scattering_functions)
 
 
 def build_scattering_function(

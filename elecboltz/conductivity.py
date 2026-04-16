@@ -23,10 +23,19 @@ class Conductivity:
         The magnetic field in the x, y, and z directions in units of
         Tesla.
     scattering_rate : Callable or float or None
-        The (out-)scattering rate as a function of kx, ky, and kz, in
-        units of THz. Can also be a constant value instead of a
-        function. If None, it will be calculated from the scattering
-        kernel.
+        The (out-)scattering rate, in units of THz, as a function of
+        any of the parameters (wavevectors) kx, ky, kz, in units of
+        1/angstrom, (velocities) vx, vy, vz, in units of m/s,
+        temperature in units of K, and energy (difference with the
+        Fermi level) in units of meV. The function signature should
+        have matching names for these parameters, and also collect
+        any extra keyword arguments in ``**kwargs`` to keep the
+        function signature consistent. Note that with this type of
+        function signature, the function doesn't need to explicitly
+        specify parameters that is does not use, and the order of the
+        parameters also doesn't matter. Can also be a constant value
+        instead of a function. If None, it will be calculated from
+        the scattering kernel.
     scattering_kernel : Callable or None
         The scattering kernel as a function of a pair of coordinates
         ``(kx, ky, kz)`` and ``(kx', ky', kz')``, in units of angstrom
@@ -407,8 +416,10 @@ class Conductivity:
 
         if isinstance(self.scattering_rate, Callable):
             scattering = self.scattering_rate(
-                self.band.kpoints[:, 0], self.band.kpoints[:, 1],
-                self.band.kpoints[:, 2], **self.scattering_params)
+                kx=self.band.kpoints[:, 0], ky=self.band.kpoints[:, 1],
+                kz=self.band.kpoints[:, 2], vx=self._velocities[:, 0],
+                vy=self._velocities[:, 1], vz=self._velocities[:, 2],
+                **self.scattering_params)
         else:
             scattering = self.scattering_rate
         # scattering_invlen is the inverse scattering length gamma
