@@ -10,7 +10,7 @@
 \newcommand{\ddfrac}[2]{{\displaystyle\frac{\displaystyle #1}{\displaystyle #2}}}
 
 \title{FEM for Boltzmann Conductivity: An Introduction}
-\author{Saleh Shamloo Ahmadi}
+\author{Saleh Shamloo, Chaitanya Murthy}
 
 \begin{document}
 \maketitle
@@ -64,11 +64,12 @@ fluctuation $g$, we have
     I[f_0 + g] = \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t)
     - \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) g(\vb{k}; t) + \mathcal{O}(g^2),
 \end{equation} 
-where $C(\vb{k}, \vb{k'})$ is a scattering kernel. I call the two terms the \emph{in-scattering} and
+where $C(\vb{k}, \vb{k'})$ is a scattering kernel. We call the two terms the \emph{in-scattering} and
 \emph{out-scattering} terms respectively. The out-scattering is usually expressed with the
 \emph{relaxation time} $\tau$ or \emph{scattering rate} $\Gamma=1/\tau$, which is equal to
 \begin{equation}
     \frac{1}{\tau(\vb{k})} = \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}).
+    \label{eq:tau_kernel}
 \end{equation}
 
 \sloppy{In-scattering is dropped in the \emph{relaxation time approximation}, which is the case for
@@ -92,7 +93,7 @@ applying the approximations, we get
 \end{equation}
 Depending on whether we want to study steady-state DC fields or AC fields, we can set $\pdv*{t}$ to
 equal to zero or perform a Fourier transform and set $\pdv*{t} = -i\omega$. For the sake of
-completeness, I will go with the latter case (just setting $\omega=0$ and using the regular,
+completeness, We will go with the latter case (just setting $\omega=0$ and using the regular,
 non-Fourier-trasformed fields would produce the former case easily).
 
 This equation can be expressed as
@@ -149,7 +150,7 @@ is added. In the end, we have
 where FS is the Fermi surface, and $\hat{v}_a=v_a/v$ is the component of the velocity in the
 $a$ direction, divided by the full magnitude of the velocity.
 
-\section{Finite Element Method}
+\section{Finite Element Method} 
 \subsection{Discretization}
 To solve this using the finite element method, we first define a set of basis functions, and then
 approximate everything as a linear combination of these basis functions. So, the goal is to express
@@ -163,25 +164,25 @@ for one quantity and on the bottom for another. If an index is not summed over, 
 obviously stay where it is in the final quantity. We call this the \emph{index contraction} rule.
 The placement of indices on the top or the bottom has a deeper connection with tensor calculus and
 covariance and contravariance, but it is not needed to understand the procedures here. You can just
-think of it as a syntactic game. I will also not use the Einstein summation convention, just to
+think of it as a syntactic game. We will also not use the Einstein summation convention, just to
 make things completely explicit and hopefully clearer.
 
-Defining the basis as the set $\{\psi_i(\vb{k})\}$, we can approximate any function by a linear
+Defining the basis as the set $\{\phi_i(\vb{k})\}$, we can approximate any function by a linear
 combination of these basis functions;
 \begin{equation}
-    f(\vb{k}) = \sum_i f^{i}\psi_i(\vb{k}). \label{eq:vector}
+    f(\vb{k}) = \sum_i f^{i}\phi_i(\vb{k}). \label{eq:vector}
 \end{equation}
 Now, we would like to evaluate integrals over the Fermi surface. So, to make our notation simpler,
 we can define quantities with subscripts to represent integrals. Also, notice these are projections
 of the functions onto the basis functions.
 \begin{equation}
-    f_i \equiv \int\dd{\vb{k}} \psi_i(\vb{k}) f(\vb{k})
-    = \sum_j f^j \int\dd{\vb{k}} \psi_i(\vb{k}) \psi_j(\vb{k})
+    f_i \equiv \int\dd{\vb{k}} \phi_i(\vb{k}) f(\vb{k})
+    = \sum_j f^j \int\dd{\vb{k}} \phi_i(\vb{k}) \phi_j(\vb{k})
     \label{eq:integral_vector}
 \end{equation}
 It is useful to define the quantity
 \begin{equation}
-    M_{ij} \equiv \int \dd{\vb{k}} \psi_i(\vb{k}) \psi_j(\vb{k}),
+    M_{ij} \equiv \int \dd{\vb{k}} \phi_i(\vb{k}) \phi_j(\vb{k}),
     \label{eq:overlap}
 \end{equation}
 which we call the \emph{overlap matrix}. Using it,
@@ -197,12 +198,12 @@ of the components of the vector $f^i$. So, to abide by our rule of index contrac
 the matrix of $A$ should have one index on the bottom to sum over the elements of $f^i$ and one index
 on the top for each of the elements of the resulting vector $(Af)^i$. Putting it all together,
 \begin{equation}
-    (Af)(\vb{k}) = \sum_i (Af)^i \psi_i(\vb{k}) \equiv \sum_{ij} A^i_j f^j \psi_i(\vb{k}).
+    (Af)(\vb{k}) = \sum_i (Af)^i \phi_i(\vb{k}) \equiv \sum_{ij} A^i_j f^j \phi_i(\vb{k}).
 \end{equation}
 For the integrals, we have
 \begin{equation}
-    (Af)_i = \int\dd{\vb{k}} \psi_i(\vb{k}) (Af)(\vb{k}) = \sum_{jk} A^j_kf^k
-    \int\dd{\vb{k}} \psi_i(\vb{k})\psi_j(\vb{k}) = \sum_{jk} M_{ij} A^j_k f^k.
+    (Af)_i = \int\dd{\vb{k}} \phi_i(\vb{k}) (Af)(\vb{k}) = \sum_{jk} A^j_kf^k
+    \int\dd{\vb{k}} \phi_i(\vb{k})\phi_j(\vb{k}) = \sum_{jk} M_{ij} A^j_k f^k.
     \label{eq:integral}
 \end{equation}
 To make it simpler, we can define the symbol
@@ -236,16 +237,16 @@ The action of the operator $A$ on a function $f(\vb{k})$ is
 Inserting this into equation \eqref{eq:integral}, and utilizing equation \eqref{eq:integral_matrix},
 we get
 \begin{equation}
-    \sum_j A_{ij} f^j = \int\dd{\vb{k}} \psi_i(\vb{k}) \int\dd{\vb{k'}} A(\vb{k}, \vb{k'}) f(\vb{k'}).
+    \sum_j A_{ij} f^j = \int\dd{\vb{k}} \phi_i(\vb{k}) \int\dd{\vb{k'}} A(\vb{k}, \vb{k'}) f(\vb{k'}).
 \end{equation}
 expanding the function $f(\vb{k'})$ in terms of the basis functions from equation \eqref{eq:vector},
 \begin{equation}
-    \sum_j A_{ij} f^j = \int\dd{\vb{k}} \psi_i(\vb{k}) \int\dd{\vb{k'}} A(\vb{k}, \vb{k'})
-    \sum_j f^j \psi_j(\vb{k'}).
+    \sum_j A_{ij} f^j = \int\dd{\vb{k}} \phi_i(\vb{k}) \int\dd{\vb{k'}} A(\vb{k}, \vb{k'})
+    \sum_j f^j \phi_j(\vb{k'}).
 \end{equation}
 This is true for any function vector $f^j$, so we can drop it from both sides. This finally gives
 \begin{equation}
-    A_{ij} = \int\dd{\vb{k}} \int\dd{\vb{k'}} \psi_i(\vb{k}) A(\vb{k}, \vb{k'}) \psi_j(\vb{k'}).
+    A_{ij} = \int\dd{\vb{k}} \int\dd{\vb{k'}} \phi_i(\vb{k}) A(\vb{k}, \vb{k'}) \phi_j(\vb{k'}).
     \label{eq:matrix_elements}
 \end{equation}
 
@@ -255,9 +256,9 @@ integral equation \eqref{eq:integral_equation}. We would like to solve
     \int \dd{\vb{k'}} A(\vb{k}, \vb{k'}) g(\vb{k'}) = (Ag)(\vb{k}) = h(\vb{k}).
 \end{equation}
 To express this equation in terms of the symbols we know, we can multiply both sides by
-$\psi_i(\vb{k})$ and integrate over $\vb{k}$. This gives
+$\phi_i(\vb{k})$ and integrate over $\vb{k}$. This gives
 \begin{equation}
-    \int \dd{\vb{k}} \psi_i(\vb{k}) (Ag)(\vb{k}) = \int \dd{\vb{k}} \psi_i(\vb{k}) h(\vb{k}).
+    \int \dd{\vb{k}} \phi_i(\vb{k}) (Ag)(\vb{k}) = \int \dd{\vb{k}} \phi_i(\vb{k}) h(\vb{k}).
 \end{equation}
 Using equations \eqref{eq:integral_vector} and \eqref{eq:integral_matrix}, this becomes
 \begin{equation}
@@ -282,12 +283,12 @@ Finally, to calculate the conductivity tensor from \eqref{eq:conductivity}, we n
 $\hat{v}_a$ with $A^{-1}\hat{v}_b$ and take an integral over the result. To express this operation
 in our discrete basis, consider two functions $f$ and $g$. Their product is
 \begin{equation}
-    f(\vb{k})g(\vb{k}) = \sum_{ij} f^i g^j \psi_i(\vb{k}) \psi_j(\vb{k}),
+    f(\vb{k})g(\vb{k}) = \sum_{ij} f^i g^j \phi_i(\vb{k}) \phi_j(\vb{k}),
 \end{equation}
 and the integral over this product is
 \begin{equation}
     \int\dd{\vb{k}} f(\vb{k}) g(\vb{k}) = \sum_{ij} f^i g^j \int\dd{\vb{k}}
-    \psi_i(\vb{k})\psi_j(\vb{k}) = \sum_{ij} f^i g^j M_{ij} = \sum_i f^i g_i.
+    \phi_i(\vb{k})\phi_j(\vb{k}) = \sum_{ij} f^i g^j M_{ij} = \sum_i f^i g_i.
 \end{equation}
 So, the vector for one function needs to have indices on top and the other on the bottom. From
 equation \eqref{eq:inverse}, we can see $A^{-1}\hat{v}_b$ has the form
@@ -316,13 +317,13 @@ we have
 \begin{align}
 A_{ij} &= \begin{aligned}[t]
     &\int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau(\vb{k})})
-        \frac{\psi_i(\vb{k})\psi_j(\vb{k})}{v(\vb{k})} \\
-    &-\int\dd{\vb{k}} \psi_i(\vb{k})\frac{e\qty(\vu{v}(\vb{k})\cross\vb{B})}{\hbar}
-        \vdot\grad_{\vb{k}}\psi_j(\vb{k}) \\
+        \frac{\phi_i(\vb{k})\phi_j(\vb{k})}{v(\vb{k})} \\
+    &-\int\dd{\vb{k}} \phi_i(\vb{k})\frac{e\qty(\vu{v}(\vb{k})\cross\vb{B})}{\hbar}
+        \vdot\grad_{\vb{k}}\phi_j(\vb{k}) \\
     &- \int\dd{\vb{k}} \int\dd{\vb{k'}}
-    \psi_i(\vb{k}) \frac{C(\vb{k},\vb{k'})}{v(\vb{k})} \psi_j(\vb{k'})
+    \phi_i(\vb{k}) \frac{C(\vb{k},\vb{k'})}{v(\vb{k})} \phi_j(\vb{k'})
 \end{aligned} \\
-&\equiv \Gamma_{ij} - \frac{eB}{\hbar} \qty(D_{\vu{v}\cross\vu{B}})_{ij} - S_{ij}.
+&\equiv \Gamma_{ij} - \frac{eB}{\hbar} \qty(D_{\vu{v}\cross\vu{B}})_{ij} + S_{ij}.
 \end{align}
 The matrices $\Gamma_{ij}$, $D_{\vu{v}\cross\vu{B}}$ and $S_{ij}$ are called the
 \emph{out-scattering}, \emph{derivative} and \emph{in-scattering} matrices respectively.
@@ -331,11 +332,11 @@ Expanding the $k$-dependence in terms of the basis functions for the out-scatter
 matrix $\Gamma_{ij}$ gives
 \begin{equation}
     \Gamma_{ij} = \sum_k \int\dd{\vb{k}} \qty(-i\omega + \frac{1}{\tau_k})
-    \frac{\psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k})}{v_k}.
+    \frac{\phi_i(\vb{k})\phi_j(\vb{k})\phi_k(\vb{k})}{v_k}.
 \end{equation}
 Let us define the tensor $\Pi_{ijk}$ and the vector $\gamma^k$, such that
 \begin{empheq}[left={\Gamma_{ij}=\sum_k\Pi_{ijk}\gamma^k\implies\empheqlbrace}]{align}
-    \Pi_{ijk} &= \int\dd{\vb{k}} \psi_i(\vb{k})\psi_j(\vb{k})\psi_k(\vb{k}), \\
+    \Pi_{ijk} &= \int\dd{\vb{k}} \phi_i(\vb{k})\phi_j(\vb{k})\phi_k(\vb{k}), \\
     \gamma^k &= -\frac{i\omega}{v_k} + \frac{1}{v_k\tau_k}.
 \end{empheq}
 So, for any given basis, we have to calculate the $\Pi_{ijk}$ tensor. The $\gamma^k$ vector
@@ -345,14 +346,14 @@ $1/\tau$ defined ``by hand'' when ignoring in-scattering).
 Expanding the $k$-dependence in terms of the basis functions for the in-scattering matrix $S_{ij}$
 gives
 \begin{equation}
-    S_{ij} = \sum_{mn} \int\dd{\vb{k}} \int\dd{\vb{k'}} \psi_i(\vb{k})\psi_m(\vb{k})
-    \frac{C_{mn}}{v_m}\psi_n(\vb{k'})\psi_j(\vb{k'}).
+    S_{ij} = -\sum_{mn} \int\dd{\vb{k}} \int\dd{\vb{k'}} \phi_i(\vb{k})\phi_m(\vb{k})
+    \frac{C_{mn}}{v_m}\phi_n(\vb{k'})\phi_j(\vb{k'}).
 \end{equation}
 Let us define the tensor $\Xi_{ijmn}$ and the matrix $s^{mn}$, such that
 \begin{empheq}[left={S_{ij}=\sum_{m,n}\Xi_{ijmn}s^{mn}\implies\empheqlbrace}]{align}
-    \Xi_{ijmn} &= \int\dd{\vb{k}} \int\dd{\vb{k'}} \psi_i(\vb{k})\psi_j(\vb{k'})
-    \psi_m(\vb{k})\psi_n(\vb{k'}), \\
-    s^{mn} &= \frac{C_{mn}}{v_m}.
+    \Xi_{ijmn} &= \int\dd{\vb{k}} \int\dd{\vb{k'}} \phi_i(\vb{k})\phi_j(\vb{k'})
+    \phi_m(\vb{k})\phi_n(\vb{k'}), \\
+    s^{mn} &= -\frac{C_{mn}}{v_m}.
 \end{empheq}
 So, for any given basis, we have to calculate the $\Xi_{ijmn}$ tensor and the $s^{mn}$ matrix
 is given from the scattering kernel.
@@ -377,7 +378,7 @@ parametrization of each line segment $I_i$ as
     x: I_i \mapsto [0, 1],
 \end{equation}
 then the basis functions can be defined as
-\begin{empheq}[left={\psi_i(\vb{k})=\empheqlbrace}]{align}
+\begin{empheq}[left={\phi_i(\vb{k})=\empheqlbrace}]{align}
     &x,& &\vb{k} \in I_{i-1}; \\
     &1-x,& &\vb{k} \in I_i; \\
     &0,& &\vb{k} \in I_j,\ j\notin \{i-1,i\}.
@@ -390,14 +391,14 @@ nonzero when $i$ and $j$ are associated with the same point or neighboring point
 For the overlap matrix,
 \begin{equation}
 \begin{aligned}
-    M_{ii} &= \int\dd{k}\psi_i(\vb{k})\psi_i(\vb{k}) = \int_{I_{i-1}} \dd{\vb{k}}
-    \qty[\psi_i(\vb{k})]^2 + \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^2\\
+    M_{ii} &= \int\dd{k}\phi_i(\vb{k})\phi_i(\vb{k}) = \int_{I_{i-1}} \dd{\vb{k}}
+    \qty[\phi_i(\vb{k})]^2 + \int_{I_i} \dd{\vb{k}} \qty[\phi_i(\vb{k})]^2\\
     &= \int_0^1 \dd{x} x^2 \ell_{i-1} + \int_0^1 \dd{x} (1-x)^2 \ell_i
     = \frac{\ell_{i-1} + \ell_i}{3},
 \end{aligned}
 \end{equation}
 \begin{equation}
-    M_{i,i+1} = M_{i+1,i} = \int_{I_i} \dd{\vb{k}} \psi_i(\vb{k})\psi_{i+1}(\vb{k})
+    M_{i,i+1} = M_{i+1,i} = \int_{I_i} \dd{\vb{k}} \phi_i(\vb{k})\phi_{i+1}(\vb{k})
     = \int_0^1 \dd{x} x(1-x) \ell_i = \frac{\ell_i}{6}.
 \end{equation}
 Therefore, the full overlap matrix is
@@ -415,12 +416,12 @@ only defined on the discretized 2D rings in $k$-space, this is the dot product o
 $\vu{v}(\vb{k})\cross\vu{B}$ with the direction of the vector $\vb{k}_{i+1} - \vb{k}_i$ (which is
 along the line segment $I_i$), which we call $\Delta\vu{k}_i$. The diagonal terms vanish, since the
 integral over $I_i$ and $I_{i-1}$ are completely the same, but with opposite signs; in the
-direction of $\vb{k}_{i-1}$ to $\vb{k}_i$, the function $\psi_i$ increases on $I_{i-1}$, and in the
+direction of $\vb{k}_{i-1}$ to $\vb{k}_i$, the function $\phi_i$ increases on $I_{i-1}$, and in the
 direction of $\vb{k}_i$ to $\vb{k}_{i+1}$, it decreases on $I_i$. The neighboring terms are
 \begin{equation}
 \begin{aligned}
     \qty(D_{\vu{v}\cross\vu{B}})_{i,i+1} &= -\qty(D_{\vu{v}\cross\vu{B}})_{i+1,i}
-        = \int_{I_i} \dd{\vb{k}} \psi_i(\vb{k})
+        = \int_{I_i} \dd{\vb{k}} \phi_i(\vb{k})
         \frac{\qty(\vu{v}_i\cross\vu{B})\vdot\Delta\vu{k}_i}{\ell_i} \\
     &= \int_0^1 \dd{x} (1-x) \qty[\qty(\vu{v}_i\cross\vu{B})\vdot\Delta\vu{k}_i]
     = \frac{\qty(\vu{v}_i\cross\vu{B})\vdot\Delta\vu{k}_i}{2},
@@ -435,18 +436,18 @@ So, the full matrix is
 For the out-scattering term $\Gamma_{ij}=\sum_k\Pi_{ijk}\gamma^k$, only the elements where $i$, $j$ and $k$ are all
 associated with the same point or neighboring points are nonzero.
 \begin{equation}
-    \Pi_{iii} = \int_{I_i} \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3 + \int_{I_{i-1}}
-        \dd{\vb{k}} \qty[\psi_i(\vb{k})]^3
+    \Pi_{iii} = \int_{I_i} \dd{\vb{k}} \qty[\phi_i(\vb{k})]^3 + \int_{I_{i-1}}
+        \dd{\vb{k}} \qty[\phi_i(\vb{k})]^3
     = \int_0^1 \dd{x} x^3 \ell_i + \int_0^1 \dd{x} (1-x)^3 \ell_{i-1}
     = \frac{\ell_i + \ell_{i-1}}{4},
 \end{equation}
 \begin{equation}
     \Pi_{i+1,i,i} = \Pi_{i,i+1,i} = \Pi_{i,i,i+1} = \int_{I_i} \dd{\vb{k}}
-    \qty[\psi_i(\vb{k})]^2\psi_{i+1}(\vb{k}) = \int_0^1 \dd{x} (1-x)^2 x \ell_i = \frac{\ell_i}{12},
+    \qty[\phi_i(\vb{k})]^2\phi_{i+1}(\vb{k}) = \int_0^1 \dd{x} (1-x)^2 x \ell_i = \frac{\ell_i}{12},
 \end{equation}
 \begin{equation}
     \Pi_{i,i+1,i+1} = \Pi_{i+1,i,i+1} = \Pi_{i+1,i+1,i} = \int_{I_i} \dd{\vb{k}}
-    \psi_i(\vb{k})\qty[\psi_{i+1}(\vb{k})]^2 = \int_0^1 \dd{x} x(1-x)^2 \ell_i = \frac{\ell_i}{12},
+    \phi_i(\vb{k})\qty[\phi_{i+1}(\vb{k})]^2 = \int_0^1 \dd{x} x(1-x)^2 \ell_i = \frac{\ell_i}{12},
 \end{equation}
 \begin{equation}
     \Pi_{ijk} = \frac{\ell_{i-1} + \ell_i}{4}\delta_{ijk}
@@ -473,7 +474,7 @@ possible, we use triangles.
 We define the Fermi surface by a set of points $\vb{k}_i$ and triangles $T(i,j,k)$ connecting the
 points $\vb{k}_i$, $\vb{k}_j$ and $\vb{k}_k$. Also, we define $T_i$ as the set of triangles
 containing the point $\vb{k}_i$. Then, defining piecewise linear basis functions, the basis function
-$\psi_i$ peaks with value 1 at the point $\vb{k}_i$, is linear on $T_i$, and is 0 everywhere else.
+$\phi_i$ peaks with value 1 at the point $\vb{k}_i$, is linear on $T_i$, and is 0 everywhere else.
 
 Each triangle is parametrized as
 \begin{equation}
@@ -481,10 +482,10 @@ Each triangle is parametrized as
 \end{equation}
 so that each triangle is mapped to a unit right-angled triangle.
 With this mapping, the basis functions can be defined as
-\begin{empheq}[left={\psi_i(\vb{k})=\empheqlbrace}]{align}
-    &1 - x - y,& &\vb{k} \in T_i, (x, y)_{\max(\psi_i)} = (0, 0); \\
-    &x,& &\vb{k} \in T_i, (x, y)_{\max(\psi_i)} = (1, 0); \\
-    &y,& &\vb{k} \in T_i, (x, y)_{\max(\psi_i)} = (0, 1); \\
+\begin{empheq}[left={\phi_i(\vb{k})=\empheqlbrace}]{align}
+    &1 - x - y,& &\vb{k} \in T_i, (x, y)_{\max(\phi_i)} = (0, 0); \\
+    &x,& &\vb{k} \in T_i, (x, y)_{\max(\phi_i)} = (1, 0); \\
+    &y,& &\vb{k} \in T_i, (x, y)_{\max(\phi_i)} = (0, 1); \\
     &0,& &\vb{k} \notin T_i.
 \end{empheq}
 To visualize these basis functions more easily, you can look at Figure
@@ -514,28 +515,28 @@ Now, for calculating each term, note that only the elements where the indices ar
 to the same triangle have nonzero overlap (see Figure \ref{fig:triangle_overlap}). Here are all the
 nonzero terms in the matrices:
 \begin{align}
-M_{ii} &= \int\dd{\vb{k}}\psi_i(\vb{k})\psi_i(\vb{k})
-    = \sum_{(i,j,k) \in T_i} \int_{T(i,j,k)} \dd{\vb{k}} (\psi_i(\vb{k}))^2 \\
+M_{ii} &= \int\dd{\vb{k}}\phi_i(\vb{k})\phi_i(\vb{k})
+    = \sum_{(i,j,k) \in T_i} \int_{T(i,j,k)} \dd{\vb{k}} (\phi_i(\vb{k}))^2 \\
     &= \sum_{(i,j,k) \in T_i} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)^2
     = \frac{1}{12} \sum_{(i,j,k) \in T_i} \alpha(i,j,k), \notag \\
-M_{ij} &= \int\dd{\vb{k}}\psi_i(\vb{k})\psi_j(\vb{k})
-    = \sum_{(i,j,k) \in T_i \cap T_j} \int_{T(i,j,k)} \dd{\vb{k}} \psi_i(\vb{k}) \psi_j(\vb{k}) \\
+M_{ij} &= \int\dd{\vb{k}}\phi_i(\vb{k})\phi_j(\vb{k})
+    = \sum_{(i,j,k) \in T_i \cap T_j} \int_{T(i,j,k)} \dd{\vb{k}} \phi_i(\vb{k}) \phi_j(\vb{k}) \\
     &= \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)x
     = \frac{1}{24} \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k) \notag \\
     \left(\vphantom{\sum_{(i)}}\right. &=\left.\sum_{(i,j,k) \in T_i \cap T_j}
     \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)y \right) \notag
 \end{align}
 \begin{align}
-\Pi_{iii} &= \int\dd{\vb{k}}\psi_i(\vb{k})\psi_i(\vb{k})\psi_i(\vb{k})
-    = \sum_{(i,j,k) \in T_i} \int_{T(i,j,k)} \dd{\vb{k}} (\psi_i(\vb{k}))^3 \\
+\Pi_{iii} &= \int\dd{\vb{k}}\phi_i(\vb{k})\phi_i(\vb{k})\phi_i(\vb{k})
+    = \sum_{(i,j,k) \in T_i} \int_{T(i,j,k)} \dd{\vb{k}} (\phi_i(\vb{k}))^3 \\
     &= \sum_{(i,j,k) \in T_i} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)^3
     = \frac{1}{20} \sum_{(i,j,k) \in T_i} \alpha(i,j,k), \notag \\
-\Pi_{iij} &= \Pi_{iji} = \Pi_{jii} = \int\dd{\vb{k}}\psi_i(\vb{k})\psi_i(\vb{k})\psi_j(\vb{k})
+\Pi_{iij} &= \Pi_{iji} = \Pi_{jii} = \int\dd{\vb{k}}\phi_i(\vb{k})\phi_i(\vb{k})\phi_j(\vb{k})
     = \sum_{(i,j,k) \in T_i \cap T_j} \int_{T(i,j,k)} \dd{\vb{k}}
-        (\psi_i(\vb{k}))^2 \psi_j(\vb{k}) \\
+        (\phi_i(\vb{k}))^2 \phi_j(\vb{k}) \\
     &= \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)^2 x
     = \frac{1}{60} \sum_{(i,j,k) \in T_i \cap T_j} \alpha(i,j,k), \notag\\
-\Pi_{ijk} &= \int_{T(i,j,k)} \dd{\vb{k}}\, \psi_i(\vb{k}) \psi_j(\vb{k}) \psi_k(\vb{k})
+\Pi_{ijk} &= \int_{T(i,j,k)} \dd{\vb{k}}\, \phi_i(\vb{k}) \phi_j(\vb{k}) \phi_k(\vb{k})
 = \alpha(i,j,k) \int_T \dd{x} \dd{y} (1 - x - y)xy = \frac{1}{120} \alpha(i,j,k).
 \end{align}
 
@@ -563,11 +564,11 @@ unit vector field normal to each triangle. That is,
 where $\hat{\vb{n}} = \vb{n}/\norm{\vb{n}}$ and $\text{sgn}(i,j,k) = \pm1$ is chosen such that
 the normals always point outwards from the surface.
 Also note that $\norm{\vb{n}(i,j,k)} = \alpha(i,j,k)$. The other term we need is gradient of
-$\psi_j$ on triangle $T(i,j,k)$. Since $\psi_j$ is linear on this triangle and peaks at $j$,
+$\phi_j$ on triangle $T(i,j,k)$. Since $\phi_j$ is linear on this triangle and peaks at $j$,
 its gradient is a constant vector pointing to $j$ and perpendicular to the opposite edge
 $\vb{k}_k - \vb{k}_i$.
 \begin{equation}
-\grad_{\vb{k}} \psi_j(\vb{k}) = \frac{\vb{u}_j(i,j,k)}{u^2_j(i,j,k)};
+\grad_{\vb{k}} \phi_j(\vb{k}) = \frac{\vb{u}_j(i,j,k)}{u^2_j(i,j,k)};
 \end{equation}
 where $u_j(i,j,k) = \norm{\vb{u}_j(i,j,k)}$ and
 \begin{equation}
@@ -580,8 +581,8 @@ direction perpendicular to the edge $\vb{k}_k - \vb{k}_i$. This is done by subtr
 in the direction of $\vb{k}_k - \vb{k}_i$ from $\vb{k}_j - \vb{k}_i$. Using these calculations, we
 can finally compute the derivative term.
 \begin{equation}
-    \qty(\hat{\vb{v}}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\psi_j
-    = \qty(\grad_{\vb{k}}\psi_j\cross\hat{\vb{v}}(\vb{k}))\vdot\vu{B}
+    \qty(\hat{\vb{v}}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\phi_j
+    = \qty(\grad_{\vb{k}}\phi_j\cross\hat{\vb{v}}(\vb{k}))\vdot\vu{B}
     = \text{sgn}(i,j,k)\qty(\frac{\vb{u}_j(i,j,k)\cross\vu{n}(i,j,k)}{u^2_j(i,j,k)})\vdot\vu{B}.
 \end{equation}
 You can simplify this expression by hand. But, using a bit of geometric thinking, it can be done
@@ -597,13 +598,13 @@ Furthermore, $u_j(i,j,k)$ and $\vb{k}_i - \vb{k}_k$ can be taken as the high and
 the triangle $T(i,j,k)$ respectively, so the product of their norms is twice the area of the
 triangle, which is the same as the Jacobian $\alpha(i,j,k)$. Putting it all together, we have
 \begin{equation}
-    \qty(\hat{\vb{v}}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\psi_j
+    \qty(\hat{\vb{v}}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\phi_j
     = \frac{\text{sgn}(i,j,k)}{\alpha(i,j,k)}(\vb{k}_i-\vb{k}_k)\vdot\vu{B}.
 \end{equation}
 Using this, we can compute the derivative matrix.
 \begin{align}
-    (D_{\vu{v}\cross\vu{B}})_{ij} &= \int\dd{\vb{k}}\psi_i(\vb{k})
-    \qty(\vu{v}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\psi_j(\vb{k}) \\
+    (D_{\vu{v}\cross\vu{B}})_{ij} &= \int\dd{\vb{k}}\phi_i(\vb{k})
+    \qty(\vu{v}(\vb{k})\cross\vu{B})\vdot\grad_{\vb{k}}\phi_j(\vb{k}) \\
     &= \sum_{(i,j,k) \in T_i \cap T_j}\alpha(i,j,k) \int_T\dd{x}\dd{y}(1-x-y)
     \frac{\text{sgn}(i,j,k)}{\alpha(i,j,k)}(\vb{k}_i - \vb{k}_k)\vdot\vu{B} \notag \\
     &= \frac{1}{6} \sum_{(i,j,k) \in T_i \cap T_j}\text{sgn}(i,j,k)(\vb{k}_i-\vb{k}_k)\vdot\vu{B}.
@@ -618,8 +619,8 @@ surfaces, this is always zero.
 
 Finally, for the in-scattering term, we have
 \begin{gather}
-\Xi_{ijmn} = \qty(\int\dd{\vb{k}}\psi_i(\vb{k})\psi_m(\vb{k}))
-    \qty(\int\dd{\vb{k'}}\psi_j(\vb{k'})\psi_n(\vb{k'})) = M_{im} M_{jn} \\
+\Xi_{ijmn} = \qty(\int\dd{\vb{k}}\phi_i(\vb{k})\phi_m(\vb{k}))
+    \qty(\int\dd{\vb{k'}}\phi_j(\vb{k'})\phi_n(\vb{k'})) = M_{im} M_{jn} \\
 S_{ij} = \sum_{m,n}\Xi_{ijmn}s^{mn} = \sum_{mn}M_{im}M_{jn}s^{mn}.
 \end{gather}
 
@@ -646,15 +647,173 @@ the different matrices can be expressed as
     \end{aligned}
 \end{gather}
 $\delta_{\expval{ij}}$ is equal to 1 if $i$ and $j$ are neighboring points, and 0 otherwise.
-Technically, due to the definitions, it is not really needed, but I include it to make things
+Technically, due to the definitions, it is not really needed, but we include it to make things
 a bit clearer.
+
+\section{Scattering Kernel}
+The FEM allows us to use any arbitrary scattering kernel $C(\vb{k}, \vb{k'})$. However, there
+is still the question of how we should build it to have a useful model. A physically relevant
+approach is to expand the scattering kernel in terms of basis functions that respect the
+symmetries of the system. That is,
+\begin{equation}
+    C(\vb{k}, \vb{k'}) = \sum_{a,b} \tilde{C}_{ab} \psi_a(\vb{k})\psi_b^*(\vb{k'}),
+    \label{eq:kernel_expansions}
+\end{equation}
+where $\psi_a$ and $\psi_b$ are basis functions based on the symmetries of the system. For
+example, for a system with translational and rotational invariance, one can use spherical
+harmonics as the basis functions.
+
+Mathematically, the scattering kernel $C(\vb{k}, \vb{k'})$ can be any arbitrary function. However,
+without any other constraints, it creates a global interaction between the states, which kills the
+performance. The other operators only involve interactions between neighboring elements, which
+produces sparse matrices, with elements only on a few diagonals. This is what makes the this method
+computationally efficient. Including the scattering kernel breaks this sparsity by having
+interactions between arbitrary pairs of points, and nonzero elements in any position of
+the matrices. Going to the basis based on the symmetries of the system, and then keeping a limited
+number of coefficients in the expansion, helps maintain the performance by reducing the rank of the
+matrices we have to deal with.
+
+\subsection{Change of Basis}
+In the symmetry basis, a function $f(\vb{k})$ can be expressed as
+\begin{equation}
+    f(\vb{k}) = \sum_a \tilde{f}^a \psi_a(\vb{k})
+\end{equation}
+(the same indexing notation with FEM is used to avoid confusion). From equation \eqref{eq:vector},
+\begin{equation}
+    \sum_i f^i \phi_i(\vb{k}) = \sum_a \tilde{f}^a \psi_a(\vb{k}).
+    \label{eq:vector_basis_expansion}
+\end{equation}
+To get the coefficients $\tilde{f}^a$ in the symmetry basis, we take the inner product of both
+sides with $\psi_a$. The symmetry basis is orthonormal, so we have
+\begin{equation}
+    \tilde{f}^a = \sum_{i} f^i \int\dd{\vb{k}}\phi_i(\vb{k}) \psi_a^*(\vb{k}).
+\end{equation}
+In matrix form, this is
+\begin{equation}
+    \tilde{f}^i = \sum_j U^i_j f^j; \quad U^i_j = \int\dd{\vb{k}}\psi_i^*(\vb{k})\phi_j(\vb{k}),
+\end{equation}
+where $U$ is the change of basis matrix from the FEM basis to the symmetry basis.
+
+To actually calculate the change of basis matrix, we can either numerically integrate the symmetry
+basis functions over the FEM elements (with a method like Gaussian quadrature), or do it
+analytically. In 3D, the change of basis matrix is calculated as
+\begin{align}
+    U^i_j &= \sum_{(j,k,l) \in T_j} \int_{T(j,k,l)} \dd{\vb{k}} \psi_i^*(\vb{k}) \phi_j(\vb{k})
+    = \sum_{(j,k,l) \in T_j} \alpha(j,k,l) \int_T \dd{x} \dd{y} \psi_i^*(\vb{k}(x,y))(1-x-y)
+    \\ &= \sum_{(j,k,l) \in T_j} \alpha(j,k,l) \int_T \dd{x} \dd{y}
+    \psi_i^*(\vb{k}_j(1-x-y) + \vb{k}_k x + \vb{k}_l y)(1-x-y)
+\end{align}
+
+Before moving on to change of basis of the in-scattering matrix, we should familiarize ourselves
+with the positioning of the indices. In the symmetry basis, the overlap matrix is the identity
+matrix, because the basis functions are orthonormal. This means we can freely raise and lower
+indices related to the symmetry basis. However, for the change of basis matrix, we need to be
+careful with the ordering of the indices. The change of basis $U$ takes us from the FEM basis
+to the symmetry basis, so its first index, which is not summed over, should always be the
+symmetry basis index.
+
+Now, we rewrite the in-scattering term in the symmetry basis. From equation
+\eqref{eq:kernel_expansions},
+\begin{equation}
+    S_{ij} = -\sum_{a,b} \int\dd{\vb{k}} \int\dd{\vb{k'}}\phi_i(\vb{k})\psi_a(\vb{k})
+    \frac{\tilde{C}_{ab}}{\tilde{v}_a}\psi_b^*(\vb{k'})\phi_j(\vb{k'})
+\end{equation}
+Using the change of basis matrix, and carefully arranging the indices for correct contraction,
+this can be rewritten as
+\begin{equation}
+    S_{ij} = \sum_{a,b} U^*_{ai} \tilde{S}^a_b U^b_j
+    = \sum_{a,b} U^\dagger_{ia} \tilde{S}^a_b U^b_j,
+\end{equation}
+which is precisely the change of basis formula for the matrix $S$ from the symmetry basis to
+the FEM basis.
+
+\subsection{Sherman--Morrison--Woodbury Formula}
+As discussed earlier, the in-scattering term breaks the sparsity of the differential matrix $A$.
+However, the in-scattering matrix is actually of a low-rank. We can exploit this fact to solve
+the matrix equations much more efficiently. If we split the differential matrix into a sparse
+part $A_0$ and a low-rank part $U^\dagger \tilde{S} U$, then the Sherman--Morrison--Woodbury
+formula for the inverse gives
+\begin{equation}
+    A^{-1} = (A_0 + U^\dagger \tilde{S} U)^{-1}
+    = A_0^{-1} - A_0^{-1} U^\dagger (\tilde{S}^{-1} + U A_0^{-1} U^\dagger)^{-1} U A_0^{-1}.
+\end{equation}
+If there are $N_{\text{sym}}$ symmetry basis functions, then $A_0^{-1} U^{\dagger}$ is
+$N_{\text{sym}}$ sparse inversions, and $\tilde{S}^{-1}$ and
+$(\tilde{S}^{-1} + U A_0^{-1} U^\dagger)^{-1}$ are two $N_{\text{sym}}\times N_{\text{sym}}$
+dense matrix inversions. So, if $N_{\text{sym}}$ is small, the inversion will stay
+computationally efficient. If we choose an apropriate symmetry basis, then the number of
+physically relevant terms in the expansion of the scattering kernel should be limited, and
+$N_{\text{sym}}$ should indeed be small.
+
+
+\subsection{Out-scattering Term}
+When calculating the out-scattering term from the scattering kernel instead of using an external
+hypothesis, we need to integrate it over the Fermi surface (equation \eqref{eq:tau_kernel})
+In order to do this, one can leverage the same basis functions, and split the integration into
+multiple integrals over different elements. So, the equation becomes
+\begin{equation}
+    \frac{1}{\tau_j} = \sum_i \int\dd{\vb{k}} C_{ij} \phi_i(\vb{k}).
+\end{equation}
+For the 3D case with triangular elements, this means
+\begin{equation}
+    \frac{1}{\tau_j} = \sum_i \alpha_i C_{ij}
+\end{equation}
+The problem with this approach is that the approximation is too rough. This is equivalent to
+assuming the kernel is constant over each element. A more accurate approach would be to do a more
+sophisticated numerical integral of the kernel over each element (e.g., Gaussian quadrature).
+In the 3D case, this gives
+\begin{equation}
+    \frac{1}{\tau_j} = \sum_{i}\int_{T_i} \dd{x}\dd{y} C(\vb{k}(x,y), \vb{k}_j).
+\end{equation}
+This is more accurate, but very computationally expensive. There are as many integrals to integrate
+as the number of triangles, for \emph{each} point on the Fermi surface.
+This scales as $\mathcal{O}(N^2)$, which is even larger than the $\mathcal{O}(N^{3/2})$ of the
+sparse matrix inversion, as discussed in the next section.
+
+Again, by moving to the symmetry basis, we can significantly reduce the computational cost.
+In the symmetry basis, the (out-)scattering rate is given by
+\begin{empheq}[left=\empheqlbrace]{align}
+    \frac{1}{\tau(\vb{k})} &= \sum_{b}\frac{1}{\tilde{\tau_b}}\psi_b^*(\vb{k}), \\
+    \frac{1}{\tau(\vb{k})} &=
+    \sum_{a,b}\int\dd{\vb{k'}} \tilde{C}_{ab} \psi_a(\vb{k'})\psi_b^*(\vb{k}).
+\end{empheq}
+Note that functions can also be expanded in terms of the complex conjugation of the
+basis functions. After applying the inner product, this gives
+\begin{equation}
+    \frac{1}{\tilde{\tau_b}} = \sum_a \int\dd{\vb{k}} \tilde{C}_{ab} \psi_a(\vb{k}).
+\end{equation}
+This gives us $N_{\text{sym}}\times N_{\text{elements}}$ integrals to compute. If $N_{\text{sym}}$
+is small (as it should be), this is much more efficient than the $\mathcal{O}(N^2)$ integrals we had
+to compute in the FEM basis. then after computing the integrals, we can go back to the FEM basis by
+applying a change of basis. Using the FEM to symmetry change of basis matrix $U$, this gives
+\begin{equation}
+    \frac{1}{\tau_j} = \qty(\frac{1}{\tau})^j
+    = \sum_b\qty(U^{-1})^j_b \qty(\frac{1}{\tilde{\tau}})^b.
+\end{equation}
+We need to be careful with the matrix inversion here, as it also involves moving FEM indices that
+involve the overlap matrix. In order to avoid any mistakes, let us derive this directly from the
+change of basis of a vector from the symmetry basis to the FEM basis. From equation
+\eqref{eq:vector_basis_expansion}, applying an inner product with an FEM basis function, we get
+\begin{gather}
+    \sum_i f^i \int\dd{\vb{k}} \phi_i(\vb{k})\phi_j(\vb{k})
+    = \sum_a \tilde{f}^a \int\dd{\vb{k}}\psi_a(\vb{k})\phi_j(\vb{k}), \\
+    \implies \sum_i M_{ji} f^i = \sum_a U^{a*}_j \tilde{f}^a = \sum_a U^\dagger_{ja} \tilde{f}^a, \\
+    \implies f^i = \sum_{a,j} (M^{-1})^{ij} U^\dagger_{ja} \tilde{f}^a
+\end{gather}
+As this change of basis is the inverse of $U$,
+\begin{equation}
+    (U^{-1})^i_a = \sum_j (M^{-1})^{ij} U^\dagger_{ja}.
+\end{equation}
+Since the matrix $U$ is $N_{\text{sym}}\times N_{\text{FEM}}$, this matrix inversion is
+$N_{\text{sym}}$ sparse inversions, which is still more efficient thatn the $\mathcal{O}(N^2)$
+integrals we had to compute in the FEM basis.
 
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
 When sticking with the relaxation time approximation and ignoring the in-scattering,
 the matrices are sparse, since there is only overlap between neighboring elements.
 Even better, they are nearly \emph{banded}, meaning that the nonzero elements are only on the main
-diagonal and the minor diagonals surrounding it. I say nearly, because there are also extra corner
+diagonal and the minor diagonals surrounding it. We say nearly, because there are also extra corner
 terms, coming from the periodic boundary conditions of the Brillouin zone.
 
 For solving our matrix equations which involve nearly-banded matrices, there are two approaches.
@@ -704,8 +863,8 @@ solver in general.
 \end{figure}
 
 \subsection{Triangulation and Periodic Boundary Conditions}
-There are many different ways of dividing up the Fermi surface into triangles. I tried any of these
-triangulation methods that I could find, and I found that there is negligible difference between
+There are many different ways of dividing up the Fermi surface into triangles. We tried any of these
+triangulation methods that we could find, and we found that there is negligible difference between
 them. So, in the package, the simplest one is used, which is \emph{marching cubes}. This was
 already used before in the Chambers package.
 
@@ -743,7 +902,7 @@ One might prefer to think of $P$ as a transformation for the matrix $A$:
 \begin{equation}
     \sigma = \vb{a}^T\vb{x} = \vb{a'}^T P A^{-1} P^T \vb{b'} = \vb{a'}^T (P A P^T)^{-1} \vb{b'}, 
 \end{equation}
-but I like to keep it as a transformation for the vectors, since we can just transform the vectors
+but we like to keep it as a transformation for the vectors, since we can just transform the vectors
 and keep every other step the same. In fact. the transformation only needs to be done once, since
 $\vb{a}$ and $\vb{b}$ are different components of the projected velocity $\vb{v}_i$ and $\vb{v}_j$,
 and it suffices to transform the matrix containing each component in each column. This turns out
@@ -751,7 +910,7 @@ to be faster than transforming the matrix $A$.
 
 \textbf{Note:} In the code, $P^T$ is called the projection matrix and is all that the package works
 with, since it is the only thing that is needed to transform the vectors. You can think of $P^T$
-as the transformation reducing the full space to the unique space. The reason I did not use this
+as the transformation reducing the full space to the unique space. The reason we did not use this
 for the explanation is that it is not clear that the reduced space point should be a sum of the
 full space points before seeing the transformation matrix from the reduced space to the full space.
 
@@ -773,7 +932,7 @@ But it is still much better than the face that has the vertices on the surface.
 Figure \ref{fig:free_electrons} shows the comparison of the FEM to the Drude model for free
 electrons in two dimensions. As expected, they match perfectly. The convergence is exponential,
 as seen in Figure \ref{fig:free_electrons_error}. The results are quite similar in 3D,
-so I do not include them here.
+so we do not include them here.
 \begin{figure}%[h]
     \centering
     \includegraphics[width=0.7\textwidth]{figures/boltzmann_vs_drude_2d}
