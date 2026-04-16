@@ -731,7 +731,10 @@ def _update_result_chemical_potential(result):
     band = BandStructure(**easy_params(params))
     band.discretize()
     if 'mu' in band.band_params:
-        result['fit_params']['band_params']['mu'] = band.band_params['mu']
+        mu = band.band_params['mu']
+        if 'energy_scale' in params['fixed_params']:
+            mu /= params['fixed_params']['energy_scale']
+        result['fit_params']['band_params']['mu'] = mu
         result['init_params']['band_params']['mu'] = \
             result['fixed_params']['band_params'].pop('mu')
         if len(result['fixed_params']['band_params']) == 0:
