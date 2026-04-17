@@ -91,15 +91,11 @@ class Conductivity:
         self._field_direction = None
         self.set_field(field, Bamp, Btheta, Bphi)
         self.sigma = np.zeros((3, 3))
-        self._saved_solutions = [None, None, None]
         self._velocities = None
-        self._vmags = None
-        self._vhats = None
         self._vhat_projections = None
         self._jacobians = None
         self._jacobian_sums = None
         self._overlap_matrix = None
-        self._derivative_components = None
         self._derivatives = None
         self._scattering_invlen = None
         self._out_scattering = None
@@ -107,7 +103,6 @@ class Conductivity:
         self._differential_operator = None
         self._are_elements_saved = False
         self._is_scattering_saved = False
-        self._saved_solutions = [None, None, None]
 
     def __setattr__(self, name, value):
         super().__setattr__(name, value)
@@ -152,7 +147,6 @@ class Conductivity:
                     self._differential_operator = (
                         self._out_scattering - e/hbar*self._derivative_term
                         - self._in_scattering)
-                self._saved_solutions = [None, None, None]
             else:
                 self.erase_memory(elements=False, scattering=False,
                                   derivative=True)
@@ -191,21 +185,12 @@ class Conductivity:
         if self._differential_operator is None:
             self._build_differential_operator()
         
-        i, j, j_calc = self._get_calculation_indices(i, j)
+        i, j = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
         linear_solution = self.solver(self._differential_operator,
-                                      self._vhat_projections[:, j_calc])
+                                      self._vhat_projections[:, j])
         if len(linear_solution.shape) == 1:
             linear_solution = linear_solution[:, None]
-        # reuse previously calculated solutions
-        for col in j:
-            if col in j_calc:
-                # save solution for potential reuse
-                self._saved_solutions[col] = \
-                    linear_solution[:, j_calc.index(col)]
-            else:
-                linear_solution = np.insert(
-                    linear_solution, col, self._saved_solutions[col], axis=1)
         # (v_a)_i (A^{-1} v_b)^i
         sigma_result = self._vhat_projections[:, i].T @ linear_solution
         sigma_result *= e**2 / (4 * np.pi**3 * hbar) / self.band.bz_ratio
@@ -237,12 +222,9 @@ class Conductivity:
         """
         if elements:
             self._velocities = None
-            self._vmags = None
-            self._vhats = None
             self._jacobians = None
             self._jacobian_sums = None
             self._overlap_matrix = None
-            self._derivative_components = None
             self._derivatives = None
             self._vhat_projections = None
             self._are_elements_saved = False
@@ -253,7 +235,6 @@ class Conductivity:
         if derivative:
             self._derivative_term = None
         self._differential_operator = None
-        self._saved_solutions = [None, None, None]
 
     def _get_calculation_indices(self, i, j):
         if i is None:
@@ -264,11 +245,7 @@ class Conductivity:
             j = range(3)
         elif isinstance(j, int):
             j = [j]
-        j_calc = []
-        for col in j:
-            if self._saved_solutions[col] is None:
-                j_calc.append(col)
-        return i, j, j_calc
+        return i, j
 
     def _build_elements(self):
         """
@@ -278,13 +255,13 @@ class Conductivity:
         self._velocities = np.column_stack(self.band.velocity_func(
             self.band.kpoints[:, 0], self.band.kpoints[:, 1],
             self.band.kpoints[:, 2]))
-        self._vmags = np.linalg.norm(self._velocities, axis=1)
-        self._vhats = self._velocities / self._vmags[:, None]
+        vhats = (self._velocities
+                 / np.linalg.norm(self._velocities, axis=1)[:, None])
 
         triangle_points = self.band.kpoints[self.band.kfaces] / angstrom
         if self.correct_curvature:
             triangle_points = self.band._curvature_correct_points(
-                triangle_points, self._vhats[self.band.kfaces])
+                triangle_points, vhats[self.band.kfaces])
     
         self._calculate_jacobian_sums(triangle_points)
         self._calculate_derivative_sums(triangle_points)
@@ -315,7 +292,7 @@ class Conductivity:
         """
         Calculate the field-independent part of the derivative term.
         """
-        self._derivative_components = (
+        derivative_components = (
             triangle_points - np.roll(triangle_points, -2, axis=1))
         i_idx = self.band.kfaces
         j_idx = np.roll(self.band.kfaces, -1, axis=1)
@@ -325,7 +302,7 @@ class Conductivity:
         self._derivatives = [
             scipy.sparse.csc_array((
             np.tile(component.flat, 2), (rows, cols))) for component in
-            self._derivative_components.transpose(2, 0, 1)]
+            derivative_components.transpose(2, 0, 1)]
         if self.band.periodic:
             self._derivatives = [
                 (self.band.periodic_projector @ derivative
@@ -333,7 +310,9 @@ class Conductivity:
                 for derivative in self._derivatives]
 
     def _calculate_velocity_projections(self):
-        self._vhat_projections = self._overlap_matrix @ self._vhats
+        vhats = (self._velocities
+                 / np.linalg.norm(self._velocities, axis=1)[:, None])
+        self._vhat_projections = self._overlap_matrix @ vhats
         if self.band.periodic:
             self._vhat_projections = \
                 self.band.periodic_projector @ self._vhat_projections
@@ -391,10 +370,12 @@ class Conductivity:
         # separate the optical conductivity case to avoid making
         # the number complex when it is not needed
         if self.frequency == 0.0:
-            self._scattering_invlen = THz * scattering / self._vmags
+            self._scattering_invlen = (
+                THz * scattering / np.linalg.norm(self._velocities, axis=1))
         else:
-            self._scattering_invlen = \
-                THz * (scattering - 2j*np.pi*self.frequency) / self._vmags
+            self._scattering_invlen = (
+                THz * (scattering - 2j*np.pi*self.frequency)
+                / np.linalg.norm(self._velocities, axis=1))
 
     def _calculate_out_scattering_from_kernel(self):
         """
