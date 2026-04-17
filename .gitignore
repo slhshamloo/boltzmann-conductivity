@@ -20,6 +20,7 @@ fits/
 **/*.out
 **/*.toc
 **/*.fls
+**/*.xdv
 **/*.synctex.gz
 **/*.fdb_latexmk
 
