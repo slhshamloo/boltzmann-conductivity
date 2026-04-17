@@ -808,6 +808,66 @@ Since the matrix $U$ is $N_{\text{sym}}\times N_{\text{FEM}}$, this matrix inver
 $N_{\text{sym}}$ sparse inversions, which is still more efficient thatn the $\mathcal{O}(N^2)$
 integrals we had to compute in the FEM basis.
 
+\subsection{Gaussian Quadrature}
+To do the integrations of the basis functions of the symmetry basis over the FEM elements, we can
+use the widely utilized Gaussian quadrature method. In this method, one approximates the integral
+as a weighted sum of the function evaluated at specific points in the integrations domain.
+\begin{equation}
+    \int f(x)\dd{x} \approx \sum_i w_i f(x_i)
+\end{equation}
+The weights $w_i$ and the points $x_i$ are chosen to give exact results for polynomials up to a
+certain degree.
+
+For our 3D case, we need to do 2D Gaussian quadrature over traingular elements. In the $(x,y)$
+coordinates of the unit right-angled triangle, this is expressed as
+\begin{equation}
+    \int_T \dd{\vb{k}} f(\vb{k}) \approx A_T \sum_i w_i f(x_i, y_i).
+\end{equation}
+where $A_T$ is the area of the triangle ($\alpha(i,j,k)$). As the elements we use are linear and
+already introduce an error of $\mathcal{O}(h^2)$, where $h$ is the size of the elements, going up
+to a quadrature that is exact for polynomials up to degree 2 is sufficient. For this, the integrals
+of the functions
+\begin{equation}
+    1, \quad x, \quad y, \quad x^2, \quad xy, \quad y^2
+\end{equation}
+need to be exact. These are the integrals
+\begin{empheq}[left=\empheqlbrace]{gather}
+    \int_T \dd{x}\dd{y} = \frac{1}{2}, \\
+    \int_T \dd{x}\dd{y} x = \int_T \dd{x}\dd{y} y = \frac{1}{6}, \\
+    \int_T \dd{x}\dd{y} x^2 = \int_T \dd{x}\dd{y} y^2 = \frac{1}{12}, \\
+    \int_T \dd{x}\dd{y} xy = \frac{1}{24}.
+\end{empheq}
+The symmetry between $x$ and $y$ means that for any point $(x_i, y_i)$ in the quadrature,
+there is also a point $(y_i, x_i)$ with the same weight $w_i$. The points and weights must satisfy
+these equations:
+\begin{empheq}[left=\empheqlbrace]{gather}
+    \sum_i w_i = \frac{1}{2}, \label{eq:quadrature_const} \\
+    \sum_i w_i x_i = \sum_i w_i y_i = \frac{1}{6}, \label{eq:quadrature_lin} \\
+    \sum_i w_i x_i^2 = \sum_i w_i y_i^2 = \frac{1}{12}, \label{eq:quadrature_quad} \\
+    \sum_i w_i x_i y_i = \frac{1}{24}. \label{eq:quadrature_cross}
+\end{empheq}
+The $x$ coordinates and weights of one point can satisfy \eqref{eq:quadrature_lin}
+and \eqref{eq:quadrature_quad} for $x$, and the mirror image can satisfy the same for $y$.
+Finally, we need an extra weight to satisfy \eqref{eq:quadrature_const}. The last equation
+\eqref{eq:quadrature_cross} can be satisfied by the $x$ and $y$ coordinates of the final
+point. This means we need 3 points in total. The equations then become
+\begin{empheq}[left=\empheqlbrace]{gather}
+    w_1 = w_2, \quad x_1 = y_2, \quad y_1 = x_2, \\
+    2w_1 + w_3 = \frac{1}{2}, \\
+    w_1 x_1 + w_3 x_3 = \frac{1}{6}, \\
+    w_1 x_1^2 + w_3 x_3^2 = \frac{1}{12}, \\
+    w_3 x_3^2 = \frac{1}{24}.
+\end{empheq}
+Solving these equations gives two solutions, one with points on the edges and one with points
+on the interior of the triangle. The latter probes more of the interior of the triangle, so it
+is preferred. This solution is
+\begin{empheq}[left=\empheqlbrace]{gather}
+    w_1 = w_2 = w_3 = \frac{1}{6}, \\
+    x_1 = y_2 = x_3 = y_3 = \frac{1}{6}, \\
+    y_1 = x_2 = \frac{2}{3}.
+\end{empheq}
+This is the quadrature rule used in the package.
+
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
 When sticking with the relaxation time approximation and ignoring the in-scattering,
