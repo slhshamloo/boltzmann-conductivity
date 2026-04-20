@@ -765,7 +765,7 @@ In the 3D case, this gives
 \begin{equation}
     \frac{1}{\tau_j} = \sum_{i}\int_{T_i} \dd{x}\dd{y} C(\vb{k}(x,y), \vb{k}_j).
 \end{equation}
-This is more accurate, but very computationally expensive. There are as many integrals to integrate
+This is more accurate, but very computationally expensive. There are as many integrals to do
 as the number of triangles, for \emph{each} point on the Fermi surface.
 This scales as $\mathcal{O}(N^2)$, which is even larger than the $\mathcal{O}(N^{3/2})$ of the
 sparse matrix inversion, as discussed in the next section.
@@ -825,8 +825,8 @@ coordinates of the unit right-angled triangle, this is expressed as
 \end{equation}
 where $A_T$ is the area of the triangle ($\alpha(i,j,k)$). As the elements we use are linear and
 already introduce an error of $\mathcal{O}(h^2)$, where $h$ is the size of the elements, going up
-to a quadrature that is exact for polynomials up to degree 2 is sufficient. For this, the integrals
-of the functions
+to a quadrature that is exact for polynomials up to degree 2 should be sufficient. For this, the
+integrals of the functions
 \begin{equation}
     1, \quad x, \quad y, \quad x^2, \quad xy, \quad y^2
 \end{equation}
@@ -866,7 +866,7 @@ is preferred. This solution is
     x_1 = y_2 = x_3 = y_3 = \frac{1}{6}, \\
     y_1 = x_2 = \frac{2}{3}.
 \end{empheq}
-This is the quadrature rule used in the package.
+Higher order quadratures rarely help with linear elements.
 
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
