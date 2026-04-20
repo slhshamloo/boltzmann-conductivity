@@ -950,34 +950,29 @@ $\vb{b'}$. To go from $\vb{b}$ to $\vb{b'}$, we can define a matrix $P$ such tha
     \vb{b'} = P\vb{b} \implies \vb{b} = P^T\vb{b'}.
 \end{equation}
 Most of the columns in $P$ just contain a single $1$, but for the points that are duplicated,
-the corresponding column contains multiple $1$s, one for each duplicate point. Now, if we have
+the corresponding column contains multiple $1$s, one for each duplicate point. Now, we have
 a matrix equation such that
 \begin{equation}
-    A\vb{x} = \vb{b}
+    A\vb{x} = \vb{b},
 \end{equation}
 and we want the quantity
 \begin{equation}
-    \sigma = \vb{a}\vdot\vb{x} = \vb{a}\vdot\qty(A^{-1}\vb{b}),
+    \sigma = \vb{a}\vdot\vb{x} = \vb{a}\vdot\qty(A^{-1}\vb{b}).
 \end{equation}
-we can rewrite everything in the ``reduced'' space as
+Replacing the vectors with their reduced space versions, we have
 \begin{equation}
-    A\vb{x} = P^T\vb{b'} \implies \sigma = P^T\vb{a'}\vdot\qty(A^{-1}P^T\vb{b'}).
+    AP^T\vb{x'} = P^T\vb{b'} \implies \vb{x'} = \qty(P A P^T)^{-1} \vb{b'}
 \end{equation}
-One might prefer to think of $P$ as a transformation for the matrix $A$:
+Then, the quantity we want is
 \begin{equation}
-    \sigma = \vb{a}^T\vb{x} = \vb{a'}^T P A^{-1} P^T \vb{b'} = \vb{a'}^T (P A P^T)^{-1} \vb{b'}, 
+    \sigma = \vb{a}^T\vb{x} = \qty(P^T \vb{a'})^T \qty(P^T \vb{x'})
+    = \vb{a'}^T \qty(P A P^T)^{-1} \vb{b'}.
 \end{equation}
-but we like to keep it as a transformation for the vectors, since we can just transform the vectors
-and keep every other step the same. In fact. the transformation only needs to be done once, since
-$\vb{a}$ and $\vb{b}$ are different components of the projected velocity $\vb{v}_i$ and $\vb{v}_j$,
-and it suffices to transform the matrix containing each component in each column. This turns out
-to be faster than transforming the matrix $A$.
-
-\textbf{Note:} In the code, $P^T$ is called the projection matrix and is all that the package works
-with, since it is the only thing that is needed to transform the vectors. You can think of $P^T$
-as the transformation reducing the full space to the unique space. The reason we did not use this
-for the explanation is that it is not clear that the reduced space point should be a sum of the
-full space points before seeing the transformation matrix from the reduced space to the full space.
+It might be tempting to assume this is the same equation as before the transformation. The key
+point is that $P$ is not invertible, since it is not a square matrix. So,
+\begin{equation}
+    \qty(P A P^T)^{-1} \neq P A^{-1} P^T.
+\end{equation}
 
 \subsection{Curvature corrections}
 There is one very cheap correction we can do to improve the accuracy at low resolutions. When
