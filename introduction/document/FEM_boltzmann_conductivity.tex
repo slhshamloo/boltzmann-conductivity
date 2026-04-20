@@ -868,6 +868,11 @@ is preferred. This solution is
 \end{empheq}
 Higher order quadratures rarely help with linear elements.
 
+For the change of basis matrix in 3D with linear elements, the integrand is a product of a
+triangular coordinate and a symmetry basis function. So, to compute the value of the integrand
+in this quadrature, we can reuse the quadrature coordinates. This is even symmetric for each
+point $\vb{k}_i$. This makes the quadrature integral a very simple matrix multiplication.
+
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
 When sticking with the relaxation time approximation and ignoring the in-scattering,
