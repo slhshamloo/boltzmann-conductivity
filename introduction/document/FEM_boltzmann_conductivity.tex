@@ -64,9 +64,10 @@ fluctuation $g$, we have
     I[f_0 + g] = \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t)
     - \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) g(\vb{k}; t) + \mathcal{O}(g^2),
 \end{equation} 
-where $C(\vb{k}, \vb{k'})$ is a scattering kernel. We call the two terms the \emph{in-scattering} and
-\emph{out-scattering} terms respectively. The out-scattering is usually expressed with the
-\emph{relaxation time} $\tau$ or \emph{scattering rate} $\Gamma=1/\tau$, which is equal to
+where $C(\vb{k}, \vb{k'})$ is the \emph{scattering kernel}. We call the two terms the
+\emph{in-scattering} and \emph{out-scattering} terms respectively. The out-scattering is usually
+expressed with the \emph{relaxation time} $\tau$ or \emph{scattering rate} $\Gamma=1/\tau$, which
+is equal to
 \begin{equation}
     \frac{1}{\tau(\vb{k})} = \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}).
     \label{eq:tau_kernel}
@@ -78,11 +79,21 @@ there is strong anisotropy in the scattering, which is the case for cuprates. Wh
 is roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend on $\vb{k}$ and, because of
 charge conservation,
 $\int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t) \approx C\int\dd{\vb{k'}} g(\vb{k'}; t) = 0.$
-Due to time-reversal symmetry, $C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$, so if we consider any
-anisotropy in the out-scattering, we must do the same for the in-scattering. This means the
-Chambers formula is just wrong for anisotropic scattering. So, why does it work effectively
-anyway? The scattering in cuprates might only be low-angle, so the in-scattering is small compared
-to the out-scattering.}
+Due to detailed balance (discussed in the next paragraph), ignoring inelastic scattering,
+$C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$, so if we consider any anisotropy in the out-scattering,
+we must do the same for the in-scattering. This means the Chambers formula is just wrong for
+anisotropic scattering. So, why does it work effectively anyway? The scattering in cuprates
+might only be low-angle, so the in-scattering is small compared to the out-scattering.}
+
+Another important point to consider is that this linearization implicitly assumes \emph{detailed
+balance}, meaning that $f_0$ is in equilibrium. Mathematically, it can be expressed as
+\begin{equation}
+    I[f_0] = 0 \implies \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) f_0(\vb{k'})
+    = \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) f_0(\vb{k}).
+\end{equation}
+This will be later used to impose constraints on the scattering kernel. Note that detailed balance
+only ensures that $f_0$ is the equilibrium distribution, and it has nothing to do with
+charge conservation.
 
 Plugging in the expression for the collision integral into equation \eqref{eq:boltzmann} and
 applying the approximations, we get
@@ -663,15 +674,25 @@ where $\psi_a$ and $\psi_b$ are basis functions based on the symmetries of the s
 example, for a system with translational and rotational invariance, one can use spherical
 harmonics as the basis functions.
 
-Mathematically, the scattering kernel $C(\vb{k}, \vb{k'})$ can be any arbitrary function. However,
-without any other constraints, it creates a global interaction between the states, which kills the
-performance. The other operators only involve interactions between neighboring elements, which
-produces sparse matrices, with elements only on a few diagonals. This is what makes the this method
-computationally efficient. Including the scattering kernel breaks this sparsity by having
-interactions between arbitrary pairs of points, and nonzero elements in any position of
-the matrices. Going to the basis based on the symmetries of the system, and then keeping a limited
-number of coefficients in the expansion, helps maintain the performance by reducing the rank of the
-matrices we have to deal with.
+Before going further, note that due to detailed balance, over a single Fermi surface (i.e. no
+inelastic scattering), we have
+\begin{equation}
+    C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k}).
+\end{equation}
+Which, together with the reality of the scattering kernel, imposes
+\begin{equation}
+    \tilde{C}_{ab} = \tilde{C}_{ba}^*.
+\end{equation}
+
+Mathematically, the scattering kernel $C(\vb{k}, \vb{k'})$ can be any arbitrary function (that also
+satisfies the detailed balance condition). However, without any other constraints, it creates a
+global interaction between the states, which kills the performance. The other operators only involve
+interactions between neighboring elements, which produces sparse matrices, with elements only on a
+few diagonals. This is what makes the this method computationally efficient. Including the
+scattering kernel breaks this sparsity by having interactions between arbitrary pairs of points, and
+nonzero elements in any position of the matrices. Going to the basis based on the symmetries of the
+system, and then keeping a limited number of coefficients in the expansion, helps maintain the
+performance by reducing the rank of the matrices we have to deal with.
 
 \subsection{Change of Basis}
 In the symmetry basis, a function $f(\vb{k})$ can be expressed as
