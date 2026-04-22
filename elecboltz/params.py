@@ -1,4 +1,4 @@
-from .scattering import build_scattering_function
+from .scatrate import build_scattering_function
 from copy import deepcopy
 import json
 

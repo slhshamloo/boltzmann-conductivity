@@ -13,7 +13,7 @@ class ScatteringFunction:
     def __init__(self, params):
         self.params = params
     
-    def __call__(self, kx, ky, kz, vx, vy, vz, epsilon, **kwargs):
+    def __call__(self, kx, ky, kz, vx, vy, vz, temperature, epsilon, **kwargs):
         """Evaluate the scattering function at the given wavevector.
 
         Parameters
@@ -22,6 +22,8 @@ class ScatteringFunction:
             The components of the wavevector in Cartesian coordinates.
         vx, vy, vz : float
             The components of the velocity at the given wavevector.
+        temperature : float
+            The temperature at which to evaluate the scattering function.
         epsilon : float
             The energy at the given wavevector.
         **kwargs

@@ -2,6 +2,20 @@ import numpy as np
 from typing import Callable, Sequence
 
 
+quad_weights = {
+        1: np.array([1]),
+        2: np.array([1/3, 1/3, 1/3]),
+        3: np.array([-27/96, 25/96, 25/96, 25/96])
+}
+
+quad_points = {
+    1: np.array([[1/3, 1/3, 1/3]]),
+    2: np.array([[1/6, 1/6, 1/6], [1/6, 2/3, 1/6], [1/6, 1/6, 2/3]]),
+    3: np.array([[1/3, 1/3, 1/3],
+                 [1/5, 1/5, 3/5], [1/5, 3/5, 1/5], [1/5, 1/5, 3/5]])
+}
+
+
 def adaptive_octree_integrate(
         func: Callable, bounds: Sequence[float], depth: int = 7) -> float:
     """
