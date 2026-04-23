@@ -197,11 +197,16 @@ class Conductivity:
             linear_solution = scipy.sparse.linalg.spsolve(
                 self._differential_operator, self._vhat_projections[:, j])
         else:
-            # A = A_0 + U^dagger S U 
+            U = self._fem_to_kernel.conj().T
+            V = self._fem_to_kernel
+            # A_periodic = P A_0 P^dagger + P U C V P^dagger
+            if self.band.periodic:
+                U = self.band.periodic_projector @ U
+                V = V @ self.band.periodic_projector.T
+            # A = A_0 + U^dagger S U
             linear_solution = solve_sparse_plus_lowrank(
                 self._differential_operator, self._scattering_matrix,
-                self._fem_to_kernel.conj().T, self._fem_to_kernel,
-                self._vhat_projections[:, j])
+                U, V, self._vhat_projections[:, j])
         if len(linear_solution.shape) == 1:
             linear_solution = linear_solution[:, None]
         # (v_a)_i (A^{-1} v_b)^i
