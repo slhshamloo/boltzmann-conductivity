@@ -464,10 +464,19 @@ def solve_sparse_plus_lowrank(A, C, U, V, b):
     .. math::
         x = A^{-1}b - A^{-1}U (C^{-1}+VA^{-1}U)^{-1} VA^{-1}b
     
-    So, only two sparse solves ``A^{-1} b`` and ``A^{-1} U`` and two
-    small dense solves ``C^{-1}`` and ``(C^{-1} + V A^{-1} U)^{-1}``
-    are needed, which is much more efficient than solving the full
-    dense system when the rank of the low-rank part is small.
+    So, only two sparse solves :math:`A^{-1} b` and :math:`A^{-1} U`
+    and two small dense solves :math:`C^{-1}` and
+    :math:`(C^{-1} + V A^{-1} U)^{-1}` are needed, which is much more
+    efficient than solving the full dense system when the rank of the
+    low-rank part is small.
+
+    Note: Since the matrix C might be singular, the implementation uses
+    the euivalent form of the Sherman--Morrison--Woodbury formula
+
+    .. math::
+        x = A^{-1}b - A^{-1}U (I+CVA^{-1}U)^{-1} CVA^{-1}b
+    
+    which only requires inverting the matrix :math:`I + CV A^{-1} U`.
 
     Parameters
     ----------
@@ -492,5 +501,7 @@ def solve_sparse_plus_lowrank(A, C, U, V, b):
     """
     A_inv_b = scipy.sparse.linalg.spsolve(A, b)
     A_inv_U = scipy.sparse.linalg.spsolve(A, U)
-    C_inv = np.linalg.inv(C)
-    return A_inv_b - A_inv_U @ np.linalg.solve(C_inv + V@A_inv_U, V@A_inv_b)
+    identity = np.eye(C.shape[0])
+    CV = C @ V
+    return A_inv_b - A_inv_U @ np.linalg.solve(
+        identity + CV@A_inv_U, CV@A_inv_b)
