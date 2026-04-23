@@ -1,5 +1,5 @@
 from .bandstructure import BandStructure
-from .scatkernel import ScatteringKernel
+from .kernels import ScatteringKernel
 from .integrate import quad_points, quad_weights
 
 import numpy as np
