@@ -48,7 +48,8 @@ class ScatteringKernel:
 
 
 class SphericalHarmonicsKernel(ScatteringKernel):
-    """Scattering kernel based on spherical harmonics.
+    """Scattering kernel based on spherical harmonics
+    :math:`Y^l_m(\\theta, \\phi)`.
 
     Parameters
     ----------
@@ -81,3 +82,37 @@ class SphericalHarmonicsKernel(ScatteringKernel):
         l = index // (index + 1)
         m = index % (index + 1)
         return sph_harm_y(l, m, theta, phi)
+
+
+class CylindricalHarmonicsKernel(ScatteringKernel):
+    """Scattering kernel based on cylindrical harmonics
+    :math:`e^{im\\phi}`.
+
+    Parameters
+    ----------
+    params : dict or np.ndarray
+        Either a dictionary mapping (m, m') to the non-zero
+        coefficients of the scattering kernel, or a 2D array of
+        coefficients where the entry at (m, m') corresponds to the
+        coefficient for the basis functions with indices m and m'.
+    """
+    def __init__(self, params):
+        super().__init__(params)
+
+    def build_coeffs(self, params):
+        if isinstance(params['coeffs'], dict):
+            matrix_dict = {}
+            for (m, m_prime), value in params['coeffs'].items():
+                matrix_dict[(m, m_prime)] = value
+            matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
+            self.coeffs = np.zeros((matrix_size, matrix_size), dtype=complex)
+            for (i, j), value in matrix_dict.items():
+                self.coeffs[i, j] = value
+        else:
+            self.coeffs = params['coeffs']
+        self.coeffs += self.coeffs.conj().T - np.diag(self.coeffs.diagonal())
+        return self.coeffs
+
+    def eval_basis(self, index, kx, ky, kz):
+        phi = np.arctan2(ky, kx)
+        return np.exp(1j * index * phi)
