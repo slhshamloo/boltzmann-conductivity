@@ -66,9 +66,9 @@ class SphericalHarmonicsKernel(ScatteringKernel):
 
     def build_coeffs(self, params):
         matrix_dict = {}
-        for (l, m), (l_prime, m_prime) in params['coeffs'].keys():
+        for (l, m), (l_prime, m_prime) in params.keys():
             matrix_dict[(l*(l+1) + m, l_prime*(l_prime+1) + m_prime)] = \
-                params['coeffs'][((l, m), (l_prime, m_prime))]
+                params[((l, m), (l_prime, m_prime))]
         matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
         self.coeffs = np.zeros((matrix_size, matrix_size), dtype=complex)
         for (i, j), value in matrix_dict.items():
@@ -104,9 +104,9 @@ class CylindricalHarmonicsKernel(ScatteringKernel):
         super().__init__(params)
 
     def build_coeffs(self, params):
-        if isinstance(params['coeffs'], dict):
+        if isinstance(params, dict):
             matrix_dict = {}
-            for (m, m_prime), value in params['coeffs'].items():
+            for (m, m_prime), value in params.items():
                 matrix_dict[(m, m_prime)] = value
             matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
             self.coeffs = np.zeros((matrix_size, matrix_size), dtype=complex)
@@ -146,9 +146,9 @@ class LegendrePolynomialsKernel(ScatteringKernel):
         super().__init__(params)
 
     def build_coeffs(self, params):
-        if isinstance(params['coeffs'], dict):
+        if isinstance(params, dict):
             matrix_dict = {}
-            for (l, l_prime), value in params['coeffs'].items():
+            for (l, l_prime), value in params.items():
                 matrix_dict[(l, l_prime)] = value
             matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
             self.coeffs = np.zeros((matrix_size, matrix_size), dtype=complex)
