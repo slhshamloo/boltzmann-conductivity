@@ -11,7 +11,8 @@ class TestGeometricalCalculations(unittest.TestCase):
             "Ef * (kx^2 + ky^2 + kz^2)", 1.0, [np.pi, np.pi, np.pi],
             band_params={'Ef': 1.0}, periodic=False)
         self.cond = elecboltz.Conductivity(
-            self.band, field=[0.0, 0.0, 0.0], scattering_rate=1.0)
+            self.band, field=[0.0, 0.0, 0.0], scattering_rate=1.0,
+            correct_curvature=False)
     
     def test_regular_octahedron_jacobian(self):
         self.set_up_regular_octahedron()
