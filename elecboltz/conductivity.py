@@ -372,23 +372,26 @@ class Conductivity:
             self.scattering_kernel.coeffs.shape[0], dtype=complex)
         for a in range(self.scattering_kernel.coeffs.shape[0]):
             scattering_quadratures = self.scattering_kernel.eval_basis(
-                a, self._quadrature_points[:, :, 0],
-                self._quadrature_points[:, :, 1],
-                self._quadrature_points[:, :, 2])
+                a, angstrom * self._quadrature_points[:, :, 0],
+                angstrom * self._quadrature_points[:, :, 1],
+                angstrom * self._quadrature_points[:, :, 2])
             weights = quad_weights[self.quadrature_order]
-            sym_basis_integral = np.sum(scattering_quadratures * weights)
+            sym_basis_integral = np.sum(
+                self._jacobians / 2 # triangle areas
+                * (scattering_quadratures @ weights[:, None]).flatten())
             for b in range(self.scattering_kernel.coeffs.shape[1]):
                 # 1/tau_b = sum_a C_ab * int dk psi_a(k)
-                sym_basis_scattering_rate[b] += \
-                    self.scattering_kernel.coeffs[a, b] * sym_basis_integral
+                sym_basis_scattering_rate[b] += (
+                    angstrom**2 * self.scattering_kernel.coeffs[a, b]
+                    * sym_basis_integral)
             for vertex in range(3):
                 fem_basis = quad_points[self.quadrature_order][:, vertex]
                 integrals = scattering_quadratures @ (weights * fem_basis)
                 np.add.at(self._fem_to_kernel[a], self.band.kfaces[:, vertex],
-                          self._jacobians * integrals)
-        # S_ab = C_ab / |v_a|
+                          self._jacobians / 2 * integrals.flatten())
+        # S_ab = -C_ab / |v_a|
         self._scattering_matrix = (
-            self.scattering_kernel.coeffs
+            -angstrom**2 * self.scattering_kernel.coeffs
             / (self._fem_to_kernel@self._vmags)[:, None])
         # (U^(-1))^i_a = sum_j (M^(-1))^ij U^dagger_ja
         fem_basis_scattering_rate = scipy.sparse.linalg.spsolve(
