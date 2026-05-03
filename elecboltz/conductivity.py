@@ -412,15 +412,15 @@ class Conductivity:
         scattering_quadratures = self.scattering_kernel.eval_basis(
             a, angstrom * self._quadrature_points[:, :, 0],
             angstrom * self._quadrature_points[:, :, 1],
-            angstrom * self._quadrature_points[:, :, 2])
+            angstrom * self._quadrature_points[:, :, 2]).conj()
         weights = quad_weights[self.quadrature_order]
         sym_basis_integral = np.sum(
             self._jacobians / 2 # triangle areas
             * (scattering_quadratures @ weights[:, None]).flatten())
         for b in range(self.scattering_kernel.coeffs.shape[1]):
-            # 1/tau_b = sum_a C_ab * int dk psi_a(k)
+            # 1/tau_b = sum_a C_ab^* int dk psi_a(k)
             sym_basis_scattering_rate[b] += (
-                angstrom**2 * self.scattering_kernel.coeffs[a, b]
+                angstrom**2 * np.conj(self.scattering_kernel.coeffs[a, b])
                 * sym_basis_integral)
         for vertex in range(3):
             fem_basis = quad_points[self.quadrature_order][:, vertex]

@@ -794,14 +794,15 @@ sparse matrix inversion, as discussed in the next section.
 Again, by moving to the symmetry basis, we can significantly reduce the computational cost.
 In the symmetry basis, the (out-)scattering rate is given by
 \begin{empheq}[left=\empheqlbrace]{align}
-    \frac{1}{\tau(\vb{k})} &= \sum_{b}\frac{1}{\tilde{\tau_b}}\psi_b^*(\vb{k}), \\
+    \frac{1}{\tau(\vb{k})} &= \sum_{b}\frac{1}{\tilde{\tau_b}}\psi_b(\vb{k}), \\
     \frac{1}{\tau(\vb{k})} &=
     \sum_{a,b}\int\dd{\vb{k'}} \tilde{C}_{ab} \psi_a(\vb{k'})\psi_b^*(\vb{k}).
 \end{empheq}
 Note that functions can also be expanded in terms of the complex conjugation of the
-basis functions. After applying the inner product, this gives
+basis functions. Assuming the reality condition $\tau^*(\vb{k}) = \tau(\vb{k})$ (which is satisfied
+by the Hermicitiy of $\tilde{C}_{ab}$), after applying the inner product, this gives
 \begin{equation}
-    \frac{1}{\tilde{\tau_b}} = \sum_a \int\dd{\vb{k}} \tilde{C}_{ab} \psi_a(\vb{k}).
+    \frac{1}{\tilde{\tau_b}} = \sum_a \int\dd{\vb{k}} \tilde{C}_{ab}^* \psi_a^*(\vb{k}).
 \end{equation}
 This gives us $N_{\text{sym}}\times N_{\text{elements}}$ integrals to compute. If $N_{\text{sym}}$
 is small (as it should be), this is much more efficient than the $\mathcal{O}(N^2)$ integrals we had
