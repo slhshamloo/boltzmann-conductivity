@@ -1,5 +1,5 @@
 \documentclass[12pt]{article}
-\usepackage{amsmath,amssymb,bbold,bm,empheq,graphicx,hyperref,siunitx,subcaption,upgreek,xcolor}
+\usepackage{amsmath,amssymb,bbold,bm,csquotes,empheq,graphicx,hyperref,siunitx,subcaption,upgreek,xcolor}
 \usepackage[a4paper, margin=1in]{geometry}
 \usepackage[italicdiff]{physics}
 \usepackage[justification=centering]{caption}
@@ -800,7 +800,7 @@ In the symmetry basis, the (out-)scattering rate is given by
 \end{empheq}
 Note that functions can also be expanded in terms of the complex conjugation of the
 basis functions. Assuming the reality condition $\tau^*(\vb{k}) = \tau(\vb{k})$ (which is satisfied
-by the Hermicitiy of $\tilde{C}_{ab}$), after applying the inner product, this gives
+by the Hermicitiy of $\tilde{C}_{ab}$), this gives
 \begin{equation}
     \frac{1}{\tilde{\tau_b}} = \sum_a \int\dd{\vb{k}} \tilde{C}_{ab}^* \psi_a^*(\vb{k}).
 \end{equation}
@@ -820,15 +820,48 @@ change of basis of a vector from the symmetry basis to the FEM basis. From equat
     \sum_i f^i \int\dd{\vb{k}} \phi_i(\vb{k})\phi_j(\vb{k})
     = \sum_a \tilde{f}^a \int\dd{\vb{k}}\psi_a(\vb{k})\phi_j(\vb{k}), \\
     \implies \sum_i M_{ji} f^i = \sum_a U^{a*}_j \tilde{f}^a = \sum_a U^\dagger_{ja} \tilde{f}^a, \\
-    \implies f^i = \sum_{a,j} (M^{-1})^{ij} U^\dagger_{ja} \tilde{f}^a
+    \implies f^i = \sum_{a,j} \qty(M^{-1})^{ij} U^\dagger_{ja} \tilde{f}^a
 \end{gather}
 As this change of basis is the inverse of $U$,
 \begin{equation}
-    (U^{-1})^i_a = \sum_j (M^{-1})^{ij} U^\dagger_{ja}.
+    (U^{-1})^i_a = \sum_j \qty(M^{-1})^{ij} U^\dagger_{ja}.
 \end{equation}
 Since the matrix $U$ is $N_{\text{sym}}\times N_{\text{FEM}}$, this matrix inversion is
 $N_{\text{sym}}$ sparse inversions, which is still more efficient thatn the $\mathcal{O}(N^2)$
 integrals we had to compute in the FEM basis.
+
+\subsection{Symmetry Basis Overlap Matrix}
+When using a perfect symmetry basis, the basis functions are orthonormal. However, in real-world
+applications, we use a symmetry basis that only approximates the symmetries of the system. This
+means that the symmetry basis also has a nontrivial overlap matrix, which we can call $\tilde{M}$.
+Now, the change of basis from the FEM basis to the symmetry basis becomes
+\begin{align}
+    \sum_b\tilde{f}^b\int\dd{\vb{k}}\psi_b(\vb{k})\psi_a^*(\vb{k})
+    &= \sum_i f^i \int\dd{\vb{k}}\phi_i(\vb{k}) \psi_a^*(\vb{k}). \\
+    \sum_b\tilde{M}_{ab} \tilde{f}^b &= \sum_i U_{ai} f^i
+\end{align}
+This means that the change of basis matrix from the FEM basis to the symmetry basis is
+replaced by
+\begin{equation}
+    \tilde{U}^i_j = \sum_a \qty(\tilde{M}^{-1})^{ia} U_{aj}.
+\end{equation}
+We should also be careful with the change of basis of the in-scattering matrix. The positioning of
+the symmetry basis indices is not arbitrary any more. This time, strictly
+\begin{equation}
+    U_{ai} = \int\dd{\vb{k}}\psi_a^*(\vb{k})\phi_i(\vb{k}),
+\end{equation}
+and so
+\begin{equation}
+    S_{ij} = \sum_{a,b} U^*_{ai} \tilde{S}^{ab} U_{bj}
+    = \sum_{a,b} U^\dagger_{ia} \tilde{S}^{ab} U_{bj}.
+\end{equation}
+This means that the only change from the orthonormal case is the positioning of the indices, and
+the actual matrix calculations are the same as before. The only subtlety to keep in mind is that
+the transformed velocity $\tilde{v}$ should be transformed with $\tilde{U}$ instead of $U$ this
+time.
+
+What about the inverse change of basis, from the symmetry basis to the FEM basis? Luckily, our
+sloppiness with the indices cancelled each other out, and the expression stays the same.
 
 \subsection{Gaussian Quadrature}
 To do the integrations of the basis functions of the symmetry basis over the FEM elements, we can
