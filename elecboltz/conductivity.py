@@ -315,7 +315,7 @@ class Conductivity:
                                j_idx, j_idx, k_idx, k_idx))
         cols = np.concatenate((i_idx, j_idx, k_idx, j_idx, k_idx,
                                i_idx, k_idx, i_idx, j_idx))
-        self._jacobian_sums = scipy.sparse.csr_array(
+        self._jacobian_sums = scipy.sparse.csc_array(
             (np.tile(self._jacobians, 9), (rows, cols)), shape=(n, n))
         self._overlap_matrix = self._jacobian_sums / 24
         self._overlap_matrix.setdiag(2 * self._overlap_matrix.diagonal())
@@ -342,7 +342,7 @@ class Conductivity:
                 for derivative in self._derivatives]
 
     def _calculate_velocity_projections(self, vhats):
-        self._vhat_projections = self._overlap_matrix @ vhats
+        self._vhat_projections = self._overlap_matrix.tocsr() @ vhats
         if self.band.periodic:
             self._vhat_projections = \
                 self.band.periodic_projector @ self._vhat_projections
