@@ -47,19 +47,22 @@ class ScatteringKernel:
         raise NotImplementedError("Subclasses should implement this method.")
 
 
-class SphericalHarmonicsKernel(ScatteringKernel):
-    """Scattering kernel based on spherical harmonics
-    :math:`Y^l_m(\\theta, \\phi)`.
+class SphericalKernel(ScatteringKernel):
+    """Scattering kernel based on real-valued spherical harmonics
+    :math:`\\sqrt{2} \\Re Y^{|m|}_l(\\theta, \\phi)` and
+    :math:`\\sqrt{2} \\Im Y^{|m|}_l(\\theta, \\phi)`. The first,
+    cosine-like, basis function corresponds to positive m, while the
+    second, sine-like, basis function corresponds to negative m.
 
     Parameters
     ----------
     params : dict
         A dictionary mapping tuples of tuples of integers,
-        ((l, m), (l', m')), to the corresponding coefficients of
+        ``((l, m), (l', m'))``, to the corresponding coefficients of
         the scattering kernel. Note that since the scattering kernel
-        should be Hermitian, you must only specify one coefficient for
-        each pair of indices. The kernel will automatically fill in the
-        other coefficient.
+        should be Hermitian (real-symmetric in this case), you must
+        only specify one coefficient for each pair of indices. The
+        kernel will automatically fill in the other coefficient.
     """
     def __init__(self, params):
         super().__init__(params)
@@ -70,77 +73,81 @@ class SphericalHarmonicsKernel(ScatteringKernel):
             matrix_dict[(l*(l+1) + m, l_prime*(l_prime+1) + m_prime)] = \
                 params[((l, m), (l_prime, m_prime))]
         matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
-        self.coeffs = np.zeros((matrix_size, matrix_size), dtype=complex)
+        self.coeffs = np.zeros((matrix_size, matrix_size))
         for (i, j), value in matrix_dict.items():
             self.coeffs[i, j] = value
-        self.coeffs += self.coeffs.conj().T - np.diag(self.coeffs.diagonal())
+            self.coeffs[j, i] = value
         return self.coeffs
-
+    
     def eval_basis(self, index, kx, ky, kz):
         theta = np.arccos(kz / np.sqrt(kx**2 + ky**2 + kz**2))
         phi = np.arctan2(ky, kx)
-        l = index // (index + 1)
-        m = index % (index + 1)
-        return sph_harm_y(l, m, theta, phi)
+        l = index // (index+1)
+        m = index % (index+1)
+        if m >= 0:
+            return np.sqrt(2) * sph_harm_y(l, m, theta, phi).real
+        else:
+            return np.sqrt(2) * sph_harm_y(l, -m, theta, phi).imag
 
 
-class CylindricalHarmonicsKernel(ScatteringKernel):
-    """Scattering kernel based on cylindrical harmonics
-    :math:`e^{im\\phi}`.
+class CylindricalKernel(ScatteringKernel):
+    """Scattering kernel based on real cylindrical harmonics
+    :math:`\\cos(m\\phi)` and :math:`\\sin(m\\phi)`.
 
     Parameters
     ----------
     params : dict or np.ndarray
-        Either a dictionary mapping (m, m') to the non-zero
-        coefficients of the scattering kernel, or a 2D array of
-        coefficients where the entry at (m, m') corresponds to the
-        coefficient for the basis functions with indices m and m'.
-        Note that since the scattering kernel should be Hermitian,
-        if you use a dictionary, you must only specify one coefficient
-        for each pair of indices. The kernel will automatically fill in
-        the other coefficient.
+        A dictionary mapping ``(m, m')`` to the non-zero coefficients
+        of the scattering kernel. For the cosine basis functions,
+        ``m`` is non-negative, while for the sine basis functions,
+        ``m`` is negative. Note that since the scattering kernel
+        should be Hermitian, (real-symmetric in this case), you must
+        only specify one coefficient for each pair of indices. The
+        kernel will automatically fill in the other coefficient.
     """
     def __init__(self, params):
         super().__init__(params)
 
     def build_coeffs(self, params):
-        if isinstance(params, dict):
-            matrix_dict = {}
-            for (m, m_prime), value in params.items():
-                matrix_dict[(m, m_prime)] = value
-            matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
-            self.coeffs = np.zeros((matrix_size, matrix_size), dtype=complex)
-            for (i, j), value in matrix_dict.items():
-                self.coeffs[i, j] = value
-        else:
-            self.coeffs = params['coeffs']
-        self.coeffs += self.coeffs.conj().T - np.diag(self.coeffs.diagonal())
+        matrix_dict = {}
+        for (m, m_prime), value in params.items():
+            matrix_dict[(abs(m) + np.sign(m), abs(m_prime) + np.sign(m_prime))
+                        ] = value
+        matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
+        self.coeffs = np.zeros((matrix_size, matrix_size))
+        for (i, j), value in matrix_dict.items():
+            self.coeffs[i, j] = value
+            self.coeffs[j, i] = value
         return self.coeffs
 
     def eval_basis(self, index, kx, ky, kz):
         phi = np.arctan2(ky, kx)
-        return np.exp(1j * index * phi)
+        if index % 2 == 0:
+            return np.cos(index//2 * phi)
+        else:
+            return np.sin(((index//2) + 1) * phi)
 
 
-class LegendrePolynomialsKernel(ScatteringKernel):
+class LegendreKernel(ScatteringKernel):
     """Scattering kernel based on Legendre polynomials
     :math:`P_l(\\cos \\theta)`.
 
     To preserve normalization, this kernel actually uses the spherical
-    harmonics :math:`Y^l_0(\\theta, \\phi)`, which are proportional to
-    the Legendre polynomials :math:`P_l(\\cos \\theta)`.
+    harmonics :math:`Y^{m=0}_l(\\theta, \\phi)`, which are proportional
+    to the Legendre polynomials :math:`P_l(\\cos \\theta)`.
 
     Parameters
     ----------
     params : dict
-        Either a dictionary mapping (l, l') to the non-zero
+        Either a dictionary mapping ``(l, l')`` to the non-zero
         coefficients of the scattering kernel, or a 2D array of
         coefficients where the entry at (l, l') corresponds to the
-        coefficient for the basis functions with indices l and l'.
-        Note that since the scattering kernel should be Hermitian,
-        if you use a dictionary, you must only specify one coefficient
-        for each pair of indices. The kernel will automatically fill in
-        the other coefficient.
+        coefficient for the basis functions with indices ``l`` and
+        ``l'``. Note that since the scattering kernel should be
+        Hermitian (real-symmetric in this case), if you use a
+        dictionary, you must only specify one coefficient for each
+        pair of indices. The kernel will automatically fill in the
+        other coefficient.
     """
     def __init__(self, params):
         super().__init__(params)
@@ -151,7 +158,7 @@ class LegendrePolynomialsKernel(ScatteringKernel):
             for (l, l_prime), value in params.items():
                 matrix_dict[(l, l_prime)] = value
             matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
-            self.coeffs = np.zeros((matrix_size, matrix_size), dtype=complex)
+            self.coeffs = np.zeros((matrix_size, matrix_size))
             for (i, j), value in matrix_dict.items():
                 self.coeffs[i, j] = value
         else:
@@ -161,4 +168,4 @@ class LegendrePolynomialsKernel(ScatteringKernel):
 
     def eval_basis(self, index, kx, ky, kz):
         theta = np.arccos(kz / np.sqrt(kx**2 + ky**2 + kz**2))
-        return sph_harm_y(index, 0, theta, 0)
+        return np.real(sph_harm_y(index, 0, theta, 0))
