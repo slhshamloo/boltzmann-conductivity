@@ -39,10 +39,10 @@ class Conductivity:
         instead of a function. If None, it will be calculated from
         the scattering kernel.
     scattering_kernel : ScatteringKernel
-        The scattering kernel. This object should contain the matrix
+        The scattering kernel. This object must contain the matrix
         ``coeffs``, which stores the coefficients for each pair of
         basis functions in the expansion, in units of angstrom**2 THz.
-        It should also implement the method
+        It must also implement the method
         ``eval_basis(index, kx, ky, kz)`` as input and returns the
         values of the basis functions at the given wavevector, at
         the given ``index`` in the expansion.
@@ -193,20 +193,7 @@ class Conductivity:
         
         i, j = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
-        if self.scattering_kernel is None:
-            linear_solution = scipy.sparse.linalg.spsolve(
-                self._differential_operator, self._vhat_projections[:, j])
-        else:
-            U = self._fem_to_kernel.conj().T
-            V = self._fem_to_kernel
-            # A_periodic = P A_0 P^dagger + P U C V P^dagger
-            if self.band.periodic:
-                U = self.band.periodic_projector @ U
-                V = V @ self.band.periodic_projector.T
-            # A = A_0 + U^dagger S U
-            linear_solution = solve_sparse_plus_lowrank(
-                self._differential_operator, self._scattering_matrix,
-                U, V, self._vhat_projections[:, j])
+        linear_solution = self._solve(j)
         if len(linear_solution.shape) == 1:
             linear_solution = linear_solution[:, None]
         # (v_a)_i (A^{-1} v_b)^i
@@ -259,6 +246,24 @@ class Conductivity:
         if derivative:
             self._derivative_term = None
         self._differential_operator = None
+    
+    def _solve(self, j):
+        if self.scattering_kernel is None:
+            return scipy.sparse.linalg.spsolve(
+                self._differential_operator, self._vhat_projections[:, j])
+        else:
+            U = self._fem_to_kernel.conj().T
+            V = self._fem_to_kernel
+            # A_periodic = P A_0 P^dagger + P U C V P^dagger
+            if self.band.periodic:
+                U = self.band.periodic_projector @ U
+                V = V @ self.band.periodic_projector.T
+            factor = scipy.sparse.linalg.splu(self._differential_operator)
+            # A = A_0 + U^dagger S U
+            return solve_sparse_plus_lowrank(
+                self._differential_operator, self._scattering_matrix,
+                U, V, self._vhat_projections[:, j],
+                sparse_solver = lambda _, b: factor.solve(b))
 
     def _get_calculation_indices(self, i, j):
         if i is None:
@@ -367,36 +372,25 @@ class Conductivity:
             return
         self._fem_to_kernel = np.zeros(
             (self.scattering_kernel.coeffs.shape[0], len(self.band.kpoints)),
-            dtype=complex)
+            dtype=self.scattering_kernel.coeffs.dtype)
         sym_basis_scattering_rate = np.zeros(
-            self.scattering_kernel.coeffs.shape[0], dtype=complex)
+            self.scattering_kernel.coeffs.shape[0],
+            dtype=self.scattering_kernel.coeffs.dtype)
         for a in range(self.scattering_kernel.coeffs.shape[0]):
-            scattering_quadratures = self.scattering_kernel.eval_basis(
-                a, angstrom * self._quadrature_points[:, :, 0],
-                angstrom * self._quadrature_points[:, :, 1],
-                angstrom * self._quadrature_points[:, :, 2])
-            weights = quad_weights[self.quadrature_order]
-            sym_basis_integral = np.sum(
-                self._jacobians / 2 # triangle areas
-                * (scattering_quadratures @ weights[:, None]).flatten())
-            for b in range(self.scattering_kernel.coeffs.shape[1]):
-                # 1/tau_b = sum_a C_ab * int dk psi_a(k)
-                sym_basis_scattering_rate[b] += (
-                    angstrom**2 * self.scattering_kernel.coeffs[a, b]
-                    * sym_basis_integral)
-            for vertex in range(3):
-                fem_basis = quad_points[self.quadrature_order][:, vertex]
-                integrals = scattering_quadratures @ (weights * fem_basis)
-                np.add.at(self._fem_to_kernel[a], self.band.kfaces[:, vertex],
-                          self._jacobians / 2 * integrals.flatten())
+            self._integrate_scattering_kernel(a, sym_basis_scattering_rate)
         # S_ab = -C_ab / |v_a|
         self._scattering_matrix = (
             -angstrom**2 * self.scattering_kernel.coeffs
             / (self._fem_to_kernel@self._vmags)[:, None])
         # (U^(-1))^i_a = sum_j (M^(-1))^ij U^dagger_ja
-        fem_basis_scattering_rate = scipy.sparse.linalg.spsolve(
-            self._overlap_matrix,
-            self._fem_to_kernel.conj().T @ sym_basis_scattering_rate)
+        transformed_scatrate = \
+            self._fem_to_kernel.conj().T @ sym_basis_scattering_rate
+        overlap_matrix_factor = scipy.sparse.linalg.splu(self._overlap_matrix)
+        fem_basis_scattering_rate = \
+            overlap_matrix_factor.solve(transformed_scatrate.real)
+        if transformed_scatrate.dtype == complex:
+            fem_basis_scattering_rate += 1j * overlap_matrix_factor.solve(
+                transformed_scatrate.imag)
         self._calculate_scattering_invlen(fem_basis_scattering_rate)
 
     def _discretize_independent_out_scattering(self):
@@ -414,6 +408,26 @@ class Conductivity:
                 scattering = self.scattering_rate
         self._calculate_scattering_invlen(scattering)
     
+    def _integrate_scattering_kernel(self, a, sym_basis_scattering_rate):
+        scattering_quadratures = self.scattering_kernel.eval_basis(
+            a, angstrom * self._quadrature_points[:, :, 0],
+            angstrom * self._quadrature_points[:, :, 1],
+            angstrom * self._quadrature_points[:, :, 2])
+        weights = quad_weights[self.quadrature_order]
+        sym_basis_integral = np.sum(
+            self._jacobians / 2 # triangle areas
+            * (scattering_quadratures @ weights[:, None]).flatten())
+        for b in range(self.scattering_kernel.coeffs.shape[1]):
+            # 1/tau_b = sum_a C_ab * int dk psi_a(k)
+            sym_basis_scattering_rate[b] += (
+                angstrom**2 * self.scattering_kernel.coeffs[a, b]
+                * sym_basis_integral)
+        for vertex in range(3):
+            fem_basis = quad_points[self.quadrature_order][:, vertex]
+            integrals = scattering_quadratures @ (weights * fem_basis)
+            np.add.at(self._fem_to_kernel[a], self.band.kfaces[:, vertex],
+                      self._jacobians / 2 * integrals.flatten())
+
     def _calculate_scattering_invlen(self, scattering):
         # scattering_invlen is the inverse scattering length gamma
         # separate the optical conductivity case to avoid making
@@ -457,7 +471,8 @@ class Conductivity:
                 @ self.band.periodic_projector.T).tocsc()
 
 
-def solve_sparse_plus_lowrank(A, C, U, V, b):
+def solve_sparse_plus_lowrank(
+        A, C, U, V, b, sparse_solver=scipy.sparse.linalg.spsolve):
     """Solve the linear system ``(A + U @ C @ V) x = b`` for x,
     where A is a sparse matrix, and U @ C @ V is a low-rank matrix.
 
@@ -496,15 +511,19 @@ def solve_sparse_plus_lowrank(A, C, U, V, b):
         of the low-rank part.
     b : numpy.ndarray
         The right-hand side vector or matrix, with shape (n,) or (n, m).
+    sparse_solver : Callable, optional
+        The solver used to solve the sparse linear systems. Takes the
+        sparse matrix as the first argument and the right-hand side as
+        the second argument. When using a custom solver, keep in mind
+        that the right-hand side might not be a vector.
 
     Returns
     -------
     numpy.ndarray
         The solution x to the linear system, with the same shape as b.
     """
-    A_inv_b = scipy.sparse.linalg.spsolve(A, b)
-    A_inv_U = scipy.sparse.linalg.spsolve(A, U)
-    identity = np.eye(C.shape[0])
+    A_inv_b = sparse_solver(A, b)
+    A_inv_U = sparse_solver(A, U)
+    I = np.eye(C.shape[0])
     CV = C @ V
-    return A_inv_b - A_inv_U @ np.linalg.solve(
-        identity + CV@A_inv_U, CV@A_inv_b)
+    return A_inv_b - A_inv_U @ np.linalg.solve(I + CV@A_inv_U, CV@A_inv_b)
