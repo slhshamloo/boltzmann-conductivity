@@ -21,12 +21,13 @@ def make_isotropic_bandstructure(kf, three_dimensional=False, **kwargs):
     dispersion = "Ef * (kx^2 + ky^2"
     if three_dimensional:
         dispersion += " + kz^2"
-    dispersion += ")"
+    dispersion += ") / kf^2"
 
     a = np.pi / kf * 1e10
     coeff = hbar**2 / (2 * m_e)
     ef = coeff * kf**2 / electron_volt * 1e3
     bandstructure = elecboltz.BandStructure(
-        dispersion, ef, [a, a, a], band_params={"Ef": ef}, **kwargs)
+        dispersion, ef, [a, a, a],
+        band_params={'Ef': ef, 'kf': kf * 1e-10}, **kwargs)
     bandstructure.discretize()
     return bandstructure
