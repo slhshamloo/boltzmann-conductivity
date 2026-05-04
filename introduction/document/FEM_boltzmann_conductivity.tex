@@ -73,28 +73,6 @@ is equal to
     \label{eq:tau_kernel}
 \end{equation}
 
-\sloppy{In-scattering is dropped in the \emph{relaxation time approximation}, which is the case for
-the Chambers formula. Our goal here is to keep this term, as it especially becomes important when
-there is strong anisotropy in the scattering, which is the case for cuprates. When the scattering
-is roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend on $\vb{k}$ and, because of
-charge conservation,
-$\int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t) \approx C\int\dd{\vb{k'}} g(\vb{k'}; t) = 0.$
-Due to detailed balance (discussed in the next paragraph), ignoring inelastic scattering,
-$C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$, so if we consider any anisotropy in the out-scattering,
-we must do the same for the in-scattering. This means the Chambers formula is just wrong for
-anisotropic scattering. So, why does it work effectively anyway? The scattering in cuprates
-might only be low-angle, so the in-scattering is small compared to the out-scattering.}
-
-Another important point to consider is that this linearization implicitly assumes \emph{detailed
-balance}, meaning that $f_0$ is in equilibrium. Mathematically, it can be expressed as
-\begin{equation}
-    I[f_0] = 0 \implies \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) f_0(\vb{k'})
-    = \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) f_0(\vb{k}).
-\end{equation}
-This will be later used to impose constraints on the scattering kernel. Note that detailed balance
-only ensures that $f_0$ is the equilibrium distribution, and it has nothing to do with
-charge conservation.
-
 Plugging in the expression for the collision integral into equation \eqref{eq:boltzmann} and
 applying the approximations, we get
 \begin{equation}
@@ -160,6 +138,59 @@ is added. In the end, we have
 \end{equation}
 where FS is the Fermi surface, and $\hat{v}_a=v_a/v$ is the component of the velocity in the
 $a$ direction, divided by the full magnitude of the velocity.
+
+\subsection{The Collision Integral}
+\subsubsection{The Relaxation Time Approximation (RTA)}
+\sloppy{The in-scattering term of the collision integral
+\begin{equation}
+    \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t)
+\end{equation}
+is dropped in the \emph{relaxation time approximation}, which is the case for
+the Chambers formula. Our goal here is to keep this term, as it especially becomes important when
+there is strong anisotropy in the scattering, which is the case for cuprates. When the scattering
+is roughly isotropic, $C(\vb{k}, \vb{k'})$ does not strongly depend on $\vb{k}$ and, because of
+charge conservation,
+$\int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) g(\vb{k'}; t) \approx C\int\dd{\vb{k'}} g(\vb{k'}; t) = 0.$
+Due to detailed balance (discussed in the next paragraph), ignoring inelastic scattering,
+$C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$, so if we consider any anisotropy in the out-scattering,
+we must do the same for the in-scattering. This means the Chambers formula is just wrong for
+anisotropic scattering. So, why does it work effectively anyway? The scattering in cuprates
+might only be low-angle, so the in-scattering is small compared to the out-scattering.}
+
+\subsubsection{Detailed Balance}
+Another important point to consider is that this linearization implicitly assumes \emph{detailed
+balance}, meaning that $f_0$ is in equilibrium. Mathematically, it can be expressed as
+\begin{equation}
+    I[f_0] = 0 \implies \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) f_0(\vb{k'})
+    = \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) f_0(\vb{k}).
+\end{equation}
+This will be later used to impose constraints on the scattering kernel. Note that detailed balance
+only ensures that $f_0$ is the equilibrium distribution, and it has nothing to do with
+charge conservation.
+
+\subsubsection{Charge Conservation}
+Charge conservation can be expressed as
+\begin{equation}
+    \dv{n}{t} = \dv{t} \int\dd{\vb{k}} f(\vb{k}) = 0.
+\end{equation}
+In our finite-element treatment of the problem, the integration domain is fixed. This is admittedly
+a simplifying assumption. For example, think of a Fermi surface as the integration domain. If we
+allow the chemical potential to change, then the Fermi surface changes as well, so the integration
+domain is not fixed. Other alternative formulations with variable domains can exist, but it does not
+concern our current formulation. Now, with a fixed integration domain, we can pull the time
+derivative inside the integral, and from the Boltzmann equation, we have
+\begin{equation}
+    \int\dd{\vb{k}} \dv{f}{t} = \int\dd{\vb{k}} I[f] = 0.
+\end{equation}
+This means, for all functions $f$,
+\begin{equation}
+    \int\dd{\vb{k}} \int\dd{\vb{k'}} C(\vb{k}, \vb{k'}) f(\vb{k'})
+    = \int\dd{\vb{k}} \int\dd{\vb{k'}} C(\vb{k'}, \vb{k}) f(\vb{k}).
+\end{equation}
+But, if you rename $\vb{k}$ and $\vb{k'}$ and swap the dummy integration variables, you can get from
+the expression of one side to the other, and this is therefore identically true. The linearization
+we chose for the collision integral is automatically charge-conserving, and no additional
+constraints are needed.
 
 \section{Finite Element Method} 
 \subsection{Discretization}
