@@ -1,4 +1,5 @@
 from .scatrate import build_scattering_function
+from .kernel import build_kernel
 from copy import deepcopy
 import json
 
@@ -25,9 +26,14 @@ def easy_params(params):
       | and the resulting expression.
     * | Build the scattering function using predefined
       | ``scattering_models`` and the ``scattering_params`` associated
-      | with them. See ``build_scattering_function`` for supported
+      | with them. See :func:`build_scattering_function` for supported
       | scattering models and their parameters. ``scattering_models``
       | is assumed to be only one ``isotropic`` model if not specified.
+    * | Build the scattering kernel using a predefined
+      | ``scattering_kernel`` (or a list of ``scattering_kernels``) and
+      | the ``kernel_params`` associated with it (or a list of
+      | ``kernel_params`` associated with each kernel). See
+      | :func:`build_kernel` for supported kernels and their parameters.
 
     Parameters
     ----------
@@ -75,6 +81,18 @@ def easy_params(params):
             new_params['scattering_models'] = ['isotropic']
         new_params['scattering_rate'] = build_scattering_function(
             new_params['scattering_params'], new_params['scattering_models'])
+    if 'scattering_kernel_params' in params:
+        if ('scattering_kernel_name' not in params
+                and 'scattering_kernel_names' not in params):
+            new_params['scattering_kernel_name'] = 'spherical'
+        if 'scattering_kernel_name' in params:
+            new_params['scattering_kernel'] = build_kernel(
+                new_params['scattering_kernel_name'],
+                new_params['scattering_kernel_params'])
+        else:
+            new_params['scattering_kernel'] = build_kernel(
+                new_params['scattering_kernel_names'],
+                new_params['scattering_kernel_params'])
     return new_params
 
 
