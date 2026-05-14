@@ -155,8 +155,15 @@ class CylindricalKernel(ScatteringKernel):
     def build_coeffs(self, params):
         matrix_dict = {}
         for (m, m_prime), value in params.items():
-            matrix_dict[(abs(m) + np.sign(m), abs(m_prime) + np.sign(m_prime))
-                        ] = value
+            if m < 0:
+                idx_m = -2*m - 1
+            else:
+                idx_m = 2*m
+            if m_prime < 0:
+                idx_m_prime = -2*m_prime - 1
+            else:
+                idx_m_prime = 2*m_prime
+            matrix_dict[(idx_m, idx_m_prime)] = value
         matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
         self.coeffs = np.zeros((matrix_size, matrix_size))
         for (i, j), value in matrix_dict.items():
