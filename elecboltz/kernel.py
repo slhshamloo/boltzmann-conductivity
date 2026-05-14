@@ -116,14 +116,17 @@ class SphericalKernel(ScatteringKernel):
         for (l, m), (l_prime, m_prime) in params.keys():
             matrix_dict[(l*(l+1) + m, l_prime*(l_prime+1) + m_prime)] = \
                 params[((l, m), (l_prime, m_prime))]
-        matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
-        self.coeffs = np.zeros((matrix_size, matrix_size))
+        self._inv_idx_map = np.sort(np.unique(np.array(
+            [[key[0], key[1]] for key in matrix_dict.keys()]).flatten()))
+        index_map = {idx: i for i, idx in enumerate(self._inv_idx_map)}
+        self.coeffs = np.zeros((len(index_map), len(index_map)))
         for (i, j), value in matrix_dict.items():
-            self.coeffs[i, j] = value
-            self.coeffs[j, i] = value
+            self.coeffs[index_map[i], index_map[j]] = value
+            self.coeffs[index_map[j], index_map[i]] = value
         return self.coeffs
     
     def eval_basis(self, index, kx, ky, kz):
+        index = self._inv_idx_map[index]
         theta = np.arccos(kz / np.sqrt(kx**2 + ky**2 + kz**2))
         phi = np.arctan2(ky, kx)
         l = index // (index+1)
@@ -164,14 +167,17 @@ class CylindricalKernel(ScatteringKernel):
             else:
                 idx_m_prime = 2*m_prime
             matrix_dict[(idx_m, idx_m_prime)] = value
-        matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
-        self.coeffs = np.zeros((matrix_size, matrix_size))
+        self._inv_idx_map = np.sort(np.unique(np.array(
+            [[key[0], key[1]] for key in matrix_dict.keys()]).flatten()))
+        index_map = {idx: i for i, idx in enumerate(self._inv_idx_map)}
+        self.coeffs = np.zeros((len(index_map), len(index_map)))
         for (i, j), value in matrix_dict.items():
-            self.coeffs[i, j] = value
-            self.coeffs[j, i] = value
+            self.coeffs[index_map[i], index_map[j]] = value
+            self.coeffs[index_map[j], index_map[i]] = value
         return self.coeffs
 
     def eval_basis(self, index, kx, ky, kz):
+        index = self._inv_idx_map[index]
         phi = np.arctan2(ky, kx)
         if index % 2 == 0:
             return np.cos(index//2 * phi)
@@ -208,16 +214,19 @@ class LegendreKernel(ScatteringKernel):
             matrix_dict = {}
             for (l, l_prime), value in params.items():
                 matrix_dict[(l, l_prime)] = value
-            matrix_size = max(max(k) for k in matrix_dict.keys()) + 1
-            self.coeffs = np.zeros((matrix_size, matrix_size))
+            self._inv_idx_map = np.sort(np.unique(np.array(
+                [[key[0], key[1]] for key in matrix_dict.keys()]).flatten()))
+            index_map = {idx: i for i, idx in enumerate(self._inv_idx_map)}
+            self.coeffs = np.zeros((len(index_map), len(index_map)))
             for (i, j), value in matrix_dict.items():
-                self.coeffs[i, j] = value
+                self.coeffs[index_map[i], index_map[j]] = value
         else:
             self.coeffs = params['coeffs']
         self.coeffs += self.coeffs.conj().T - np.diag(self.coeffs.diagonal())
         return self.coeffs
 
     def eval_basis(self, index, kx, ky, kz):
+        index = self._inv_idx_map[index]
         theta = np.arccos(kz / np.sqrt(kx**2 + ky**2 + kz**2))
         return np.real(sph_harm_y(index, 0, theta, 0))
 
