@@ -959,6 +959,26 @@ triangular coordinate and a symmetry basis function. So, to compute the value of
 in this quadrature, we can reuse the quadrature coordinates. This is even symmetric for each
 point $\vb{k}_i$. This makes the quadrature integral a very simple matrix multiplication.
 
+\subsection{Real-Valued Basis Functions}
+While you could use complex-valued functions for the symmetry basis, if not handled carefully,
+it can severely reduce the performance. Also, by having complex-valued matrices, the memory usage
+is doubled. So, since it is better to stick to real-valued basis functions if possible.
+
+Due to the detailed balance condition, the scattering matrix is Hermitian. This means there exists
+a real-valued basis for any scattering kernel, and limiting ourselves to real-valued functions does
+not reduce the generality of our model.
+
+For example, instead of the usual spherical harmonics, one can use their real-valued counterparts,
+defined as
+\begin{empheq}[left=\empheqlbrace]{gather}
+    Y_{l,\abs{m}}^R(\theta, \phi) = \frac{1}{\sqrt{2}}(
+        Y_{l,m}(\theta, \phi) + Y_{l,-m}(\theta, \phi)), \\
+    Y_{l,\abs{m}}^I(\theta, \phi) = \frac{1}{\sqrt{2}i}(
+        Y_{l,m}(\theta, \phi) - Y_{l,-m}(\theta, \phi)).
+\end{empheq}
+Instead of complex valued cylindrical harmonics (which are just complex exponentials $e^{im\phi}$),
+their real-valued counterparts are just sines and cosines.
+
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
 When sticking with the relaxation time approximation and ignoring the in-scattering,
