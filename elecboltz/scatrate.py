@@ -94,7 +94,7 @@ def build_scattering_function(
 
     Supported scattering models include:
 
-    * ``'isotropic'``: Constant ``gamma_0`` everywhere
+    * | ``'isotropic'``: Constant ``gamma_0`` everywhere
     * | ``'cos'``: ``gamma_k * abs(cos(sym * phi))^power`` where `phi`
       | is the angle of the projection of the wavevector k in the x-y
       | plane with the x axis. The rest are parameters of the model.

@@ -8,6 +8,7 @@ elecBoltz API reference
    bandstructure
    conductivity
    scattering
+   kernel
    params
    fit
    load
