@@ -402,8 +402,7 @@ class Conductivity:
                 scattering = self.scattering_rate(
                     kx=self.band.kpoints[:, 0], ky=self.band.kpoints[:, 1],
                     kz=self.band.kpoints[:, 2], vx=self._velocities[:, 0],
-                    vy=self._velocities[:, 1], vz=self._velocities[:, 2],
-                    **self.scattering_params)
+                    vy=self._velocities[:, 1], vz=self._velocities[:, 2])
             else:
                 scattering = self.scattering_rate
         self._calculate_scattering_invlen(scattering)
