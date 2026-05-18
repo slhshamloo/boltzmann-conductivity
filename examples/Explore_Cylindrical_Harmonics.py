@@ -27,7 +27,7 @@ mpl.rcParams['pdf.fonttype'] = 3
 mpl.rcParams['figure.figsize'] = (8.0, 5.2)
 mpl.rcParams['lines.linewidth'] = 3
 mpl.rcParams['lines.markersize'] = 20
-
+mpl.rcParams['axes.formatter.useoffset'] = False
 
 params = {
     'band_name': "Nd-LSCO",
@@ -43,7 +43,7 @@ params = {
     'Bamp': 45,
     'scattering_kernel_name': 'cylindrical',
     'scattering_kernel_params': {
-        'constant': 5.5, 'cos4': 1.5
+        'constant': 5.5, 'cos4': 1.0, 'cos4cos4': 3.0
     },
     'march_square': True
 }
@@ -169,26 +169,26 @@ def _get_cylindrical_coeff_label(label):
     elif m_prime == 0:
         trig = 'cos' if m > 0 else 'sin'
         if abs(m) == 1:
-            return f'${trig}(\\theta)$'
+            return f'${trig}(\\varphi)$'
         else:
-            return f'${trig}({abs(m)}\\theta)$'
+            return f'${trig}({abs(m)}\\varphi)$'
     elif m == 0:
         trig = 'cos' if m_prime > 0 else 'sin'
         if abs(m_prime) == 1:
-            return f'${trig}(\\theta)$'
+            return f'${trig}(\\varphi)$'
         else:
-            return f'${trig}({abs(m_prime)}\\theta)$'
+            return f'${trig}({abs(m_prime)}\\varphi)$'
     else:
         trig1 = 'cos' if m > 0 else 'sin'
         trig2 = 'cos' if m_prime > 0 else 'sin'
         if abs(m) == 1:
-            trig1_str = f"${trig1}(\\theta)$"
+            trig1_str = f"${trig1}(\\varphi)$"
         else:
-            trig1_str = f"${trig1}({abs(m)}\\theta)$"
+            trig1_str = f"${trig1}({abs(m)}\\varphi)$"
         if abs(m_prime) == 1:
-            trig2_str = f"${trig2}(\\theta')$"
+            trig2_str = f"${trig2}(\\varphi')$"
         else:
-            trig2_str = f"${trig2}({abs(m_prime)}\\theta')$"
+            trig2_str = f"${trig2}({abs(m_prime)}\\varphi')$"
         return f'{trig1_str}{trig2_str}'
 
 
@@ -220,8 +220,8 @@ def plot_full_fermi_surface_slices(ax, renderer, params, n_interp=300, res=101,
     ax_text.text(0.0, ypos, '$k_z$', color='black', fontsize='small',
             ha='left', va='bottom', transform=ax_text.transAxes)
     ax.tick_params(axis='both', labelsize='x-small')
-    ax.set_xlabel("$k_x$ (Å)", fontsize='x-small', labelpad=2)
-    ax.set_ylabel("$k_y$ (Å)", fontsize='x-small', labelpad=2)
+    ax.set_xlabel("$k_x$ (Å$^{-1}$)", fontsize='x-small', labelpad=2)
+    ax.set_ylabel("$k_y$ (Å$^{-1}$)", fontsize='x-small', labelpad=2)
 
 
 def plot_fermi_surface_slice(ax, band, kz=0.0, n_interp=300, res=101,
@@ -260,12 +260,12 @@ def plot_scattering_heatmap(fig, ax, params, res=101, **kwargs):
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="5%", pad=0.1)
     cbar = fig.colorbar(heatmap, cax=cax,
-                        label=r"$C(\theta, \theta')$ (Å$^2$ THz)")
+                        label=r"$C(\varphi, \varphi')$ (Å$^2$ THz)")
     cbar.ax.tick_params(labelsize='xx-small')
     cbar.ax.set_ylabel(cbar.ax.get_ylabel(), fontsize='xx-small')
     ax.tick_params(axis='both', labelsize='x-small')
-    ax.set_xlabel(r"$\theta$ ($^\circ$)", fontsize='x-small', labelpad=2)
-    ax.set_ylabel(r"$\theta'$ ($^\circ$)", fontsize='x-small', labelpad=2)
+    ax.set_xlabel(r"$\varphi$ ($^\circ$)", fontsize='x-small', labelpad=2)
+    ax.set_ylabel(r"$\varphi'$ ($^\circ$)", fontsize='x-small', labelpad=2)
     ax.set_xticks([-180, -90, 0, 90, 180])
     ax.set_yticks([-180, -90, 0, 90, 180])
 
@@ -339,12 +339,16 @@ def calc_and_plot_admr(ax, params):
         for j, Btheta in enumerate(Bthetas):
             cond.Btheta = Btheta
             rho_zz[i, j] = np.linalg.inv(cond.calculate())[2, 2]
+    
+    cond.Bphi = 0
+    cond.Btheta = 0
+    rho_zz_0 = np.linalg.inv(cond.calculate())[2, 2]
 
     for i, phi in enumerate(Bphis):
-        ax.plot(Bthetas, 1e5 * rho_zz[i], label=f'${phi}^\\circ$',
+        ax.plot(Bthetas, rho_zz[i] / rho_zz_0, label=f'${phi}^\\circ$',
                 color=mpl.cm.Blues((i+1) / len(Bphis)))
     ax.set_xlabel(r'$\theta$ ($^\circ$)')
-    ax.set_ylabel(r'$\rho_{zz}$ (mΩ cm)')
+    ax.set_ylabel(r'$\rho_{zz}(\theta)/\rho_{zz}(0)$')
     ax.set_title('Nd-LSCO')
     ax.legend(frameon=False, title=r"$\phi$")
     ax.set_xticks([-30, 0, 30, 60, 90, 120, 150])
