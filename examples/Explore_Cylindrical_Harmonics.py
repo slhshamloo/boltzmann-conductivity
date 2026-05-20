@@ -43,9 +43,8 @@ params = {
     'Bamp': 45,
     'scattering_kernel_name': 'cylindrical',
     'scattering_kernel_params': {
-        'constant': 5.5, 'cos4': 1.0, 'cos4cos4': 3.0
-    },
-    'march_square': True
+        'constant': 5.5, 'sin4': -1.0
+    }
 }
 
 label_to_latex = {
@@ -169,26 +168,26 @@ def _get_cylindrical_coeff_label(label):
     elif m_prime == 0:
         trig = 'cos' if m > 0 else 'sin'
         if abs(m) == 1:
-            return f'${trig}(\\varphi)$'
+            return f'$\\mathrm{{{trig}}}(\\varphi)$'
         else:
-            return f'${trig}({abs(m)}\\varphi)$'
+            return f'$\\mathrm{{{trig}}}({abs(m)}\\varphi)$'
     elif m == 0:
         trig = 'cos' if m_prime > 0 else 'sin'
         if abs(m_prime) == 1:
-            return f'${trig}(\\varphi)$'
+            return f'$\\mathrm{{{trig}}}(\\varphi)$'
         else:
-            return f'${trig}({abs(m_prime)}\\varphi)$'
+            return f'$\\mathrm{{{trig}}}({abs(m_prime)}\\varphi)$'
     else:
         trig1 = 'cos' if m > 0 else 'sin'
         trig2 = 'cos' if m_prime > 0 else 'sin'
         if abs(m) == 1:
-            trig1_str = f"${trig1}(\\varphi)$"
+            trig1_str = f"$\\mathrm{{{trig1}}}(\\varphi)$"
         else:
-            trig1_str = f"${trig1}({abs(m)}\\varphi)$"
+            trig1_str = f"$\\mathrm{{{trig1}}}({abs(m)}\\varphi)$"
         if abs(m_prime) == 1:
-            trig2_str = f"${trig2}(\\varphi')$"
+            trig2_str = f"$\\mathrm{{{trig2}}}(\\varphi')$"
         else:
-            trig2_str = f"${trig2}({abs(m_prime)}\\varphi')$"
+            trig2_str = f"$\\mathrm{{{trig2}}}({abs(m_prime)}\\varphi')$"
         return f'{trig1_str}{trig2_str}'
 
 
@@ -368,6 +367,8 @@ def plot_kernel_admr(params, show=False):
         if value == np.floor(value):
             value = int(value)
         if label != 'constant' and label != '1':
+            if value < 0 and coeffs_text[-1] == '+':
+                coeffs_text = coeffs_text[:-1]
             if value != 1:
                 coeffs_text += str(value)
             coeffs_text += label
