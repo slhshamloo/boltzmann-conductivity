@@ -366,7 +366,7 @@ def plot_kernel_admr(params, show=False):
     for label, value in sorted(params['scattering_kernel_params'].items()):
         if value == np.floor(value):
             value = int(value)
-        if label != 'constant' and label != '1':
+        if label not in ['1', 'constant', 'const', 'iso']:
             if value < 0 and coeffs_text[-1] == '+':
                 coeffs_text = coeffs_text[:-1]
             if value != 1:

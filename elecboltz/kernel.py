@@ -258,7 +258,7 @@ def build_kernel(kernel, kernel_params):
           | other ``m`` to zero or by simply omitting it, so for
           | example ``'cos3'``. You can set the constant term by having
           | both m and m' be zero, or just use ``'1'`` or ``'constant'``
-          | as the key.
+          | or ``'const'`` or ``'iso'`` as the key.
         * | ``'legendre'``: Legendre polynomials. The parameters are
           | indicated by a pair of integers, ``(l, l')``, mapping to
           | the corresponding coefficients of the Legendre polynomials
@@ -296,7 +296,7 @@ def build_kernel(kernel, kernel_params):
 
 
 def _get_cylindrical_indices(key):
-    if key in ['1', 'constant']:
+    if key in ['1', 'constant', 'const', 'iso']:
         return (0, 0)
     else:
         match = re.match(r'(cos|sin)+(\d+)(cos|sin)?(\d*)', key)
