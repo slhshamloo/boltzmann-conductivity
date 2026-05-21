@@ -25,15 +25,18 @@ def easy_params(params):
       | See ``get_tight_binding_dispersion`` for the list of parameters
       | and the resulting expression.
     * | Build the scattering function using predefined
-      | ``scattering_models`` and the ``scattering_params`` associated
-      | with them. See :func:`build_scattering_function` for supported
-      | scattering models and their parameters. ``scattering_models``
-      | is assumed to be only one ``isotropic`` model if not specified.
+      | ``scattering_models`` and the ``scattering_params``
+      | associated with them.
+      | See :func:`elecboltz.scatrate.build_scattering_function`
+      | for supported scattering models and their parameters.
+      | ``scattering_models`` is assumed to be only one ``isotropic``
+      | model if not specified.
     * | Build the scattering kernel using a predefined
-      | ``scattering_kernel`` (or a list of ``scattering_kernels``) and
-      | the ``kernel_params`` associated with it (or a list of
+      | ``scattering_kernel`` (or a list of ``scattering_kernels``)
+      | and the ``kernel_params`` associated with it (or a list of
       | ``kernel_params`` associated with each kernel). See
-      | :func:`build_kernel` for supported kernels and their parameters.
+      | :func:`elecboltz.kernel.build_kernel` for supported kernels
+      | and their parameters.
 
     Parameters
     ----------
