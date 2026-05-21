@@ -979,6 +979,26 @@ defined as
 Instead of complex valued cylindrical harmonics (which are just complex exponentials $e^{im\phi}$),
 their real-valued counterparts are just sines and cosines.
 
+\subsection{Arbitrary Scattering Kernels}
+The method of expanding the scattering kernel in a symmetry basis is effectively a projection into
+a low-rank subspace. So instead of using a symmetry-based basis like spherical harmonics, we could
+also use any other arbitrary functions as the basis. The only contraints are
+\begin{enumerate}
+    \item $C(\vb{k}, \vb{k'}) > 0$ everywhere, because it is representing the rate of
+        transition between states. A negative value would be inconsistent with the definition.
+    \item Keeping detailed balance. For elastic scattering this means
+        $C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$.
+\end{enumerate}
+This lets us construct the basis by hand to follow a certain shape
+
+In some cases, we have a specific scattering kernel, possibly derived from a microscopic model, and
+it is not naturally expressed in terms of a low-rank expansion. In these cases, to get a low-rank
+approximation of the kernel, we can do a singular value decomposition of the kernel matrix in the
+FEM basis, and keep only the largest singular values. This can be achieved efficiently without
+constructing the full matrix and only computing the action of the kernel on vectors. Then, using
+methods like the Lanczos algorithm, we can compute the largest singular values and the corresponding
+singular vectors, without solving the full eigendecomposition problem.
+
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
 When sticking with the relaxation time approximation and ignoring the in-scattering,
