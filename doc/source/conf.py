@@ -6,7 +6,8 @@ sys.path.insert(0, os.path.abspath('../..'))
 project = 'elecBoltz'
 copyright = '2025, Saleh Shamloo Ahmadi'
 author = 'Saleh Shamloo Ahmadi'
-release = get_version(root='../../').split('+')[0].split('.')[:3]
+release = get_version(root='../../', version_scheme='no-guess-dev'
+                      ).split('+')[0].split('.')[:3]
 release = '.'.join(release)
 
 extensions = [
