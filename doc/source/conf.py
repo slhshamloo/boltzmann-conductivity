@@ -1,14 +1,16 @@
 import os, sys
-from setuptools_scm import get_version
+from importlib.metadata import PackageNotFoundError, version
 
 sys.path.insert(0, os.path.abspath('../..'))
 
 project = 'elecBoltz'
 copyright = '2025, Saleh Shamloo Ahmadi'
 author = 'Saleh Shamloo Ahmadi'
-release = get_version(root='../../', version_scheme='post-release'
-                      ).split('+')[0].split('.')[:3]
-release = '.'.join(release)
+try:
+    release = version('elecboltz')
+except PackageNotFoundError:
+    release = '0.0.0'
+version = '.'.join(release.split('.')[:2])
 
 extensions = [
     'sphinx.ext.autodoc',
