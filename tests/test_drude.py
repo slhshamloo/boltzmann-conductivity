@@ -1,49 +1,76 @@
 import unittest
 import elecboltz
 import numpy as np
-from scipy.constants import e, electron_volt, hbar, m_e
+from scipy.constants import angstrom, angstrom, e, electron_volt, hbar, m_e
 
 
 class TestDrude(unittest.TestCase):
-    def calculate_conductivities(self, B):
-        kf = 1e10
+    def calculate_conductivities(self, B, scattering=1.0, kf=1):
+        kf /= angstrom
         bandstructure = make_isotropic_bandstructure(
             kf, periodic=2, resolution=21)
         conductivity = elecboltz.Conductivity(
-            bandstructure, scattering_rate=1.0, field=B)
+            bandstructure, scattering_rate=scattering, field=B)
         conductivity.calculate()
-        sigma_boltzmann = conductivity.sigma
+        sigma_rta = conductivity.sigma
+
+        kernel = elecboltz.kernel.LegendreKernel(
+            {(0, 0): scattering / (kf * angstrom)**2})
+        conductivity = elecboltz.Conductivity(
+            bandstructure, scattering_kernel=kernel, field=B)
+        conductivity.calculate()
+        sigma_kernel = conductivity.sigma
+
 
         charge_density = kf**3 / (2 * np.pi**2)
         sigma_drude = calculate_drude(1.0, charge_density, 1.0 * 1e12, B)
         
-        return sigma_boltzmann, sigma_drude
+        return sigma_kernel, sigma_rta, sigma_drude
 
     def test_zero_field(self):
-        sigma_boltzmann, sigma_drude = self.calculate_conductivities(
+        sigma_kernel, sigma_rta, sigma_drude = self.calculate_conductivities(
             B=np.array([0.0, 0.0, 0.0]))
 
-        relative_error_xx = abs(sigma_boltzmann[0, 0]-sigma_drude[0, 0]
-                                ) / abs(sigma_drude[0, 0])
+        error_kernel = abs(sigma_kernel[0, 0]-sigma_drude[0, 0]
+                           ) / abs(sigma_drude[0, 0])
+        error_rta = abs(sigma_rta[0, 0]-sigma_drude[0, 0]
+                        ) / abs(sigma_drude[0, 0])
         self.assertLess(
-            relative_error_xx, 0.01,
-            f"xx relative error {relative_error_xx:.3g} exceeds 1% tolerance")
+            error_kernel, 0.01,
+            f"Scattering kernel conductivity error {error_kernel:.3g}"
+            f" exceeds 1% tolerance")
+        self.assertLess(
+            error_rta, 0.01,
+            f"RTA conductivity error {error_rta:.3g} exceeds 1% tolerance")
 
     def test_nonzero_field(self):
-        sigma_boltzmann, sigma_drude = self.calculate_conductivities(
+        sigma_kernel, sigma_rta, sigma_drude = self.calculate_conductivities(
             B=np.array([0.0, 0.0, 10.0]))
 
-        relative_error_xx = abs(sigma_boltzmann[0, 0]-sigma_drude[0, 0]
-                                ) / abs(sigma_drude[0, 0])
-        relative_error_xy = abs(sigma_boltzmann[0, 1]-sigma_drude[0, 1]
-                                ) / abs(sigma_drude[0, 1])
+        error_xx_kernel = abs(sigma_kernel[0, 0]-sigma_drude[0, 0]
+                              ) / abs(sigma_drude[0, 0])
+        error_xy_kernel = abs(sigma_kernel[0, 1]-sigma_drude[0, 1]
+                              ) / abs(sigma_drude[0, 1])
+        error_xx_rta = abs(sigma_rta[0, 0]-sigma_drude[0, 0]
+                           ) / abs(sigma_drude[0, 0])
+        error_xy_rta = abs(sigma_rta[0, 1]-sigma_drude[0, 1]
+                           ) / abs(sigma_drude[0, 1])
         self.assertLess(
-            relative_error_xx, 0.01,
-            f"finite-field xx relative error {relative_error_xx:.3g}" \
+            error_xx_kernel, 0.01,
+            f"Scattering kernel conductivity xx error {error_xx_kernel:.3g}"
             f" exceeds 1% tolerance",)
         self.assertLess(
-            relative_error_xy, 0.01,
-            f"xy relative error {relative_error_xy:.3g} exceeds 1% tolerance",)
+            error_xy_kernel, 0.01,
+            f"Scattering kernel conductivity xy relative error"
+            f"{error_xy_kernel:.3g} exceeds 1% tolerance")
+        self.assertLess(
+            error_xx_rta, 0.01,
+            f"RTA conductivity xx error {error_xx_rta:.3g}"
+            f"exceeds 1% tolerance")
+        self.assertLess(
+            error_xy_rta, 0.01,
+            f"RTA conductivity xy relative error {error_xy_rta:.3g}"
+            f"exceeds 1% tolerance")
 
 
 def calculate_drude(effective_mass, charge_density,
