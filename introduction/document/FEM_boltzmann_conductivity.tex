@@ -999,6 +999,11 @@ constructing the full matrix and only computing the action of the kernel on vect
 methods like the Lanczos algorithm, we can compute the largest singular values and the corresponding
 singular vectors, without solving the full eigendecomposition problem.
 
+Because of the detailed balance condition, the kernel matrix is symmetric, so the singular value
+decomposition is equivalent to an eigendecomposition, and the singular values are just the absolute
+values of the eigenvalues. This means that the calculations are exactly the same, since we have the
+eigenvectors as the basis functions.
+
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
 When sticking with the relaxation time approximation and ignoring the in-scattering,
