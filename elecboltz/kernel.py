@@ -290,6 +290,7 @@ class VonMisesKernel(ScatteringKernel):
     ----------
     params : dict
         A dictionary containing the following keys:
+
         * | ``c0``: The constant term in the kernel.
         * | ``c1``: The coefficient for the von Mises distribution.
         * | ``kappa``: Controls the width of the distribution. Larger
@@ -326,6 +327,7 @@ class CustomKernel(ScatteringKernel):
     ----------
     params : dict
         A dictionary containing the following keys:
+
         * | ``kernel_func``: A callable that takes in wavevector
           | components (kx, ky, kz, kx', ky', kz') and returns the value
           | of the kernel function at that wavevector. The output should
@@ -581,28 +583,22 @@ def build_kernel(kernel, kernel_params):
         * | ``'forward_phi'``: Like ``'forward'``, but the Gaussian is
           | in the angle of the wavevector in the x-y plane instead of
           | the full wavevector. So,
-          | :math:`C_f \\mathrm{exp}\\left(\\frac{-|\\phi-\\phi'|^2}
-          | {2\\sigma_f^2}\\right)`.
+          | :math:`C_f \\mathrm{exp}\\left(\\frac{-|\\phi-\\phi'|^2}{2\\sigma_f^2}\\right)`.
         * | ``'backward_phi'``: Like ``'backward'``, but the Gaussian
           | is in the angle of the wavevector in the x-y plane instead
           | of the full wavevector. So,
-          | :math:`C_b \\mathrm{exp}\\left(\\frac{-|\\phi+\\phi'|^2}
-          | {2\\sigma_b^2}\\right)`.
+          | :math:`C_b \\mathrm{exp}\\left(\\frac{-|\\phi+\\phi'|^2}{2\\sigma_b^2}\\right)`.
         * | ``'forward_anisotropic'``: Like ``'forward_phi'``, but with
           | anisotropic parameters for the Gaussian. This means,
-          | :math:`C_f = C_{f0} + C_{f1}
-          | \\mathrm{cos}\\left(\\frac{m(\\phi-\\phi_0)}{2}\\right)` and
-          | :math:`\\sigma_f=\\sigma_{f0}+\\sigma_{f1}
-          | \\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
+          | :math:`C_f = C_{f0} + C_{f1}\\mathrm{cos}\\left(\\frac{m(\\phi-\\phi_0)}{2}\\right)` and
+          | :math:`\\sigma_f=\\sigma_{f0}+\\sigma_{f1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
           | The kernel parameters are ``'Cf0'``, ``'Cf1'``,
           | ``'sigmaf0'``, ``'sigmaf1'``, ``'m'``,
           | and ``'phi0'``.
         * | ``'backward_anisotropic'``: Like ``'backward_phi'``, but
           | with anisotropic parameters for the Gaussian. This means,
-          | :math:`C_b = C_{b0} + C_{b1}
-          | \\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)` and
-          | :math:`\\sigma_b=\\sigma_{b0}+\\sigma_{b1}
-          | \\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
+          | :math:`C_b = C_{b0} + C_{b1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)` and
+          | :math:`\\sigma_b=\\sigma_{b0}+\\sigma_{b1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
           | The kernel parameters are ``'Cb0'``, ``'Cb1'``,
           | ``'sigmab0'``, ``'sigmab1'``, ``'m'``,
           | and ``'phi0'``.
