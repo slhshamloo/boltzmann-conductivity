@@ -800,15 +800,18 @@ $N_{\text{sym}}$ should indeed be small.
 
 \subsection{Out-scattering Term}
 When calculating the out-scattering term from the scattering kernel instead of using an external
-hypothesis, we need to integrate it over the Fermi surface (equation \eqref{eq:tau_kernel})
+hypothesis, we need to integrate it over the Fermi surface (equation \eqref{eq:tau_kernel}).
 In order to do this, one can leverage the same basis functions, and split the integration into
 multiple integrals over different elements. So, the equation becomes
 \begin{equation}
-    \frac{1}{\tau_j} = \sum_i \int\dd{\vb{k}} C_{ij} \phi_i(\vb{k}).
+    \sum_j\frac{1}{\tau_j}\phi_j(\vb{k}) =
+    \sum_{i,j} \int\dd{\vb{k'}} C_{ij} \phi_i(\vb{k'})\phi_j(\vb{k})
 \end{equation}
 For the 3D case with triangular elements, this means
 \begin{equation}
-    \frac{1}{\tau_j} = \sum_i \alpha_i C_{ij}
+    \frac{1}{\tau_j} = \sum_{i}C_{ij} \int_{T_i} \dd{x}\dd{y} (1-x-y)
+    = \sum_{i}\frac{C_{ij}\alpha_i}{6}.
+    \label{eq:tau_kernel_fem}
 \end{equation}
 The problem with this approach is that the approximation is too rough. This is equivalent to
 assuming the kernel is constant over each element. A more accurate approach would be to do a more
@@ -877,7 +880,7 @@ replaced by
     \tilde{U}^i_j = \sum_a \qty(\tilde{M}^{-1})^{ia} U_{aj}.
 \end{equation}
 We should also be careful with the change of basis of the in-scattering matrix. The positioning of
-the symmetry basis indices is not arbitrary any more. This time, strictly
+the symmetry basis indices is not arbitrary anymore. This time, strictly
 \begin{equation}
     U_{ai} = \int\dd{\vb{k}}\psi_a^*(\vb{k})\phi_i(\vb{k}),
 \end{equation}
@@ -989,20 +992,52 @@ also use any other arbitrary functions as the basis. The only contraints are
     \item Keeping detailed balance. For elastic scattering this means
         $C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$.
 \end{enumerate}
-This lets us construct the basis by hand to follow a certain shape
+This lets us construct the basis by hand to follow a certain shape.
 
 In some cases, we have a specific scattering kernel, possibly derived from a microscopic model, and
 it is not naturally expressed in terms of a low-rank expansion. In these cases, to get a low-rank
 approximation of the kernel, we can do a singular value decomposition of the kernel matrix in the
-FEM basis, and keep only the largest singular values. This can be achieved efficiently without
-constructing the full matrix and only computing the action of the kernel on vectors. Then, using
-methods like the Lanczos algorithm, we can compute the largest singular values and the corresponding
-singular vectors, without solving the full eigendecomposition problem.
+FEM basis, and keep only the largest singular values. Then, using methods like the Lanczos
+algorithm, we can compute the largest singular values and the corresponding singular vectors,
+without solving the full eigendecomposition problem.
 
 Because of the detailed balance condition, the kernel matrix is symmetric, so the singular value
 decomposition is equivalent to an eigendecomposition, and the singular values are just the absolute
 values of the eigenvalues. This means that the calculations are exactly the same, since we have the
 eigenvectors as the basis functions.
+
+In order for the decomposition to actually provide a performance boost, it needs to be less
+expensive than the matrix inversions. However, if we first fully construct the scattering matrix in
+the FEM basis and then apply the decomposition, the cost will be $\mathcal{O}(N^3)$, and we have
+constructed a dense matrix anyway. So, for this method to make sense, we have to approximate the
+matrix with a lower-resolution version. This is achieved by using a lower-resolution triangulation
+of the Fermi surface. This way, if we have a mapping from the low-resolution points to the
+high-resolution points, we can construct the full scattering matrix from the low-rank decomposition
+of the low-resolution matrix. This can be achieved by least-square fitting of a few nearest neighbor
+points from the low-resolution triangulation to each point in the high-resolution triangulation.
+Then, the mapping gives
+\begin{equation}
+    C^{\text{high}} = P C^{\text{low}} P^T,
+\end{equation}
+and then, from the eigendecomposition of the low-resolution matrix, we have
+\begin{equation}
+    C^{\text{low}} = V \Lambda V^T,
+\end{equation}
+and so
+\begin{equation}
+    C^{\text{high}} = (P V) \Lambda (P V)^T = U^T \tilde{C} U.
+\end{equation}
+This directly gives us the basis transformation matrix. What remains is the calculation of the
+scattering rate. We can assume the representation of the scattering kernel in terms of the basis
+is a linear combination of the FEM basis functions. Then, directly from
+\eqref{eq:tau_kernel_fem},
+\begin{equation}
+    \frac{1}{\tau_j} = \sum_{i} \alpha_i C_{ij} =
+    \sum_i \frac{\alpha_i}{6} \sum_{a,b} U^T_{ia} \tilde{C}^{ab} U_{bj} =
+    \sum_{a,b} \qty(\sum_i \frac{1}{6} \alpha_i U^T_{ia}) \tilde{C}^{ab} U_{bj}.
+\end{equation}
+If we first apply the sum in the parentheses, then we never have to construct any large dense
+matrix in the FEM basis.
 
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
