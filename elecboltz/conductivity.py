@@ -1,5 +1,5 @@
 from .bandstructure import BandStructure
-from .kernel import ScatteringKernel
+from .kernel import ScatteringKernel, CustomKernel
 from .integrate import quad_points, quad_weights
 
 import numpy as np
@@ -39,13 +39,9 @@ class Conductivity:
         instead of a function. If None, it will be calculated from
         the scattering kernel.
     scattering_kernel : ScatteringKernel
-        The scattering kernel. This object must contain the matrix
-        ``coeffs``, which stores the coefficients for each pair of
-        basis functions in the expansion, in units of angstrom**2 THz.
-        It must also implement the method
-        ``eval_basis(index, kx, ky, kz)`` as input and returns the
-        values of the basis functions at the given wavevector, at
-        the given ``index`` in the expansion.
+        See the `elecboltz.kernel` module for more details on this
+        object. If provided, ``scattering_rate`` will be ignored
+        and calculated from the kernel.
     frequency : float
         The frequency of the applied field in units of THz.
     correct_curvature : bool, optional
@@ -370,27 +366,44 @@ class Conductivity:
         if self.scattering_kernel is None:
             self._discretize_independent_out_scattering()
             return
-        self._fem_to_kernel = np.zeros(
-            (self.scattering_kernel.coeffs.shape[0], len(self.band.kpoints)),
-            dtype=self.scattering_kernel.coeffs.dtype)
-        sym_basis_scattering_rate, symmetry_overlap = \
-            self._calculate_kernel_quadratures()
-        # tilde{v} = tilde{M}^{-1} @ U @ v
-        transformed_velocities = (np.linalg.inv(symmetry_overlap)
-                                  @ self._fem_to_kernel @ self._vmags)
-        # S_ab = -C_ab / |v_a|
-        self._scattering_matrix = (
-            -angstrom**2 * self.scattering_kernel.coeffs
-            / transformed_velocities[:, None])
-        # (U^(-1))^i_a = sum_j (M^(-1))^ij U^dagger_ja
-        transformed_scatrate = \
-            self._fem_to_kernel.conj().T @ sym_basis_scattering_rate
-        overlap_matrix_factor = scipy.sparse.linalg.splu(self._overlap_matrix)
-        fem_basis_scattering_rate = \
-            overlap_matrix_factor.solve(transformed_scatrate.real)
-        if transformed_scatrate.dtype == complex:
-            fem_basis_scattering_rate += 1j * overlap_matrix_factor.solve(
-                transformed_scatrate.imag)
+
+        if not self.scattering_kernel.is_explicit:
+            self.scattering_kernel.decompose(self.band)
+
+        if isinstance(self.scattering_kernel, CustomKernel):
+            self._fem_to_kernel = self.scattering_kernel.projector.T
+            self._scattering_matrix = (
+                -angstrom**2 * self.scattering_kernel.coeffs
+                / (self.scattering_kernel.inv_projector@self._vmags)[:, None])
+            area_sums = self._jacobian_sums.diagonal() / 6
+            fem_basis_scattering_rate = (
+                (area_sums[None, :] @ self._fem_to_kernel.T)
+                @ self.scattering_kernel.coeffs @ self._fem_to_kernel
+                ).flatten() * angstrom**2
+        else:
+            self._fem_to_kernel = np.zeros(
+                (self.scattering_kernel.coeffs.shape[0],
+                 len(self.band.kpoints)),
+                dtype=self.scattering_kernel.coeffs.dtype)
+            sym_basis_scattering_rate, symmetry_overlap = \
+                self._calculate_kernel_quadratures()
+            # tilde{v} = tilde{M}^{-1} @ U @ v
+            transformed_velocities = (np.linalg.inv(symmetry_overlap)
+                                      @ self._fem_to_kernel @ self._vmags)
+            # S_ab = -C_ab / |v_a|
+            self._scattering_matrix = (
+                -angstrom**2 * self.scattering_kernel.coeffs
+                / transformed_velocities[:, None])
+            # (U^(-1))^i_a = sum_j (M^(-1))^ij U^dagger_ja
+            transformed_scatrate = \
+                self._fem_to_kernel.conj().T @ sym_basis_scattering_rate
+            overlap_matrix_factor = scipy.sparse.linalg.splu(
+                self._overlap_matrix)
+            fem_basis_scattering_rate = \
+                overlap_matrix_factor.solve(transformed_scatrate.real)
+            if transformed_scatrate.dtype == complex:
+                fem_basis_scattering_rate += 1j * overlap_matrix_factor.solve(
+                    transformed_scatrate.imag)
         self._calculate_scattering_invlen(fem_basis_scattering_rate)
 
     def _discretize_independent_out_scattering(self):
