@@ -414,7 +414,7 @@ class GaussianScattering:
     wavevectors of the incoming and outgoing states.
 
     .. math::
-    C(k, k') = C \\mathrm{exp}(
+        C(k, k') = C \\mathrm{exp}(
         -(|\\mathbf{k}\\pm \\mathbf{k'}|-delta)^2/2\\sigma^2)
 
     Call the object like ``C(kx, ky, kz, kx_prime, ky_prime, kz_prime)``
@@ -491,7 +491,7 @@ class AnisotropicGaussianScattering:
         difference, such as forward scattering (``delta=0``) or
         backward scattering (``delta=180``).
     """
-    def __init__(self, C0, C1, sigma0, sigma1, m, phi0, delta=0.0):
+    def __init__(self, C0, C1, sigma0, sigma1, m=1, phi0=0.0, delta=0.0):
         self.C0 = C0
         self.C1 = C1
         self.sigma0 = sigma0
@@ -502,10 +502,11 @@ class AnisotropicGaussianScattering:
     def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
         phi = np.arctan2(ky, kx)
         phi_prime = np.arctan2(ky_prime, kx_prime)
+        phi_mean = (phi+phi_prime) / 2
         amplitude = self.C0 + self.C1 * np.cos(
-            self.m * (phi - self.phi0_rad))
+            self.m * (phi_mean - self.phi0_rad))
         width = self.sigma0 + self.sigma1 * np.cos(
-            self.m * (phi - self.phi0_rad))
+            self.m * (phi_mean - self.phi0_rad))
         diff_phi = abs(phi-phi_prime) - self.delta_rad
         return amplitude * np.exp(-diff_phi**2 / (2 * width**2))
 
