@@ -674,14 +674,14 @@ def build_kernel(kernel, kernel_params):
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
             kernel_params['Cf0'], kernel_params['Cf1'],
             kernel_params['sigmaf0'], kernel_params['sigmaf1'],
-            kernel_params['m'], kernel_params['phi0']),
+            kernel_params.get('m', 1), kernel_params.get('phi0', 0)),
             **kernel_params})
     elif kernel == 'backward_anisotropic':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
             kernel_params['Cb0'], kernel_params['Cb1'],
             kernel_params['sigmab0'], kernel_params['sigmab1'],
-            kernel_params['m'], kernel_params['phi0'], delta=180),
-            **kernel_params})
+            kernel_params.get('m', 1), kernel_params.get('phi0', 0),
+            delta=180), **kernel_params})
     elif kernel == 'spherical':
         return SphericalKernel(kernel_params)
     elif kernel == 'cylindrical':
