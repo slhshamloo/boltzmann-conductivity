@@ -620,11 +620,6 @@ def build_kernel(kernel, kernel_params):
         The parameters for the kernel(s). If a list of explicit basis
         kernels is provided, a list of parameter dictionaries should
         be provided, where each dictionary corresponds to the
-        parameters for the respective kernel. If the kernels do not
-        have explicit basis functions, as long as the parameter names
-        do not conflict, you can just provide a single dictionary with
-        all the parameters for all the kernels. If not, a list can
-        still be provided, where each dictionary corresponds to the
         parameters for the respective kernel. For non-explicit kernels,
         an extra dictionary can be provided at the end of the list to
         specify the parameters for the decomposition of the resulting
