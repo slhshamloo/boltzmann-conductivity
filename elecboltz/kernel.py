@@ -328,20 +328,20 @@ class CustomKernel(ScatteringKernel):
     params : dict
         A dictionary containing the following keys:
 
-        * | ``kernel_func``: A callable that takes in wavevector
+        * | ``'kernel_func'``: A callable that takes in wavevector
           | components (kx, ky, kz, kx', ky', kz') and returns the value
           | of the kernel function at that wavevector. The output should
           | be in units of angstrom^2 THz. The wavevector components
           | have units of 1/angstrom.
-        * | ``rank``: The number of eigenvalue and eigenvector pairs to
-          | keep when decomposing the kernel function into basis
+        * | ``'rank'``: The number of eigenvalue and eigenvector pairs
+          | to keep when decomposing the kernel function into basis
           | functions and coefficients. This would be the final rank of
           | the resulting scattering kernel. If not provided, set to 20
           | by default.
-        * | ``low_res``: The resolution of the approximate band object
+        * | ``'low_res'``: The resolution of the approximate band object
           | used for a more managable eigenvalue decomposition
           | (nystrom method). If not provided, set to 31 by default.
-        * | ``decomp_method``: The method to use for the eigenvalue
+        * | ``'decomp_method'``: The method to use for the eigenvalue
           | decomposition. Should be one of 'lanczos' or 'full'. If not
           | provided, set to 'lanczos' by default. 'lanczos' should be
           | more efficient for larger low-res approximations of
@@ -503,12 +503,19 @@ class AnisotropicGaussianScattering:
         phi = np.arctan2(ky, kx)
         phi_prime = np.arctan2(ky_prime, kx_prime)
         phi_mean = (phi+phi_prime) / 2
+        phi_diff = phi - phi_prime
+        # keep the angles between -pi and pi
+        phi_mean = (np.fmod(phi_mean, np.pi) - np.sign(phi_mean)
+                    * np.pi * np.fmod(np.abs(phi_mean)//np.pi, 2))
+        phi_diff = (np.fmod(phi_diff, np.pi) - np.sign(phi_diff)
+                    * np.pi * np.fmod(np.abs(phi_diff)//np.pi, 2))
+
         amplitude = self.C0 + self.C1 * np.cos(
-            self.m * (phi_mean - self.phi0_rad))
+            self.m * (phi_mean-self.phi0_rad))
         width = self.sigma0 + self.sigma1 * np.cos(
-            self.m * (phi_mean - self.phi0_rad))
-        diff_phi = abs(phi-phi_prime) - self.delta_rad
-        return amplitude * np.exp(-diff_phi**2 / (2 * width**2))
+            self.m * (phi_mean-self.phi0_rad))
+        phi_diff = abs(phi_diff) - self.delta_rad
+        return amplitude * np.exp(-phi_diff**2 / (2 * width**2))
 
 
 class SumKernelFunction:
