@@ -43,11 +43,11 @@ params = {
 
 
 def calc_kernel_values(
-        Cf0=5.5, Cf1=0.0, sigmaf0=0.1, sigmaf1=0.0, m=1, delta=0.0, rank=20,
-        n_interp=201):
+        C_f0=5.5, C_f1=0.0, sigma_f0=0.1, sigma_f1=0.0, m=1, delta=0.0,
+        rank=20, n_interp=201):
     kernel = elecboltz.kernel.CustomKernel(
         {'kernel_func': elecboltz.kernel.AnisotropicGaussianScattering(
-            Cf0, Cf1, sigmaf0, sigmaf1, m, delta),
+            C_f0, C_f1, sigma_f0, sigma_f1, m, delta),
          'rank': rank})
     band = elecboltz.BandStructure(**elecboltz.easy_params(params))
     band.discretize()
@@ -106,41 +106,41 @@ def plot_comparison(kernel_values, kernel_decomposed,
     return fig, axs
 
 
-def compare_decomposition(sigmaf0=0.5, rank=50):
+def compare_decomposition(sigma_f0=0.5, rank=50):
     kernel_values, kernel_decomposed = calc_kernel_values(
-        sigmaf0=sigmaf0, rank=rank)
+        sigmaf0=sigma_f0, rank=rank)
     fig, _ = plot_comparison(
         kernel_values, kernel_decomposed,
         title="$C(\\mathbf{k}, \\mathbf{k}') = C_f \\mathrm{exp}\\left("
               "-\\frac{|\\phi-\\phi'|^2}{2\\sigma_f^2}\\right)$, $C_f=5.5$, "
-              f"$\\sigma_f = {sigmaf0}$, $\\mathrm{{rank}} = {rank}$",
+              f"$\\sigma_f = {sigma_f0}$, $\\mathrm{{rank}} = {rank}$",
         figsize=(10.0, 4.5))
     fig.savefig(os.path.dirname(os.path.relpath(__file__))
                 + "/Kernel/Decomposition Comparison/"
-                + f"NdLSCO_sigmaf={sigmaf0}_rank={rank}.pdf",
+                + f"NdLSCO_sigmaf={sigma_f0}_rank={rank}.pdf",
                 bbox_inches='tight')
     plt.show()
 
 
 def compare_decomposition_anisotropic(
-        Cf0=5.5, Cf1=2.0, sigmaf0=0.5, sigmaf1=0.3, rank=20):
+        C_f0=5.5, C_f1=2.0, sigma_f0=0.5, sigma_f1=0.3, rank=20):
     kernel_values, kernel_decomposed = calc_kernel_values(
-        Cf0=Cf0, Cf1=Cf1, sigmaf0=sigmaf0, sigmaf1=sigmaf1, m=4, rank=rank)
-    
+        C_f0=C_f0, C_f1=C_f1, sigma_f0=sigma_f0, sigma_f1=sigma_f1,
+        m=4, rank=rank)
     fig, _ = plot_comparison(
         kernel_values, kernel_decomposed,
         title="$C(\\mathbf{k}, \\mathbf{k}') = C_f \\mathrm{exp}"
               "\\left(-\\frac{|\\phi-\\phi'|^2}{2\\sigma_f^2}\\right)$, "
-              f"$C_f = {Cf0} + {Cf1}\\mathrm{{cos}}"
+              f"$C_f = {C_f0} + {C_f1}\\mathrm{{cos}}"
               "\\left(\\frac{\\phi+\\phi'}{2}\\right)$,\n"
-              f"$\\sigma_f = {sigmaf0} + {sigmaf1}\\mathrm{{cos}}"
+              f"$\\sigma_f = {sigma_f0} + {sigma_f1}\\mathrm{{cos}}"
               f"\\left(\\frac{{\\phi+\\phi'}}{{2}}\\right)$, "
               f"$\\mathrm{{rank}} = {rank}$",
         figsize=(10.0, 6.5))
     fig.savefig(os.path.dirname(os.path.relpath(__file__))
                 + "/Kernel/Decomposition Comparison/"
-                + f"Cf0={Cf0}_Cf1={Cf1}_sigmaf0={sigmaf0}"
-                + f"_sigmaf1={sigmaf1}_rank={rank}.pdf",
+                + f"Cf0={C_f0}_Cf1={C_f1}_sigmaf0={sigma_f0}"
+                + f"_sigmaf1={sigma_f1}_rank={rank}.pdf",
                 bbox_inches='tight')
     plt.show()
 

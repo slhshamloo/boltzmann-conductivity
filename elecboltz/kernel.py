@@ -458,25 +458,25 @@ class AnisotropicGaussianScattering:
     the x-y plane, with anisotropic parameters.
 
     .. math::
-    C(\\phi, \\phi') = (C_0 + C_1 \\mathrm{cos}\\left(
-        \\frac{m(\\phi+\\phi_0)}{2}\\right)) \\mathrm{exp}\\left(
-        -\\frac{(|\\phi-\\phi'|-\\delta)^2} {2(\\sigma_0+\\sigma_1
-        \\mathrm{cos}\\left(\\frac{m(\\phi-\\phi_0)}{2}\\right))^2}
-        \\right)
+    C(\\phi, \\phi') = \\left(C_0 + C_1 \\mathrm{cos}\\left(
+        \\frac{m(\\phi+\\phi')}{2}\\right)\\right) \\mathrm{exp}
+        \\left(-\\frac{(|\\phi-\\phi'|-\\delta)^2}{2\\left(
+        \\sigma_0+\\sigma_1\\mathrm{cos}\\left(\\frac{
+        m(\\phi-\\phi')}{2}\\right)\\right)^2}\\right)
 
     Call the object like ``C(kx, ky, kz, kx_prime, ky_prime, kz_prime)``
     to evaluate the kernel function at the given wavevectors.
 
     Parameters
     ----------
-    C0 : float
+    C_0 : float
         The constant term in the amplitude of the Gaussian.
-    C1 : float
+    C_1 : float
         The coefficient for the anisotropic term in the amplitude of the
         Gaussian.
-    sigma0 : float
+    sigma_0 : float
         The constant term in the width of the Gaussian.
-    sigma1 : float
+    sigma_1 : float
         The coefficient for the anisotropic term in the width of the
         Gaussian.
     m : int
@@ -491,11 +491,11 @@ class AnisotropicGaussianScattering:
         difference, such as forward scattering (``delta=0``) or
         backward scattering (``delta=180``).
     """
-    def __init__(self, C0, C1, sigma0, sigma1, m=1, phi0=0.0, delta=0.0):
-        self.C0 = C0
-        self.C1 = C1
-        self.sigma0 = sigma0
-        self.sigma1 = sigma1
+    def __init__(self, C_0, C_1, sigma_0, sigma_1, m=1, phi0=0.0, delta=0.0):
+        self.C_0 = C_0
+        self.C_1 = C_1
+        self.sigma_0 = sigma_0
+        self.sigma_1 = sigma_1
         self.m = m
         self.phi0_rad = np.radians(phi0)
         self.delta_rad = np.radians(delta)
@@ -510,9 +510,9 @@ class AnisotropicGaussianScattering:
         phi_diff = (np.fmod(phi_diff, np.pi) - np.sign(phi_diff)
                     * np.pi * np.fmod(np.abs(phi_diff)//np.pi, 2))
 
-        amplitude = self.C0 + self.C1 * np.cos(
+        amplitude = self.C_0 + self.C_1 * np.cos(
             self.m * (phi_mean-self.phi0_rad))
-        width = self.sigma0 + self.sigma1 * np.cos(
+        width = self.sigma_0 + self.sigma_1 * np.cos(
             self.m * (phi_mean-self.phi0_rad))
         phi_diff = abs(phi_diff) - self.delta_rad
         return amplitude * np.exp(-phi_diff**2 / (2 * width**2))
@@ -600,15 +600,15 @@ def build_kernel(kernel, kernel_params):
           | anisotropic parameters for the Gaussian. This means,
           | :math:`C_f = C_{f0} + C_{f1}\\mathrm{cos}\\left(\\frac{m(\\phi-\\phi_0)}{2}\\right)` and
           | :math:`\\sigma_f=\\sigma_{f0}+\\sigma_{f1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
-          | The kernel parameters are ``'Cf0'``, ``'Cf1'``,
-          | ``'sigmaf0'``, ``'sigmaf1'``, ``'m'``,
+          | The kernel parameters are ``'C_f0'``, ``'C_f1'``,
+          | ``'sigma_f0'``, ``'sigma_f1'``, ``'m'``,
           | and ``'phi0'``.
         * | ``'backward_anisotropic'``: Like ``'backward_phi'``, but
           | with anisotropic parameters for the Gaussian. This means,
           | :math:`C_b = C_{b0} + C_{b1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)` and
           | :math:`\\sigma_b=\\sigma_{b0}+\\sigma_{b1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
-          | The kernel parameters are ``'Cb0'``, ``'Cb1'``,
-          | ``'sigmab0'``, ``'sigmab1'``, ``'m'``,
+          | The kernel parameters are ``'C_b0'``, ``'C_b1'``,
+          | ``'sigma_b0'``, ``'sigma_b1'``, ``'m'``,
           | and ``'phi0'``.
 
         If a list of kernels is provided, the resulting kernel is the
@@ -654,32 +654,32 @@ def build_kernel(kernel, kernel_params):
                  **(decomp_params or {})})
     elif kernel == 'isotropic':
         return CustomKernel({'kernel_func': IsotropicKernelFunction(
-            kernel_params['C0']), **kernel_params})
+            kernel_params['C_0']), **kernel_params})
     elif kernel == 'forward':
         return CustomKernel({'kernel_func': GaussianScattering(
-            kernel_params['Cf'], kernel_params['sigmaf']), **kernel_params})
+            kernel_params['C_f'], kernel_params['sigma_f']), **kernel_params})
     elif kernel == 'backward':
         return CustomKernel({'kernel_func': GaussianScattering(
-            kernel_params['Cb'], kernel_params['sigmab'], backward=True),
+            kernel_params['C_b'], kernel_params['sigma_b'], backward=True),
             **kernel_params})
     elif kernel == 'forward_phi':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            kernel_params['Cf'], 0, kernel_params['sigmaf'], 0, 1, 0),
+            kernel_params['C_f'], 0, kernel_params['sigma_f'], 0, 1, 0),
             **kernel_params})
     elif kernel == 'backward_phi':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            kernel_params['Cb'], 0, kernel_params['sigmab'], 0, 1, 0,
+            kernel_params['C_b'], 0, kernel_params['sigma_b'], 0, 1, 0,
             delta=180), **kernel_params})
     elif kernel == 'forward_anisotropic':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            kernel_params['Cf0'], kernel_params['Cf1'],
-            kernel_params['sigmaf0'], kernel_params['sigmaf1'],
+            kernel_params['C_f0'], kernel_params['C_f1'],
+            kernel_params['sigma_f0'], kernel_params['sigma_f1'],
             kernel_params.get('m', 1), kernel_params.get('phi0', 0)),
             **kernel_params})
     elif kernel == 'backward_anisotropic':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            kernel_params['Cb0'], kernel_params['Cb1'],
-            kernel_params['sigmab0'], kernel_params['sigmab1'],
+            kernel_params['C_b0'], kernel_params['C_b1'],
+            kernel_params['sigma_b0'], kernel_params['sigma_b1'],
             kernel_params.get('m', 1), kernel_params.get('phi0', 0),
             delta=180), **kernel_params})
     elif kernel == 'spherical':
