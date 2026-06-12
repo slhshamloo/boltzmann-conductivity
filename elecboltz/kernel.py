@@ -458,11 +458,11 @@ class AnisotropicGaussianScattering:
     the x-y plane, with anisotropic parameters.
 
     .. math::
-    C(\\phi, \\phi') = \\left(C_0 + C_1 \\mathrm{cos}\\left(
-        \\frac{m(\\phi+\\phi')}{2}\\right)\\right) \\mathrm{exp}
+    C(\\phi, \\phi') = \\left(C_0 + C_1 \\mathrm{cos}\\left(m\\left[
+        \\frac{\\phi+\\phi'}{2}-\\phi_c\\right]\\right)\\right)\\mathrm{exp}
         \\left(-\\frac{(|\\phi-\\phi'|-\\delta)^2}{2\\left(
-        \\sigma_0+\\sigma_1\\mathrm{cos}\\left(\\frac{
-        m(\\phi-\\phi')}{2}\\right)\\right)^2}\\right)
+        \\sigma_0+\\sigma_1\\mathrm{cos}\\left(m\\left[\\frac{
+        \\phi+\\phi'}{2}-\\phi_s\\right]\\right)\\right)^2}\\right)
 
     Call the object like ``C(kx, ky, kz, kx_prime, ky_prime, kz_prime)``
     to evaluate the kernel function at the given wavevectors.
@@ -482,22 +482,27 @@ class AnisotropicGaussianScattering:
     m : int
         Sets the symmetry of the anisotropy over the angle in the x-y
         plane. For example, ``m=4`` repeats the peak every 90 degrees.
-    phi0 : float
-        Sets the angle at which the peak of the anisotropy occurs.
-        Should be in degrees.
+    phi_c : float
+        Sets the angle at which the peak of the amplitude of the
+        anisotropy occurs.  In units of degrees.
+    phi_s : float
+        Sets the angle at which the width of the kernel is largest.
+        In units of degrees.
     delta : float
         The shift of the Gaussian from zero, in degrees. This can be
         used to model scattering that is peaked at a non-zero angle
         difference, such as forward scattering (``delta=0``) or
         backward scattering (``delta=180``).
     """
-    def __init__(self, C_0, C_1, sigma_0, sigma_1, m=1, phi0=0.0, delta=0.0):
+    def __init__(self, C_0, C_1, sigma_0, sigma_1, m=1,
+                 phi_c=0.0, phi_s=0.0, delta=0.0):
         self.C_0 = C_0
         self.C_1 = C_1
         self.sigma_0 = sigma_0
         self.sigma_1 = sigma_1
         self.m = m
-        self.phi0_rad = np.radians(phi0)
+        self.phi_c_rad = np.radians(phi_c)
+        self.phi_s_rad = np.radians(phi_s)
         self.delta_rad = np.radians(delta)
     def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
         phi = np.arctan2(ky, kx)
@@ -511,9 +516,9 @@ class AnisotropicGaussianScattering:
                     * np.pi * np.fmod(np.abs(phi_diff)//np.pi, 2))
 
         amplitude = self.C_0 + self.C_1 * np.cos(
-            self.m * (phi_mean-self.phi0_rad))
+            self.m * (phi_mean-self.phi_c_rad))
         width = self.sigma_0 + self.sigma_1 * np.cos(
-            self.m * (phi_mean-self.phi0_rad))
+            self.m * (phi_mean-self.phi_s_rad))
         phi_diff = abs(phi_diff) - self.delta_rad
         return amplitude * np.exp(-phi_diff**2 / (2 * width**2))
 
@@ -591,22 +596,22 @@ def build_kernel(kernel, kernel_params):
         * | ``'forward_phi'``: Like ``'forward'``, but the Gaussian is
           | in the angle of the wavevector in the x-y plane instead of
           | the full wavevector. So,
-          | :math:`C_f \\mathrm{exp}\\left(\\frac{-|\\phi-\\phi'|^2}{2\\sigma_f^2}\\right)`.
+          | :math:`C_f \\mathrm{exp}(-|\\phi-\\phi'|^2/(2\\sigma_f^2))`.
         * | ``'backward_phi'``: Like ``'backward'``, but the Gaussian
           | is in the angle of the wavevector in the x-y plane instead
           | of the full wavevector. So,
-          | :math:`C_b \\mathrm{exp}\\left(\\frac{-|\\phi+\\phi'|^2}{2\\sigma_b^2}\\right)`.
+          | :math:`C_b \\mathrm{exp}(-|\\phi+\\phi'|^2/(2\\sigma_b^2))`.
         * | ``'forward_anisotropic'``: Like ``'forward_phi'``, but with
           | anisotropic parameters for the Gaussian. This means,
-          | :math:`C_f = C_{f0} + C_{f1}\\mathrm{cos}\\left(\\frac{m(\\phi-\\phi_0)}{2}\\right)` and
-          | :math:`\\sigma_f=\\sigma_{f0}+\\sigma_{f1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
+          | :math:`C_f = C_{f0} + C_{f1}\\mathrm{cos}(m[(\\phi+\\phi')/2-\\phi_{cf}])` and
+          | :math:`\\sigma_f=\\sigma_{f0}+\\sigma_{f1}\\mathrm{cos}(m[(\\phi+\\phi')/2-\\phi_{sf}])`.
           | The kernel parameters are ``'C_f0'``, ``'C_f1'``,
           | ``'sigma_f0'``, ``'sigma_f1'``, ``'m'``,
           | and ``'phi0'``.
         * | ``'backward_anisotropic'``: Like ``'backward_phi'``, but
           | with anisotropic parameters for the Gaussian. This means,
-          | :math:`C_b = C_{b0} + C_{b1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)` and
-          | :math:`\\sigma_b=\\sigma_{b0}+\\sigma_{b1}\\mathrm{cos}\\left(\\frac{m(\\phi+\\phi_0)}{2}\\right)`.
+          | :math:`C_b = C_{b0} + C_{b1}\\mathrm{cos}(m[(\\phi+\\phi')/2-\\phi_{cb}])` and
+          | :math:`\\sigma_b=\\sigma_{b0}+\\sigma_{b1}\\mathrm{cos}(m[(\\phi+\\phi')/2-\\phi_{sb}])`.
           | The kernel parameters are ``'C_b0'``, ``'C_b1'``,
           | ``'sigma_b0'``, ``'sigma_b1'``, ``'m'``,
           | and ``'phi0'``.
@@ -674,14 +679,14 @@ def build_kernel(kernel, kernel_params):
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
             kernel_params['C_f0'], kernel_params['C_f1'],
             kernel_params['sigma_f0'], kernel_params['sigma_f1'],
-            kernel_params.get('m', 1), kernel_params.get('phi0', 0)),
-            **kernel_params})
+            kernel_params.get('m', 1), kernel_params.get('phi_cf', 0),
+            kernel_params.get('phi_sf', 0)), **kernel_params})
     elif kernel == 'backward_anisotropic':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
             kernel_params['C_b0'], kernel_params['C_b1'],
             kernel_params['sigma_b0'], kernel_params['sigma_b1'],
-            kernel_params.get('m', 1), kernel_params.get('phi0', 0),
-            delta=180), **kernel_params})
+            kernel_params.get('m', 1), kernel_params.get('phi_cb', 0),
+            kernel_params.get('phi_sb', 0), delta=180), **kernel_params})
     elif kernel == 'spherical':
         return SphericalKernel(kernel_params)
     elif kernel == 'cylindrical':
