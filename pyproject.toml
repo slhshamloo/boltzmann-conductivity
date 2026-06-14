@@ -7,10 +7,10 @@ name = "elecboltz"
 dynamic = ["version"]
 authors=[{name = "Saleh Shamloo Ahmadi", email = "slhshamloo@gmail.com"}]
 description = "Boltzmann transport for conductivity of materials using an FEM"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 dependencies = [
     "numpy>=1.26.4",
-    "scipy>=1.12.0",
+    "scipy>=1.16.0",
     "sympy>=1.10.1",
     "scikit-image>=0.22.0"
 ]

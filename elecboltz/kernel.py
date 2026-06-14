@@ -3,10 +3,7 @@ import numpy as np
 import scipy
 from typing import Mapping, Collection, Callable
 from copy import copy
-if scipy.__version__ >= "1.15.0":
-    from scipy.special import sph_harm_y
-else:
-    from scipy.special import sph_harm as sph_harm_y
+from scipy.special import sph_harm_y
 
 
 class ScatteringKernel:
