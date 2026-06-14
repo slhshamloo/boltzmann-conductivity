@@ -525,10 +525,10 @@ class AnisotropicGaussianScattering:
         phi_diff = (np.fmod(phi_diff, np.pi) - np.sign(phi_diff)
                     * np.pi * np.fmod(np.abs(phi_diff)//np.pi, 2))
 
-        amplitude = self.C_0 + self.C_1 * np.cos(
-            self.m * (phi_mean-self.phi_c_rad)) ** self.nu_c
-        width = self.sigma_0 + self.sigma_1 * np.cos(
-            self.m * (phi_mean-self.phi_s_rad)) ** self.nu_s
+        amplitude = self.C_0 + self.C_1 * np.abs(np.cos(
+            self.m * (phi_mean-self.phi_c_rad))) ** self.nu_c
+        width = self.sigma_0 + self.sigma_1 * np.abs(np.cos(
+            self.m * (phi_mean-self.phi_s_rad))) ** self.nu_s
         phi_diff = abs(phi_diff) - self.delta_rad
         return amplitude * np.exp(-phi_diff**2 / (2 * width**2))
 
