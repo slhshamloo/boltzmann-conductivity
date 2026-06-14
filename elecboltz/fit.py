@@ -462,6 +462,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     end_time = datetime.now()
 
     print(result.message)
+    print()
     return _save_fit_result(
         result, init_params, update_keys, begin_time, end_time,
         save_path, save_label)
@@ -601,8 +602,8 @@ def _build_params_from_flat(param_keys, param_values):
     Parameters
     ----------
     param_keys : Collection[str]
-        The "flattened" keys of the parameters. See ``extract_keys``
-        for more information.
+        The "flattened" keys of the parameters. See
+        ``_extract_flat_keys`` for more information.
     param_values : Sequence
         The values corresponding to the keys in ``param_keys``.
 
@@ -629,8 +630,10 @@ def _build_params_from_flat(param_keys, param_values):
                         level_params[key] = []
                 while part >= len(level_params[key]):
                     level_params[key].append(dict())
-            elif key not in level_params:
+            elif isinstance(level_params, dict) and key not in level_params:
                 level_params[key] = dict()
+            elif isinstance(level_params, list) and key >= len(level_params):
+                level_params.append(dict())
             level_params = level_params[key]
             key = part
         level_params[key] = param_values.pop(0)
