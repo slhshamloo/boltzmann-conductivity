@@ -337,7 +337,7 @@ class CustomKernel(ScatteringKernel):
           | by default.
         * | ``'low_res'``: The resolution of the approximate band object
           | used for a more managable eigenvalue decomposition
-          | (nystrom method). If not provided, set to 31 by default.
+          | (nystrom method). If not provided, set to 21 by default.
         * | ``'decomp_method'``: The method to use for the eigenvalue
           | decomposition. Should be one of 'lanczos' or 'full'. If not
           | provided, set to 'lanczos' by default. 'lanczos' should be
@@ -351,7 +351,7 @@ class CustomKernel(ScatteringKernel):
     
     def decompose(self, band):
         band_decomp = copy(band)
-        band_decomp.resolution = self.params.get('low_res', 31)
+        band_decomp.resolution = self.params.get('low_res', 21)
         band_decomp.discretize()
         low_to_high = _interpolation_matrix(band.kpoints, band_decomp.kpoints)
         high_to_low = _interpolation_matrix(band_decomp.kpoints, band.kpoints)
