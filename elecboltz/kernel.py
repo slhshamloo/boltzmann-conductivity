@@ -406,6 +406,47 @@ class IsotropicKernelFunction:
         return self.C * np.ones((kx.shape[0], kx_prime.shape[1]))
 
 
+class AzimuthalKernelFunction:
+    """Scattering kernel that is a function of the angle of the
+    wavevector in the x-y plane, but not the magnitude.
+
+    .. math::
+    C(\\phi, \\phi') = C_1\\left|\\mathrm{cos}\\left(m
+        \\left[\\frac{\\phi+\\phi'}{2}-\\phi_c\\right]\\right)
+        \\right|^{\\nu_c}
+    
+    Call the object like ``C(kx, ky, kz, kx_prime, ky_prime, kz_prime)``
+    to evaluate the kernel function at the given wavevectors.
+
+    Parameters
+    ----------
+    C_1 : float
+        The coefficient for the anisotropic term in the kernel function.
+    m : int
+        Sets the symmetry of the anisotropy over the angle in the x-y
+        plane. For example, ``m=2`` repeats the peak every 90 degrees.
+    nu : float
+        Sets the sharpness of the anisotropy in the kernel function.
+    phi_0 : float
+        The phase shift of the anisotropy in the kernel function.
+    """
+    def __init__(self, C_1, m=1, nu=1.0, phi_0=0.0):
+        self.C_1 = C_1
+        self.m = m
+        self.nu = nu
+        self.phi_0_rad = np.radians(phi_0)
+
+    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+        phi = np.arctan2(ky, kx)
+        phi_prime = np.arctan2(ky_prime, kx_prime)
+        phi_mean = (phi+phi_prime) / 2
+        # keep the angle between -pi and pi
+        phi_mean = (np.fmod(phi_mean, np.pi) - np.sign(phi_mean)
+                    * np.pi * np.fmod(np.abs(phi_mean)//np.pi, 2))
+        return self.C_1 * np.abs(np.cos(self.m*phi_mean - self.phi_0_rad)
+                                 )**self.nu
+
+
 class GaussianScattering:
     """Scattering kernel based on a Gaussian of the difference of the
     wavevectors of the incoming and outgoing states.
@@ -592,6 +633,14 @@ def build_kernel(kernel, kernel_params):
 
         * | ``'isotropic'``: Isotropic scattering, where the kernel is
           | just a constant value ``'C_0'`` at all wavevectors.
+        * | ``'azimuthal'``: A kernel that is a function of the angle
+          | of the wavevector in the x-y plane, but not the magnitude.
+          | The function has the form
+          | :math:`C(\\phi, \\phi') = C_1|\\mathrm{cos}(m[\\frac{\\phi+\\phi'}{2}-\\phi])|^\\nu`.
+          | The kernel parameters are ``'C_1'`` (the aplitude),
+          | ``'m'`` (the symmetry), ``'nu'`` (the sharpness of the
+          | anisotropy), and ``'phi'`` (the angle at which the
+          | anisotropy peaks, in degrees).
         * | ``'forward'``: Forward scattering expressed as a Gaussian
           | :math:`C_f \\mathrm{exp}(-|k-k'|^2/2\\sigma_f^2)`. The
           | kernel parameters are ``'C_f'``, which sets the amplitude,
@@ -667,6 +716,11 @@ def build_kernel(kernel, kernel_params):
     elif kernel == 'isotropic':
         return CustomKernel({'kernel_func': IsotropicKernelFunction(
             kernel_params['C_0']), **kernel_params})
+    elif kernel == 'azimuthal':
+        return CustomKernel({'kernel_func': AzimuthalKernelFunction(
+            kernel_params['C_1'], kernel_params.get('m', 1),
+            kernel_params.get('nu', 1), kernel_params.get('phi', 0)),
+            **kernel_params})
     elif kernel == 'forward':
         return CustomKernel({'kernel_func': GaussianScattering(
             kernel_params['C_f'], kernel_params['sigma_f']), **kernel_params})
