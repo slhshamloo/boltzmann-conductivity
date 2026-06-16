@@ -365,8 +365,7 @@ class CustomKernel(ScatteringKernel):
         method = self.params.get('decomp_method', 'lanczos')
         if method == 'full':
             eigenvalues, eigenvectors = np.linalg.eigh(kernel_matrix)
-            cutoff = np.arange(
-                0, min(self.params.get('rank', 20), len(eigenvalues)))
+            cutoff = min(self.params.get('rank', 20), len(eigenvalues))
             eigenvalues = eigenvalues[-cutoff::-1]
             eigenvectors = eigenvectors[:, -cutoff::-1]
         elif method == 'lanczos':
