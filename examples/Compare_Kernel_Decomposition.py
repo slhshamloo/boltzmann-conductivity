@@ -42,21 +42,15 @@ params = {
 }
 
 
-def calc_kernel_values(
-        C_f0=5.5, C_f1=0.0, sigma_f0=0.1, sigma_f1=0.0, m=1, delta=0.0,
-        rank=20, n_interp=201):
-    kernel = elecboltz.kernel.CustomKernel(
-        {'kernel_func': elecboltz.kernel.AnisotropicGaussianScattering(
-            C_f0, C_f1, sigma_f0, sigma_f1, m, delta),
-         'rank': rank})
+def calc_kernel_values(kernel, low_res=31, n_interp=201):
     band = elecboltz.BandStructure(**elecboltz.easy_params(params))
     band.discretize()
     params_low = params.copy()
-    params_low['resolution'] = 31
+    params_low['resolution'] = low_res
     band_low = elecboltz.BandStructure(**elecboltz.easy_params(params_low))
     band_low.discretize()
     kernel.decompose(band)
-    
+
     phi = np.linspace(-np.pi, np.pi, n_interp)
     kx, ky = np.cos(phi), np.sin(phi)
     kz = np.zeros_like(kx)
@@ -70,6 +64,26 @@ def calc_kernel_values(
         kernel_decomposed, band_low.kpoints[:, 0], band_low.kpoints[:, 1], phi)
     
     return kernel_values, kernel_decomposed
+
+
+def calc_kernel_values_gaussian(
+        C_f0=5.5, C_f1=0.0, sigma_f0=0.1, sigma_f1=0.0, m=1, delta=0.0,
+        rank=20, low_res=31, n_interp=201):
+    kernel = elecboltz.kernel.CustomKernel(
+        {'kernel_func': elecboltz.kernel.AnisotropicGaussianScattering(
+            C_f0, C_f1, sigma_f0, sigma_f1, m, delta),
+         'rank': rank, 'low_res': low_res})
+    return calc_kernel_values(kernel, low_res=low_res, n_interp=n_interp)
+
+
+def calc_kernel_values_azimuthal(
+        C_0=5.5, C_1=0.0, m=1, nu=1.0, rank=20, low_res=31, n_interp=201):
+    kernels = [elecboltz.kernel.IsotropicKernelFunction(C_0),
+               elecboltz.kernel.AzimuthalKernelFunction(C_1, m, nu)]
+    kernel = elecboltz.kernel.CustomKernel(
+        {'kernel_func': elecboltz.kernel.SumKernelFunction(kernels),
+         'rank': rank, 'low_res': low_res})
+    return calc_kernel_values(kernel, low_res=low_res, n_interp=n_interp)
 
 
 def plot_comparison(kernel_values, kernel_decomposed,
@@ -106,9 +120,25 @@ def plot_comparison(kernel_values, kernel_decomposed,
     return fig, axs
 
 
-def compare_decomposition(sigma_f0=0.5, rank=50):
-    kernel_values, kernel_decomposed = calc_kernel_values(
-        sigmaf0=sigma_f0, rank=rank)
+def compare_decomposition_azimuthal(C_0=5.5, C_1=50, m=2, nu=10, rank=20):
+    kernel_values, kernel_decomposed = calc_kernel_values_azimuthal(
+        C_0=C_0, C_1=C_1, m=m, nu=nu, rank=rank)
+    fig, _ = plot_comparison(
+        kernel_values, kernel_decomposed,
+        title="$C(\\mathbf{k}, \\mathbf{k}') = C_0 + \\left|\\mathrm{cos}"
+              f"(\\phi+\\phi')\\right|^\\nu$, $C_0 = {C_0}$, "
+              f"$C_1 = {C_1}$, $\\nu = {nu}$, $\\mathrm{{rank}} = {rank}$",
+        figsize=(10.0, 4.5))
+    fig.savefig(os.path.dirname(os.path.relpath(__file__))
+                + "/Kernel/Decomposition Comparison/"
+                + f"NdLSCO_C0={C_0}_C1={C_1}_nu={nu}_rank={rank}.pdf",
+                bbox_inches='tight')
+    plt.show()
+
+
+def compare_decomposition_gaussian(sigma_f0=0.5, rank=50):
+    kernel_values, kernel_decomposed = calc_kernel_values_gaussian(
+        sigma_f0=sigma_f0, rank=rank)
     fig, _ = plot_comparison(
         kernel_values, kernel_decomposed,
         title="$C(\\mathbf{k}, \\mathbf{k}') = C_f \\mathrm{exp}\\left("
@@ -124,7 +154,7 @@ def compare_decomposition(sigma_f0=0.5, rank=50):
 
 def compare_decomposition_anisotropic(
         C_f0=5.5, C_f1=2.0, sigma_f0=0.5, sigma_f1=0.3, rank=20):
-    kernel_values, kernel_decomposed = calc_kernel_values(
+    kernel_values, kernel_decomposed = calc_kernel_values_gaussian(
         C_f0=C_f0, C_f1=C_f1, sigma_f0=sigma_f0, sigma_f1=sigma_f1,
         m=4, rank=rank)
     fig, _ = plot_comparison(
@@ -162,5 +192,4 @@ def _interpolate_to_phi(values, kx, ky, phi_interp):
 
 
 if __name__ == "__main__":
-    # compare_decomposition()
-    compare_decomposition_anisotropic()
+    compare_decomposition_gaussian(sigma_f0=0.2, rank=30)
