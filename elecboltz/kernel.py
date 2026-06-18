@@ -743,7 +743,7 @@ def build_kernel(kernel, kernel_params):
             delta=180), **kernel_params})
     elif kernel == 'forward_anisotropic':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            C_0=kernel_params['C_f0'], C_1=kernel_params.get('C_f1', 0),
+            C_0=kernel_params.get('C_f0', 0), C_1=kernel_params.get('C_f1', 0),
             sigma_0=kernel_params['sigma_f0'],
             sigma_1=kernel_params.get('sigma_f1', 0),
             m=kernel_params.get('m', 1), nu_c=kernel_params.get('nu_fc', 1),
@@ -753,7 +753,7 @@ def build_kernel(kernel, kernel_params):
             **kernel_params})
     elif kernel == 'backward_anisotropic':
         return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            C_0=kernel_params['C_b0'], C_1=kernel_params.get('C_b1', 0),
+            C_0=kernel_params.get('C_b0', 0), C_1=kernel_params.get('C_b1', 0),
             sigma_0=kernel_params['sigma_b0'],
             sigma_1=kernel_params.get('sigma_b1', 0),
             m=kernel_params.get('m', 1), nu_c=kernel_params.get('nu_bc', 1),
