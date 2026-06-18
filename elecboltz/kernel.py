@@ -381,7 +381,13 @@ class CustomKernel(ScatteringKernel):
         return self.coeffs
     
     def eval_basis(self, index, kx, ky, kz):
-        return self.projector[index, :]
+        stacked_points = np.stack((kx, ky, kz), axis=-1)
+        original_shape = stacked_points.shape
+        stacked_points = stacked_points.reshape(-1, 3)
+        interpolator = _interpolation_matrix(
+            stacked_points, self.low_res_points)
+        values = interpolator @ self.eigenvectors[:, index]
+        return values.reshape(original_shape[:-1])
 
 
 class IsotropicKernelFunction:
