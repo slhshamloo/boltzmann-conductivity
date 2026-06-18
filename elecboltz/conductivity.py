@@ -100,7 +100,7 @@ class Conductivity:
         self._derivatives = None
         self._fem_to_kernel = None
         self._scattering_invlen = None
-        self._scattering_matrix = None
+        self._in_scattering_matrix = None
         self._out_scattering = None
         self._derivative_term = None
         self._differential_operator = None
@@ -236,7 +236,7 @@ class Conductivity:
         if scattering:
             self._fem_to_kernel = None
             self._scattering_invlen = None
-            self._scattering_matrix = None
+            self._in_scattering_matrix = None
             self._out_scattering = None
             self._is_scattering_saved = False
         if derivative:
@@ -248,7 +248,10 @@ class Conductivity:
             return scipy.sparse.linalg.spsolve(
                 self._differential_operator, self._vhat_projections[:, j])
         else:
-            U = self._fem_to_kernel.conj().T
+            # S_ij = C_ij / |v|_i, therefore we scale one of the U or V
+            # matrices by the velocity magnitude to include the 1/|v|
+            # factor in the transformed, full matrix
+            U = self._fem_to_kernel.conj().T / self._vmags[:, None]
             V = self._fem_to_kernel
             # A_periodic = P A_0 P^dagger + P U C V P^dagger
             if self.band.periodic:
@@ -257,7 +260,7 @@ class Conductivity:
             factor = scipy.sparse.linalg.splu(self._differential_operator)
             # A = A_0 + U^dagger S U
             return solve_sparse_plus_lowrank(
-                self._differential_operator, self._scattering_matrix,
+                self._differential_operator, self._in_scattering_matrix,
                 U, V, self._vhat_projections[:, j],
                 sparse_solver = lambda _, b: factor.solve(b))
 
@@ -371,15 +374,13 @@ class Conductivity:
             self.scattering_kernel.decompose(self.band)
 
         if isinstance(self.scattering_kernel, CustomKernel):
-            self._fem_to_kernel = self.scattering_kernel.projector.T
-            self._scattering_matrix = (
-                -angstrom**2 * self.scattering_kernel.coeffs
-                / (self.scattering_kernel.inv_projector@self._vmags)[:, None])
+            self._fem_to_kernel = (
+                self._overlap_matrix @ self.scattering_kernel.projector).T
             area_sums = self._jacobian_sums.diagonal() / 6
-            fem_basis_scattering_rate = (
-                (area_sums[None, :] @ self._fem_to_kernel.T)
-                @ self.scattering_kernel.coeffs @ self._fem_to_kernel
-                ).flatten() * angstrom**2
+            fem_basis_scattering_rate = angstrom**2 * (
+                (area_sums[None, :] @ self.scattering_kernel.projector)
+                @ self.scattering_kernel.coeffs
+                @ self.scattering_kernel.projector.T).flatten()
         else:
             self._fem_to_kernel = np.zeros(
                 (self.scattering_kernel.coeffs.shape[0],
@@ -387,13 +388,6 @@ class Conductivity:
                 dtype=self.scattering_kernel.coeffs.dtype)
             sym_basis_scattering_rate, symmetry_overlap = \
                 self._calculate_kernel_quadratures()
-            # tilde{v} = tilde{M}^{-1} @ U @ v
-            transformed_velocities = (np.linalg.inv(symmetry_overlap)
-                                      @ self._fem_to_kernel @ self._vmags)
-            # S_ab = -C_ab / |v_a|
-            self._scattering_matrix = (
-                -angstrom**2 * self.scattering_kernel.coeffs
-                / transformed_velocities[:, None])
             # (U^(-1))^i_a = sum_j (M^(-1))^ij U^dagger_ja
             transformed_scatrate = \
                 self._fem_to_kernel.conj().T @ sym_basis_scattering_rate
@@ -404,6 +398,8 @@ class Conductivity:
             if transformed_scatrate.dtype == complex:
                 fem_basis_scattering_rate += 1j * overlap_matrix_factor.solve(
                     transformed_scatrate.imag)
+        self._in_scattering_matrix = \
+            -angstrom**2 * THz * self.scattering_kernel.coeffs
         self._calculate_scattering_invlen(fem_basis_scattering_rate)
 
     def _discretize_independent_out_scattering(self):
