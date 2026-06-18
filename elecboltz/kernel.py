@@ -486,7 +486,7 @@ class GaussianScattering:
         self.backward = backward
 
     def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
-        sign = 1 if self.backward else -1
+        sign = -1 if self.backward else 1
         diff_x = kx - sign * kx_prime
         diff_y = ky - sign * ky_prime
         diff_z = kz - sign * kz_prime
