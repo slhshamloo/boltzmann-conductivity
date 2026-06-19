@@ -111,12 +111,12 @@ def get_scattering_latex(name, params):
         text += "\\mathrm{exp}\\left(-\\frac{|\\varphi-\\varphi'|^2}"
         if params.get('sigma_b1', 0) != 0:
             return (text +
-                "{2\\left(\\sigma_{b0}+\\sigma_{b1}\\left|\\mathrm{cos}" \
+                "{2\\left(\\sigma_{f0}+\\sigma_{f1}\\left|\\mathrm{cos}" \
                 f"\\left({params['m']}\\left[\\frac" \
-                "{\\varphi+\\varphi'}{2}-\\varphi_{bs}\\right]\\right)"\
-                "\\right|^{\\nu_{bs}}\\right)}\\right)")
+                "{\\varphi+\\varphi'}{2}-\\varphi_{fs}\\right]\\right)"\
+                "\\right|^{\\nu_{fs}}\\right)}\\right)")
         else:
-            return text + "{2\\sigma_{b0}^2}\\right)"
+            return text + "{2\\sigma_{f0}^2}\\right)"
     elif name == 'backward_anisotropic':
         if params.get('C_b0', 0) != 0:
             text = "C_{b1} \\left|\\mathrm{cos}\\left(" \
