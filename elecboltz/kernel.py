@@ -354,7 +354,6 @@ class CustomKernel(ScatteringKernel):
         band_decomp.resolution = self.params.get('low_res', 21)
         band_decomp.discretize()
         low_to_high = _interpolation_matrix(band.kpoints, band_decomp.kpoints)
-        high_to_low = _interpolation_matrix(band_decomp.kpoints, band.kpoints)
 
         kx, ky, kz = band_decomp.kpoints.T
         kx, ky, kz = kx[:, None], ky[:, None], kz[:, None]
@@ -377,7 +376,6 @@ class CustomKernel(ScatteringKernel):
         self.coeffs = np.diag(eigenvalues)
         self.eigenvectors = eigenvectors
         self.projector = low_to_high @ eigenvectors
-        self.inv_projector = eigenvectors.T @ high_to_low
         return self.coeffs
     
     def eval_basis(self, index, kx, ky, kz):
