@@ -147,11 +147,21 @@ def get_tight_binding_dispersion(band_params) -> str:
     return dispersion
 
 
-def _deep_update(d, u):
-    """Recursively update dictionary `d` with values from `u`."""
-    for k, v in u.items():
-        if isinstance(v, dict):
-            d[k] = _deep_update(d.get(k, {}), v)
-        else:
-            d[k] = v
-    return d
+def _deep_update(dst, src):
+    if isinstance(dst, dict) and isinstance(src, dict):
+        for k, v in src.items():
+            if k in dst:
+                dst[k] = _deep_update(dst[k], v)
+            else:
+                dst[k] = v
+        return dst
+
+    if isinstance(dst, list) and isinstance(src, list):
+        for i, v in enumerate(src):
+            if i < len(dst):
+                dst[i] = _deep_update(dst[i], v)
+            else:
+                dst.append(v)
+        return dst
+
+    return src
