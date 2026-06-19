@@ -769,6 +769,7 @@ Now, we rewrite the in-scattering term in the symmetry basis. From equation
 \begin{equation}
     S_{ij} = -\sum_{a,b} \int\dd{\vb{k}} \int\dd{\vb{k'}}\phi_i(\vb{k})\psi_a(\vb{k})
     \frac{\tilde{C}_{ab}}{\tilde{v}_a}\psi_b^*(\vb{k'})\phi_j(\vb{k'})
+    \label{eq:in_scattering_symmetry}
 \end{equation}
 Using the change of basis matrix, and carefully arranging the indices for correct contraction,
 this can be rewritten as
@@ -897,6 +898,81 @@ time.
 What about the inverse change of basis, from the symmetry basis to the FEM basis? Luckily, our
 sloppiness with the indices cancelled each other out, and the expression stays the same.
 
+\subsection{Arbitrary Scattering Kernels}
+The method of expanding the scattering kernel in a symmetry basis is effectively a projection into
+a low-rank subspace. So instead of using a symmetry-based basis like spherical harmonics, we could
+also use any other arbitrary functions as the basis. The only contraints are
+\begin{enumerate}
+    \item $C(\vb{k}, \vb{k'}) > 0$ everywhere, because it is representing the rate of
+        transition between states. A negative value would be inconsistent with the definition.
+    \item Keeping detailed balance. For elastic scattering this means
+        $C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$.
+\end{enumerate}
+This lets us construct the basis by hand to follow a certain shape.
+
+In some cases, we have a specific scattering kernel, possibly derived from a microscopic model, and
+it is not naturally expressed in terms of a low-rank expansion. In these cases, to get a low-rank
+approximation of the kernel, we can do a singular value decomposition of the kernel matrix in the
+FEM basis, and keep only the largest singular values. Then, using methods like the Lanczos
+algorithm, we can compute the largest singular values and the corresponding singular vectors,
+without solving the full eigendecomposition problem.
+
+Because of the detailed balance condition, the kernel matrix is symmetric, so the singular value
+decomposition is equivalent to an eigendecomposition, and the singular values are just the absolute
+values of the eigenvalues. This means that the calculations are exactly the same, since we have the
+eigenvectors as the basis functions.
+
+In order for the decomposition to actually provide a performance boost, it needs to be less
+expensive than the matrix inversions. However, if we first fully construct the scattering matrix in
+the FEM basis and then apply the decomposition, the cost will be $\mathcal{O}(N^3)$, and we have
+constructed a dense matrix anyway. So, for this method to make sense, we have to approximate the
+matrix with a lower-resolution version. This is achieved by using a lower-resolution triangulation
+of the Fermi surface. This way, if we have a mapping from the low-resolution points to the
+high-resolution points, we can construct the full scattering matrix from the low-rank decomposition
+of the low-resolution matrix. This can be achieved by least-square fitting of a few nearest neighbor
+points from the low-resolution triangulation to each point in the high-resolution triangulation.
+Then, the mapping gives
+\begin{equation}
+    C^{\text{high}} = P C^{\text{low}} P^T,
+\end{equation}
+and then, from the eigendecomposition of the low-resolution matrix, we have
+\begin{equation}
+    C^{\text{low}} = V \Lambda V^T,
+\end{equation}
+and so
+\begin{equation}
+    C^{\text{high}} = (P V) \Lambda (P V)^T.
+\end{equation}
+By only keeping the largest eigenvalues, we can get a low-rank approximation of the scattering
+kernel in the FEM basis, without having to construct the full matrix. Now, our decomposition is
+\begin{equation}
+    C(\vb{k}, \vb{k'}) = \sum_{i,j} C^{\text{high}}_{ij} \phi_i(\vb{k})\phi_j(\vb{k'}),
+\end{equation}
+so that the decomposition basis is the same as the FEM basis. By substituting the FEM basis
+functions with the symmetry basis functions in equation \eqref{eq:in_scattering_symmetry}, we
+can rewrite the in-scattering term as
+\begin{equation}
+    S_{ij} = \sum_{a,b} M_{ia} \tilde{S}^{ab} M_{bj} = \sum_{a,b} M_{ia}
+    \qty(P V S^{\text{eigen}} (P V)^T)^{ab} M_{bj},
+\end{equation}
+where $S^{\text{eigen}}$ is the $S$ matrix in the basis of the eigenvectors of the low-resolution
+scattering kernel. Since the overlap matrix $M$ is symmetric, the full \enquote{transformation}
+matrix $U$ becomes
+\begin{equation}
+    U = M P V.
+\end{equation}
+
+What remains is the calculation of the scattering rate. We can assume the representation of the
+scattering kernel in terms of the basis is a linear combination of the FEM basis functions. Then,
+directly from \eqref{eq:tau_kernel_fem},
+\begin{equation}
+    \frac{1}{\tau_j} = \sum_{i} \alpha_i C_{ij} =
+    \sum_i \frac{\alpha_i}{6} \sum_{a,b} (PV)_{ia} \Lambda (P V)^T_{bj} =
+    \sum_{a,b} \qty(\sum_i \frac{1}{6} \alpha_i (PV)_{ia}) \tilde{C}^{ab} (P V)^T_{bj}.
+\end{equation}
+If we first apply the sum in the parentheses, then we never have to construct any large dense
+matrix in the FEM basis.
+
 \subsection{Gaussian Quadrature}
 To do the integrations of the basis functions of the symmetry basis over the FEM elements, we can
 use the widely utilized Gaussian quadrature method. In this method, one approximates the integral
@@ -981,63 +1057,6 @@ defined as
 \end{empheq}
 Instead of complex valued cylindrical harmonics (which are just complex exponentials $e^{im\phi}$),
 their real-valued counterparts are just sines and cosines.
-
-\subsection{Arbitrary Scattering Kernels}
-The method of expanding the scattering kernel in a symmetry basis is effectively a projection into
-a low-rank subspace. So instead of using a symmetry-based basis like spherical harmonics, we could
-also use any other arbitrary functions as the basis. The only contraints are
-\begin{enumerate}
-    \item $C(\vb{k}, \vb{k'}) > 0$ everywhere, because it is representing the rate of
-        transition between states. A negative value would be inconsistent with the definition.
-    \item Keeping detailed balance. For elastic scattering this means
-        $C(\vb{k}, \vb{k'}) = C(\vb{k'}, \vb{k})$.
-\end{enumerate}
-This lets us construct the basis by hand to follow a certain shape.
-
-In some cases, we have a specific scattering kernel, possibly derived from a microscopic model, and
-it is not naturally expressed in terms of a low-rank expansion. In these cases, to get a low-rank
-approximation of the kernel, we can do a singular value decomposition of the kernel matrix in the
-FEM basis, and keep only the largest singular values. Then, using methods like the Lanczos
-algorithm, we can compute the largest singular values and the corresponding singular vectors,
-without solving the full eigendecomposition problem.
-
-Because of the detailed balance condition, the kernel matrix is symmetric, so the singular value
-decomposition is equivalent to an eigendecomposition, and the singular values are just the absolute
-values of the eigenvalues. This means that the calculations are exactly the same, since we have the
-eigenvectors as the basis functions.
-
-In order for the decomposition to actually provide a performance boost, it needs to be less
-expensive than the matrix inversions. However, if we first fully construct the scattering matrix in
-the FEM basis and then apply the decomposition, the cost will be $\mathcal{O}(N^3)$, and we have
-constructed a dense matrix anyway. So, for this method to make sense, we have to approximate the
-matrix with a lower-resolution version. This is achieved by using a lower-resolution triangulation
-of the Fermi surface. This way, if we have a mapping from the low-resolution points to the
-high-resolution points, we can construct the full scattering matrix from the low-rank decomposition
-of the low-resolution matrix. This can be achieved by least-square fitting of a few nearest neighbor
-points from the low-resolution triangulation to each point in the high-resolution triangulation.
-Then, the mapping gives
-\begin{equation}
-    C^{\text{high}} = P C^{\text{low}} P^T,
-\end{equation}
-and then, from the eigendecomposition of the low-resolution matrix, we have
-\begin{equation}
-    C^{\text{low}} = V \Lambda V^T,
-\end{equation}
-and so
-\begin{equation}
-    C^{\text{high}} = (P V) \Lambda (P V)^T = U^T \tilde{C} U.
-\end{equation}
-This directly gives us the basis transformation matrix. What remains is the calculation of the
-scattering rate. We can assume the representation of the scattering kernel in terms of the basis
-is a linear combination of the FEM basis functions. Then, directly from
-\eqref{eq:tau_kernel_fem},
-\begin{equation}
-    \frac{1}{\tau_j} = \sum_{i} \alpha_i C_{ij} =
-    \sum_i \frac{\alpha_i}{6} \sum_{a,b} U^T_{ia} \tilde{C}^{ab} U_{bj} =
-    \sum_{a,b} \qty(\sum_i \frac{1}{6} \alpha_i U^T_{ia}) \tilde{C}^{ab} U_{bj}.
-\end{equation}
-If we first apply the sum in the parentheses, then we never have to construct any large dense
-matrix in the FEM basis.
 
 \section{Implementation Details}
 \subsection{Solving Matrix Equations}
