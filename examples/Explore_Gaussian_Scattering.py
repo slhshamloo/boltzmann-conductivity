@@ -45,10 +45,9 @@ params = {
     'Bamp': 45,
     'scattering_kernel_names': ['isotropic', 'forward_anisotropic'],
     'scattering_kernel_params': [
-        {'C_0': 3.0},
-        {'m': 2, 'nu_fc': 20.0, 'C_f0': 0.0, 'C_f1': 200.0,
-         'sigma_f0': 0.2, 'sigma_f1': 0.0},
-        {'rank': 30, 'low_res': 21}],
+        {'C_0': 2.5},
+        {'m': 2, 'nu_fc': 20.0, 'C_f1': 300.0, 'sigma_f0': 0.3},
+        {'rank': 20, 'low_res': 21}],
 }
 
 label_to_latex = {
@@ -96,12 +95,20 @@ def get_scattering_latex(name, params):
         return "C_b \\mathrm{exp}\\left(-\\frac{(|\\phi-\\phi'|-\\pi)^2}" \
                "{2\\sigma_b^2}\\right)"
     elif name == 'forward_anisotropic':
-        text = "\\left(C_{f0} + C_{f1} \\left|\\mathrm{cos}\\left(" \
-               f"{params['m']}\\left[\\frac" \
-               "{\\varphi+\\varphi'}{2}+\\varphi_{fc}\\right]\\right)" \
-               "\\right|^{\\nu_{fc}}\\right)\\mathrm{exp}" \
-               "\\left(-\\frac{|\\varphi-\\varphi'|^2}"
-        if params['sigma_f1'] != 0:
+        if params.get('C_f0', 0) != 0:
+            text = "C_{f1} \\left|\\mathrm{cos}\\left(" \
+                f"{params['m']}\\left[\\frac{{\\varphi+\\varphi'}}{{2}}"
+            if params.get('phi_fc', 0) != 0:
+                text += "+\\varphi_{fc}"
+            text += "\\right]\\right)\\right|^{\\nu_{fc}}"
+        else:
+            text = "\\left(C_{f0} + C_{f1} \\left|\\mathrm{cos}\\left(" \
+                f"{params['m']}\\left[\\frac{{\\varphi+\\varphi'}}{{2}}"
+            if params.get('phi_fc', 0) != 0:
+                text += "+\\varphi_{fc}"
+            text += "\\right]\\right)\\right|^{\\nu_{fc}}\\right)"
+        text += "\\mathrm{exp}\\left(-\\frac{|\\varphi-\\varphi'|^2}"
+        if params.get('sigma_b1', 0) != 0:
             return (text +
                 "{2\\left(\\sigma_{f0}+\\sigma_{f1}\\left|\\mathrm{cos}" \
                 f"\\left({params['m']}\\left[\\frac" \
@@ -110,12 +117,20 @@ def get_scattering_latex(name, params):
         else:
             return text + "{2\\sigma_{f0}^2}\\right)"
     elif name == 'backward_anisotropic':
-        text = "\\left(C_{b0} + C_{b1} \\left|\\mathrm{cos}\\left(" \
-               f"{params['m']}\\left[\\frac" \
-               "{\\varphi+\\varphi'}{2}+\\varphi_{bc}\\right]\\right)" \
-               "\\right|^{\\nu_{bc}}\\right)\\mathrm{exp}" \
-               "\\left(-\\frac{|\\varphi-\\varphi'|^2}"
-        if params['sigma_b1'] != 0:
+        if params.get('C_b0', 0) != 0:
+            text = "C_{b1} \\left|\\mathrm{cos}\\left(" \
+                f"{params['m']}\\left[\\frac{{\\varphi+\\varphi'}}{{2}}"
+            if params.get('phi_bc', 0) != 0:
+                text += "+\\varphi_{bc}"
+            text += "\\right]\\right)\\right|^{\\nu_{bc}}"
+        else:
+            text = "\\left(C_{b0} + C_{b1} \\left|\\mathrm{cos}\\left(" \
+                f"{params['m']}\\left[\\frac{{\\varphi+\\varphi'}}{{2}}"
+            if params.get('phi_bc', 0) != 0:
+                text += "+\\varphi_{bc}"
+            text += "\\right]\\right)\\right|^{\\nu_{bc}}\\right)"
+        text += "\\mathrm{exp}\\left(-\\frac{|\\varphi-\\varphi'|^2}"
+        if params.get('sigma_b1', 0) != 0:
             return (text +
                 "{2\\left(\\sigma_{b0}+\\sigma_{b1}\\left|\\mathrm{cos}" \
                 f"\\left({params['m']}\\left[\\frac" \
@@ -371,7 +386,7 @@ def _calc_heatmap(params, res=101):
     else:
         band = elecboltz.BandStructure(**elecboltz.easy_params(params))
         band_low = copy(band)
-        band_low.resolution = kernel.params.get('low_res', 31)
+        band_low.resolution = kernel.params.get('low_res', 21)
         band.discretize()
         band_low.discretize()
 
