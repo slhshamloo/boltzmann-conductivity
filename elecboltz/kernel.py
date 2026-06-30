@@ -1,4 +1,5 @@
 import re
+from unittest import result
 import numpy as np
 import scipy
 from typing import Mapping, Collection, Callable
@@ -444,10 +445,9 @@ class AzimuthalKernelFunction:
         phi_prime = np.arctan2(ky_prime, kx_prime)
         phi_mean = (phi+phi_prime) / 2
         # keep the angle between -pi and pi
-        phi_mean = (np.fmod(phi_mean, np.pi) - np.sign(phi_mean)
-                    * np.pi * np.fmod(np.abs(phi_mean)//np.pi, 2))
-        return self.C_1 * np.abs(np.cos(self.m*phi_mean - self.phi_0_rad)
-                                 )**self.nu
+        phi_mean = _make_angle_periodic(phi_mean)
+        return self.C_1 * np.abs(
+            np.cos(self.m*phi_mean - self.phi_0_rad))**self.nu
 
 
 class GaussianScattering:
@@ -561,10 +561,8 @@ class AnisotropicGaussianScattering:
         phi_mean = (phi+phi_prime) / 2
         phi_diff = phi - phi_prime
         # keep the angles between -pi and pi
-        phi_mean = (np.fmod(phi_mean, np.pi) - np.sign(phi_mean)
-                    * np.pi * np.fmod(np.abs(phi_mean)//np.pi, 2))
-        phi_diff = (np.fmod(phi_diff, np.pi) - np.sign(phi_diff)
-                    * np.pi * np.fmod(np.abs(phi_diff)//np.pi, 2))
+        phi_mean = _make_angle_periodic(phi_mean)
+        phi_diff = _make_angle_periodic(phi_diff)
 
         amplitude = self.C_0 + self.C_1 * np.abs(np.cos(
             self.m * (phi_mean-self.phi_c_rad))) ** self.nu_c
@@ -572,6 +570,95 @@ class AnisotropicGaussianScattering:
             self.m * (phi_mean-self.phi_s_rad))) ** self.nu_s
         phi_diff = abs(phi_diff) - self.delta_rad
         return amplitude * np.exp(-phi_diff**2 / (2 * width**2))
+
+
+class HotspotScattering:
+    """Scattering kernel based on a Gaussian of the difference of the
+    angles of the wavevectors of the incoming and outgoing states in
+    the x-y plane with "hotspot" pairs.
+
+    .. math::
+    C(\\phi, \\phi') = \sum_i C_{hi}\sum_j \\mathrm{exp}\\left(
+        -\\frac{(\phi-\phi_{hj})^2}{2\\sigma_{hi}^2}\\right)
+        \\mathrm{exp}\\left(-\\frac{(\phi-\phi'_{hj})^2}
+        {2\\sigma_{hi}^2}\\right)
+
+    The hotspots themselves are defined by a number of hotspots
+    ``m_h`` and a shift ``phi_h0``. The hotspots are then located at
+    ``phi_h[i] = phi_h0 + i*2*pi/m_h``, so that there are :math:`m_h`
+    hotspots evenly spaced around the circle. Their connecting angles
+    are then defined by the array ``dphi_h``, which is a sequence of
+    angle differences between the hotspots that makes the pairs
+    :math:`\\phi_{hj}` and :math:`\\phi'_{hj}`. That is, when the
+    hotspots are at angle ``dphi_h[j]`` apart, the kernel will have
+    a peak at that angle difference.
+
+    Parameters
+    ----------
+    m_h : int
+        The number of hotspots.
+    phi_h0 : Sequence of float
+        The shift of the hotspots from zero, in degrees. Each hotspot
+        will then be at angle ``phi_h[i] = phi_h0 + i*2*pi/m_h``
+        (here, phi_h0 is converted into radians).
+    dphi_h : Sequence of float
+        The connecting angles between the hotspots, in degrees.
+        When the hotspots are at angle ``dphi_h[j]`` apart, the
+        kernel will have a peak at that angle difference.
+    C_h : Sequence of float
+        The amplitude of the Gaussian for each connecting angle
+        between the hotspots.
+    sigma_h : Sequence of float
+        The width of the Gaussian for each connecting angle
+        between the hotspots.
+    """
+    def __init__(self, m_h, dphi_h, C_h, sigma_h, phi_h0=0.0):
+        self.m_h = m_h
+        self.phi_h0_rad = np.radians(phi_h0)
+        self.dphi_h = np.array(dphi_h)
+        self.dphi_h_rad = np.radians(self.dphi_h)
+        self.C_h = np.array(C_h)
+        self.sigma_h = np.array(sigma_h)
+        self.tol = 1e-5
+    
+    def _double_gaussian(self, C, sigma, x, y):
+        return C * np.exp(-x**2/(2*sigma**2)) * np.exp(-y**2/(2*sigma**2))
+
+    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+        phi = np.arctan2(ky, kx)
+        phi_prime = np.arctan2(ky_prime, kx_prime)
+        hotspot_diff = 2 * np.pi / self.m_h
+        hotspots = self.phi_h0_rad - np.pi + np.arange(self.m_h)*hotspot_diff
+        result = 0
+        for i, dphi in enumerate(self.dphi_h_rad):
+            if dphi == 0:
+                for hotspot in hotspots:
+                    result += self._double_gaussian(
+                        self.C_h[i], self.sigma_h[i],
+                        _make_angle_periodic(phi - hotspot),
+                        _make_angle_periodic(phi_prime - hotspot))
+            else:
+                shift = 0
+                while shift < hotspot_diff - self.tol:
+                    hotspot = self.phi_h0_rad - np.pi + shift
+                    hotspot_prime = hotspot + dphi
+                    if np.isclose(dphi, np.pi, atol=self.tol):
+                        limit = np.pi + self.phi_h0_rad - self.tol
+                    else:
+                        limit = np.pi + self.phi_h0_rad + self.tol
+                    while hotspot_prime < limit:
+                        result += self._double_gaussian(
+                            self.C_h[i], self.sigma_h[i],
+                            _make_angle_periodic(phi - hotspot),
+                            _make_angle_periodic(phi_prime - hotspot_prime))
+                        result += self._double_gaussian(
+                            self.C_h[i], self.sigma_h[i],
+                            _make_angle_periodic(phi - hotspot_prime),
+                            _make_angle_periodic(phi_prime - hotspot))
+                        hotspot += hotspot_diff
+                        hotspot_prime += hotspot_diff
+                    shift += hotspot_diff
+        return result
 
 
 class SumKernelFunction:
@@ -667,6 +754,8 @@ def build_kernel(kernel, kernel_params):
           | The kernel parameters are ``'C_f0'``, ``'C_f1'``,
           | ``'sigma_f0'``, ``'sigma_f1'``, ``'m'``, ``\\nu_{fc}``,
           | ``\\nu_{fs}``, ``'phi_fc'``, and ``'phi_fs'``.
+          | Any omitted parameters will be set to zero, except for ``'m'``,
+          | which will be set to 1 by default.
         * | ``'backward_anisotropic'``: Like ``'backward_phi'``, but
           | with anisotropic parameters for the Gaussian. This means,
           | :math:`C_b = C_{b0} + C_{b1}|\\mathrm{cos}(m[(\\phi+\\phi')/2-\\phi_{bc}])|^{\\nu_{bc}}` and
@@ -674,6 +763,18 @@ def build_kernel(kernel, kernel_params):
           | The kernel parameters are ``'C_b0'``, ``'C_b1'``,
           | ``'sigma_b0'``, ``'sigma_b1'``, ``'m'``, ``\\nu_{bc}``,
           | ``\\nu_{bs}``, ``'phi_bc'``, and ``'phi_bs'``.
+          | Any omitted parameters will be set to zero, except for ``'m'``,
+          | which will be set to 1 by default.
+        * | ``'hotspot'``: See
+          | `elecboltz.kernel.AzimuthalHotspotScattering` for details.
+          | The parameters are ``'m_h'`` (number of hotspots),
+          | ``'phi_h0'`` (shift of the hotspots from zero, in degrees.
+          | if omitted, set to 0 by default),
+          | ``dphi_h`` (array of connecting angles between
+          | the hotspots, in degrees),
+          | ``'C_h'`` (array of strengths for each connecting angle),
+          | and ``'sigma_h'`` (array of widths for each
+          | connecting angle).
 
         If a list of kernels is provided, the resulting kernel is the
         sum of all the kernels in the list. Note that you cannot mix
@@ -759,6 +860,11 @@ def build_kernel(kernel, kernel_params):
             phi_c=kernel_params.get('phi_bc', 0),
             phi_s=kernel_params.get('phi_bs', 0),
             delta=180),**kernel_params})
+    elif kernel == 'hotspot':
+        return CustomKernel({'kernel_func': HotspotScattering(
+            kernel_params.get('m_h', 4), kernel_params['dphi_h'],
+            kernel_params['C_h'], kernel_params['sigma_h'],
+            kernel_params.get('phi_h0', 0)), **kernel_params})
     elif kernel == 'spherical':
         return SphericalKernel(kernel_params)
     elif kernel == 'cylindrical':
@@ -772,6 +878,11 @@ def build_kernel(kernel, kernel_params):
         return LegendreKernel(kernel_params)
     else:
         raise ValueError(f"Unsupported kernel type: {kernel}")
+
+
+def _make_angle_periodic(angle):
+    return (np.fmod(angle, np.pi) - np.sign(angle)
+            * np.pi * np.fmod(np.abs(angle)//np.pi, 2))
 
 
 def is_kernel_name_for_explicit(kernel_name):
