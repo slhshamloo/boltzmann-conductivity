@@ -37,20 +37,20 @@ def mean_squared_error(y_fit, y_data):
 def main():
     phis = [0, 15, 30, 45]
     n_interp = 35
-    #filepath = os.path.dirname(os.path.relpath(__file__))
-    filepath = "/mnt/home/sshamloo/elecboltz/"
+    filepath = os.path.dirname(os.path.relpath(__file__))
 
     name = "ADMR_NdLSCO_T25_relative_band=t+tp+tpp+tz_scat=hotspot" \
            "_free=C0+Ch+sigmah"
-    path = pathlib.Path(filepath + name)
-    path.mkdir(parents=True)
+    path = "/../fits/ADMR_NdLSCO/" + name
+    path = pathlib.Path(filepath + path)
+    path.mkdir(parents=True, exist_ok=True)
 
     loader = elecboltz.Loader(
         x_vary_label='theta', y_label='rho_zz',
         x_search={'phi': phis.copy(), 'H': [45] * 4},
         save_new_labels=False)
     loader.load(
-        filepath + "data/ADMR_NdLSCO", f"NdLSCO_0p25_rho_c-vs-theta_25K_",
+        filepath + "/../data/ADMR_NdLSCO", f"NdLSCO_0p25_rho_c-vs-theta_25K_",
         x_columns=[0], y_columns=[1])
     loader.interpolate(n_interp, x_normalize=0)
     
