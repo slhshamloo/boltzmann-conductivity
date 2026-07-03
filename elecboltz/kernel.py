@@ -14,13 +14,6 @@ class ScatteringKernel:
 
     Attributes
     ----------
-    is_explicit : bool
-        Whether the kernel already has explicit basis functions that
-        can be evaluated at any wavevector. If ``False``, the kernel
-        should provide a method ``decompose(band)`` to decompose the
-        kernel into the basis functions and coefficients (effectively
-        building ``ceoffs`` and ``eval_basis`` from the kernel
-        function).
     coeffs : np.ndarray
         The coefficients of the scattering kernel. The entry at (i, j)
         corresponds to the coefficient for the basis functions with
@@ -31,20 +24,19 @@ class ScatteringKernel:
     build_coeffs(params) -> np.ndarray
         Build the coefficients of the scattering kernel from the given
         parameters and set the ``coeffs`` attribute. Only necessary if
-        ``is_explicit`` is ``True``.
+        building a kernel with explicit basis functions.
     eval_basis(index, kx, ky, kz) -> np.ndarray
         Evaluate the basis function with the given index at the given
-        wavevector. Only necessary if ``is_explicit`` is ``True``.
-        The output should be in units of angstrom^2 THz.
-        The wavevector components have units of 1/angstrom.
+        wavevector. Only necessary if you want to use explicit basis
+        functions.
     decompose(band)
         Decompose the kernel into the basis functions and coefficients.
-        Takes in a band object. Only necessary if ``is_explicit`` is
-        ``False``. This should set the ``coeffs`` attribute and provide
-        the object with the parameters needed for ``eval_basis``.
+        Takes in a band object. Only necessary if there is no explicit
+        basis functions. This sets ``eval_basis`` and whatever
+        is needed to build the transformation from the reduced
+        basis to the full FEM basis.
     """
     def __init__(self, params: Mapping):
-        self.is_explicit = True
         self.coeffs = self.build_coeffs(params)
     
     def build_coeffs(self, params: Mapping) -> np.ndarray:
@@ -84,48 +76,23 @@ class ScatteringKernel:
         raise NotImplementedError("Subclasses should implement this method.")
 
 
-class SumKernel(ScatteringKernel):
-    """Scattering kernel that is a sum of other kernels.
-    
-    The resulting basis is a direct sum of each basis for the individual
-    kernels. This means that the vector of the basis functions is just a
-    concatenation of the basis functions for each kernel, and the
-    coefficient matrix would become a block-diagonal matrix with the
-    coefficient matrices of the individual kernels as blocks.
-    
-    Keep in mind that this creates many unused entries in the
-    scattering matrix. So, always try finding a more general basis
-    before simply adding multiple kernels with this method.
+class IsotropicKernel(ScatteringKernel):
+    """Scattering kernel that is just a constant function of the wavevectors
+    of the incoming and outgoing states. This corresponds to isotropic
+    scattering.
 
     Parameters
     ----------
-    kernels : list of ScatteringKernel
-        The kernels to sum together.
+    C : float
+        The value of the kernel function at all wavevectors. Should be in
+        units of angstrom^2 THz.
     """
-    def __init__(self, kernels: Collection[ScatteringKernel]):
-        self.is_explicit = True
-        self.kernels = kernels
-        self.coeffs = self.build_coeffs(kernels)
-    
-    def build_coeffs(self, kernels: Collection[ScatteringKernel]):
-        total_size = sum(kernel.coeffs.shape[0] for kernel in kernels)
-        coeffs = np.zeros((total_size, total_size))
-        current_index = 0
-        for kernel in kernels:
-            size = kernel.coeffs.shape[0]
-            coeffs[current_index:current_index+size,
-                   current_index:current_index+size] = kernel.coeffs
-            current_index += size
-        return coeffs
-    
+    def __init__(self, C):
+        self.C = C
+        self.coeffs = np.array([[C]])
+
     def eval_basis(self, index, kx, ky, kz):
-        current_index = 0
-        for kernel in self.kernels:
-            size = kernel.coeffs.shape[0]
-            if index < current_index + size:
-                return kernel.eval_basis(index - current_index, kx, ky, kz)
-            current_index += size
-        raise IndexError("Index out of range for the combined basis.")
+        return np.ones_like(kx)
 
 
 class SphericalKernel(ScatteringKernel):
@@ -268,53 +235,62 @@ class LegendreKernel(ScatteringKernel):
         return np.real(sph_harm_y(index, 0, theta, 0))
 
 
-class VonMisesKernel(ScatteringKernel):
-    """Scattering kernel based on von Mises distributions in the angle
-    of the wavevector in the x-y plane.
-    
-    The basis consists of a constant term and one function of the form:
-    
-    .. math::
-        e^{\\kappa \\cos(m(\\phi-\\phi_0))}
-    
-    So, the full kernel is:
+class AzimuthalHotspotKernel(ScatteringKernel):
+    """Scattering kernel based on a Gaussian of the difference of the
+    angles of the wavevectors of the incoming and outgoing states in
+    the x-y plane with "hotspot" pairs.
 
     .. math::
-        C(\\phi, \\phi') = C_0 + C_1 (
-        e^{\\kappa \\cos(m(\\phi-\\phi_0))}
-        e^{\\kappa \\cos(m(\\phi'-\\phi_0))})
+    C(\\phi, \\phi') = \sum_i C_{hi}\sum_j \\mathrm{exp}\\left(
+        -\\frac{(\phi-\phi_{hj})^2}{2\\sigma_h^2}\\right)
+        \\mathrm{exp}\\left(-\\frac{(\phi-\phi'_{hj})^2}
+        {2\\sigma_h^2}\\right)
+    
+    Pairs of "hotspots" separated by a particular angle will contribute
+    to the scattering kernel in the form of a double Gaussian peak.
 
     Parameters
     ----------
-    params : dict
-        A dictionary containing the following keys:
-
-        * | ``c0``: The constant term in the kernel.
-        * | ``c1``: The coefficient for the von Mises distribution.
-        * | ``kappa``: Controls the width of the distribution. Larger
-          | kappa corresponds to a narrower distribution.
-        * | ``m``: Sets the symmetry of the distribution over the
-          | angle in the x-y plane. For example, ``m=4`` repeats the
-          | peak every 90 degrees.
-        * | ``phi_0``: Sets the angle at which the peak of the
-          | distribution occurs. Should be in degrees.
+    phi_h: Sequence of float
+        The position of the hotspots by their angle in the x-y plane.
+        In degrees, but converted to radians internally.
+    dphi_h : float
+        The connecting angle between the hotspots. In degrees, but
+        converted to radians internally. Only pairs of hotspots with
+        this particular connecting angle will contribute to the
+        scattering kernel.
+    C_h : float
+        The amplitude of each Gaussian pair in the scattering kernel.
+        In units of angstrom^2 THz.
+    sigma_h : Sequence of float
+        The width of the Gaussians (in radians).
+    tol : float
+        The tolerance for determining whether a pair of hotspots is
+        connected by the given connecting angle. This is in absolute
+        terms, in radians.
     """
-    def __init__(self, params: Mapping):
-        super().__init__(params)
-    
-    def build_coeffs(self, params: Mapping):
-        self.coeffs = np.array([[params['c0'], params['c1']],
-                                [params['c1'], 0]])
-        self._phi0_rad = np.radians(params['phi_0'])
-        return self.coeffs
-    
+    def __init__(self, phi_h, dphi_h, C_h, sigma_h, tol=1e-5):
+        self.phi_h = np.radians(np.array(phi_h))
+        self.dphi_h = np.radians(dphi_h)
+        self.C_h = C_h
+        self.sigma_h = sigma_h
+        self.tol = tol
+        self.build_coeffs()
+
+    def build_coeffs(self):
+        self.coeffs = np.zeros((len(self.phi_h), len(self.phi_h)))
+        for i in range(len(self.phi_h)):
+            for j in range(i, len(self.phi_h)):
+                phi_diff = _make_angle_periodic(self.phi_h[i] - self.phi_h[j])
+                if abs(abs(phi_diff) - self.dphi_h) < self.tol:
+                    self.coeffs[i, j] = self.C_h
+                    self.coeffs[j, i] = self.C_h
+
     def eval_basis(self, index, kx, ky, kz):
         phi = np.arctan2(ky, kx)
-        if index == 0:
-            return 1
-        else:
-            exponent = np.cos(self.params['m'] * (phi - self._phi0_rad))
-            return np.exp(self.params['kappa'] * exponent)
+        hotspot = _make_angle_periodic(self.phi_h[index])
+        phi_diff = _make_angle_periodic(phi - hotspot)
+        return np.exp(-phi_diff**2 / (2*self.sigma_h**2))
 
 
 class CustomKernel(ScatteringKernel):
@@ -323,91 +299,112 @@ class CustomKernel(ScatteringKernel):
 
     Parameters
     ----------
-    params : dict
-        A dictionary containing the following keys:
-
-        * | ``'kernel_func'``: A callable that takes in wavevector
-          | components (kx, ky, kz, kx', ky', kz') and returns the value
-          | of the kernel function at that wavevector. The output should
-          | be in units of angstrom^2 THz. The wavevector components
-          | have units of 1/angstrom.
-        * | ``'rank'``: The number of eigenvalue and eigenvector pairs
-          | to keep when decomposing the kernel function into basis
-          | functions and coefficients. This would be the final rank of
-          | the resulting scattering kernel. If not provided, set to 20
-          | by default.
-        * | ``'low_res'``: The resolution of the approximate band object
-          | used for a more managable eigenvalue decomposition
-          | (nystrom method). If not provided, set to 21 by default.
-        * | ``'decomp_method'``: The method to use for the eigenvalue
-          | decomposition. Should be one of 'lanczos' or 'full'. If not
-          | provided, set to 'lanczos' by default. 'lanczos' should be
-          | more efficient for larger low-res approximations of
-          | the kernel.
+    kernel_func:
+        Takes in wavevector components (kx, ky, kz, kx', ky', kz')
+        and returns the value of the kernel function at that wavevector.
+        The output should be in units of angstrom^2 THz. The wavevector
+        components have units of 1/angstrom.
+    rank:
+        The number of eigenvalue and eigenvector pairs
+        to keep when decomposing the kernel function into basis
+        functions and coefficients. This would be the final rank of
+        the resulting scattering kernel.
+    ``'low_res'``:
+        The resolution of the approximate band object
+        used for a more managable eigenvalue decomposition.
     """
-    def __init__(self, params: Mapping):
-        self.params = params
-        self.is_explicit = False
+    def __init__(self, kernel_func: Callable, rank: int = 20,
+                 low_res: int = 21, **kwargs):
+        self.kernel_func = kernel_func
+        self.rank = rank
+        self.low_res = low_res
         self.coeffs = None
     
     def decompose(self, band):
         band_decomp = copy(band)
-        band_decomp.resolution = self.params.get('low_res', 21)
+        band_decomp.resolution = self.low_res
         band_decomp.discretize()
         low_to_high = _interpolation_matrix(band.kpoints, band_decomp.kpoints)
 
         kx, ky, kz = band_decomp.kpoints.T
         kx, ky, kz = kx[:, None], ky[:, None], kz[:, None]
         kx_prime, ky_prime, kz_prime = kx.T, ky.T, kz.T
-        kernel_matrix = self.params['kernel_func'](
+        kernel_matrix = self.kernel_func(
             kx, ky, kz, kx_prime, ky_prime, kz_prime)
 
-        method = self.params.get('decomp_method', 'lanczos')
-        if method == 'full':
-            eigenvalues, eigenvectors = np.linalg.eigh(kernel_matrix)
-            cutoff = min(self.params.get('rank', 20), len(eigenvalues))
-            eigenvalues = eigenvalues[-cutoff::-1]
-            eigenvectors = eigenvectors[:, -cutoff::-1]
-        elif method == 'lanczos':
-            matvec = scipy.sparse.linalg.LinearOperator(
-                kernel_matrix.shape, matvec=lambda x: kernel_matrix @ x)
-            eigenvalues, eigenvectors = scipy.sparse.linalg.eigsh(
-                matvec, k=self.params.get('rank', 20))
+        matvec = scipy.sparse.linalg.LinearOperator(
+            kernel_matrix.shape, matvec=lambda x: kernel_matrix @ x)
+        eigenvalues, eigenvectors = scipy.sparse.linalg.eigsh(
+            matvec, k=self.rank)
         
         self.coeffs = np.diag(eigenvalues)
         self.eigenvectors = eigenvectors
         self.projector = low_to_high @ eigenvectors
         return self.coeffs
+
+
+class SumKernel(ScatteringKernel):
+    """Scattering kernel that is a sum of other kernels.
     
-    def eval_basis(self, index, kx, ky, kz):
-        stacked_points = np.stack((kx, ky, kz), axis=-1)
-        original_shape = stacked_points.shape
-        stacked_points = stacked_points.reshape(-1, 3)
-        interpolator = _interpolation_matrix(
-            stacked_points, self.low_res_points)
-        values = interpolator @ self.eigenvectors[:, index]
-        return values.reshape(original_shape[:-1])
+    The resulting basis is a direct sum of each basis for the individual
+    kernels. This means that the vector of the basis functions is just a
+    concatenation of the basis functions for each kernel, and the
+    coefficient matrix would become a block-diagonal matrix with the
+    coefficient matrices of the individual kernels as blocks.
 
-
-class IsotropicKernelFunction:
-    """Scattering kernel that is just a constant function of the wavevectors
-    of the incoming and outgoing states. This corresponds to isotropic
-    scattering.
-
-    Call the object like ``C(kx, ky, kz, kx_prime, ky_prime, kz_prime)``
-    to evaluate the kernel function at the given wavevectors.
+    Custom kernels will just be summed together in one unified function,
+    and the basis obtained from the decomposition of the resulting
+    kernel will be used.
 
     Parameters
     ----------
-    C : float
-        The value of the kernel function at all wavevectors. Should be in
-        units of angstrom^2 THz.
+    kernels : list of ScatteringKernel
+        The kernels to sum together.
+    decomp_params : dict
+        The parameters for the decomposition of the custom kernels.
     """
-    def __init__(self, C):
-        self.C = C
+    def __init__(self, kernels: Collection[ScatteringKernel],
+                 **decomp_params):
+        self.custom_kernel = None
+        custom_kernels = [k for k in kernels if isinstance(k, CustomKernel)]
+        if len(custom_kernels) > 0:
+            self.custom_kernel_sum = CustomKernelSumCallable(
+                [k.kernel_func for k in custom_kernels])
+            self.custom_kernel = CustomKernel(
+                self.custom_kernel_sum, **decomp_params)
+        
+        self.explicit_kernels = [
+            k for k in kernels if not isinstance(k, CustomKernel)]
+        if len(self.explicit_kernels) > 0:
+            self.coeffs = scipy.linalg.block_diag(
+                *[k.coeffs for k in self.explicit_kernels])
+    
+    def eval_basis(self, index, kx, ky, kz):
+        current_index = 0
+        for kernel in self.explicit_kernels:
+            size = kernel.coeffs.shape[0]
+            if index < current_index + size:
+                return kernel.eval_basis(index - current_index, kx, ky, kz)
+            current_index += size
+        raise IndexError("Index out of range for the combined basis.")
 
+    def decompose(self, band):
+        if self.custom_kernel is not None:
+            self.custom_kernel.decompose(band)
+
+
+class CustomKernelSumCallable:
+    """
+    Helper class to sum multiple custom kernel functions
+    together into one unified function.
+    """
+    def __init__(self, kernels: Collection[Callable]):
+        self.kernels = kernels
     def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
-        return self.C * np.ones((kx.shape[0], kx_prime.shape[1]))
+        result = 0
+        for kernel in self.kernels:
+            result += kernel(kx, ky, kz, kx_prime, ky_prime, kz_prime)
+        return result
 
 
 class AzimuthalKernelFunction:
@@ -466,7 +463,7 @@ class GaussianScattering:
     C : float
         The amplitude of the Gaussian.
     sigma : float
-        The width of the Gaussian.
+        The width of the Gaussian (in angstroms).
     backward : bool
         Whether the Gaussian is a function of |k+k'| (backward scattering)
         or |k-k'| (forward scattering). Default is False, which corresponds
@@ -518,10 +515,10 @@ class AnisotropicGaussianScattering:
         The coefficient for the anisotropic term in the amplitude of the
         Gaussian.
     sigma_0 : float
-        The constant term in the width of the Gaussian.
+        The constant term in the width of the Gaussian (in radians).
     sigma_1 : float
         The coefficient for the anisotropic term in the width of the
-        Gaussian.
+        Gaussian (in radians).
     m : int
         Sets the symmetry of the anisotropy over the angle in the x-y
         plane. For example, ``m=2`` repeats the peak every 90 degrees.
@@ -570,116 +567,6 @@ class AnisotropicGaussianScattering:
             self.m * (phi_mean-self.phi_s_rad))) ** self.nu_s
         phi_diff = abs(phi_diff) - self.delta_rad
         return amplitude * np.exp(-phi_diff**2 / (2 * width**2))
-
-
-class HotspotScattering:
-    """Scattering kernel based on a Gaussian of the difference of the
-    angles of the wavevectors of the incoming and outgoing states in
-    the x-y plane with "hotspot" pairs.
-
-    .. math::
-    C(\\phi, \\phi') = \sum_i C_{hi}\sum_j \\mathrm{exp}\\left(
-        -\\frac{(\phi-\phi_{hj})^2}{2\\sigma_{hi}^2}\\right)
-        \\mathrm{exp}\\left(-\\frac{(\phi-\phi'_{hj})^2}
-        {2\\sigma_{hi}^2}\\right)
-
-    The hotspots themselves are defined by a number of hotspots
-    ``m_h`` and a shift ``phi_h0``. The hotspots are then located at
-    ``phi_h[i] = phi_h0 + i*2*pi/m_h``, so that there are :math:`m_h`
-    hotspots evenly spaced around the circle. Their connecting angles
-    are then defined by the array ``dphi_h``, which is a sequence of
-    angle differences between the hotspots that makes the pairs
-    :math:`\\phi_{hj}` and :math:`\\phi'_{hj}`. That is, when the
-    hotspots are at angle ``dphi_h[j]`` apart, the kernel will have
-    a peak at that angle difference.
-
-    Parameters
-    ----------
-    m_h : int
-        The number of hotspots.
-    phi_h0 : Sequence of float
-        The shift of the hotspots from zero, in degrees. Each hotspot
-        will then be at angle ``phi_h[i] = phi_h0 + i*2*pi/m_h``
-        (here, phi_h0 is converted into radians).
-    dphi_h : Sequence of float
-        The connecting angles between the hotspots, in degrees.
-        When the hotspots are at angle ``dphi_h[j]`` apart, the
-        kernel will have a peak at that angle difference.
-    C_h : Sequence of float
-        The amplitude of the Gaussian for each connecting angle
-        between the hotspots.
-    sigma_h : Sequence of float
-        The width of the Gaussian for each connecting angle
-        between the hotspots.
-    """
-    def __init__(self, m_h, dphi_h, C_h, sigma_h, phi_h0=0.0):
-        self.m_h = m_h
-        self.phi_h0_rad = np.radians(phi_h0)
-        self.dphi_h = np.array(dphi_h)
-        self.dphi_h_rad = np.radians(self.dphi_h)
-        self.C_h = np.array(C_h)
-        self.sigma_h = np.array(sigma_h)
-        self.tol = 1e-5
-    
-    def _double_gaussian(self, C, sigma, x, y):
-        return C * np.exp(-x**2/(2*sigma**2)) * np.exp(-y**2/(2*sigma**2))
-
-    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
-        phi = np.arctan2(ky, kx)
-        phi_prime = np.arctan2(ky_prime, kx_prime)
-        hotspot_diff = 2 * np.pi / self.m_h
-        hotspots = self.phi_h0_rad - np.pi + np.arange(self.m_h)*hotspot_diff
-        result = 0
-        for i, dphi in enumerate(self.dphi_h_rad):
-            if dphi == 0:
-                for hotspot in hotspots:
-                    result += self._double_gaussian(
-                        self.C_h[i], self.sigma_h[i],
-                        _make_angle_periodic(phi - hotspot),
-                        _make_angle_periodic(phi_prime - hotspot))
-            else:
-                shift = 0
-                while shift < hotspot_diff - self.tol:
-                    hotspot = self.phi_h0_rad - np.pi + shift
-                    hotspot_prime = hotspot + dphi
-                    if np.isclose(dphi, np.pi, atol=self.tol):
-                        limit = np.pi + self.phi_h0_rad - self.tol
-                    else:
-                        limit = np.pi + self.phi_h0_rad + self.tol
-                    while hotspot_prime < limit:
-                        result += self._double_gaussian(
-                            self.C_h[i], self.sigma_h[i],
-                            _make_angle_periodic(phi - hotspot),
-                            _make_angle_periodic(phi_prime - hotspot_prime))
-                        result += self._double_gaussian(
-                            self.C_h[i], self.sigma_h[i],
-                            _make_angle_periodic(phi - hotspot_prime),
-                            _make_angle_periodic(phi_prime - hotspot))
-                        hotspot += hotspot_diff
-                        hotspot_prime += hotspot_diff
-                    shift += hotspot_diff
-        return result
-
-
-class SumKernelFunction:
-    """Class for gathering multiple kernels together by adding
-    their kernel functions.
-    
-    Call the object like ``C(kx, ky, kz, kx_prime, ky_prime, kz_prime)``
-    to evaluate the combined kernel function at the given wavevectors.
-
-    Parameters
-    ----------
-    kernels : list of Callable
-        A list of kernel functions to add together.
-    """
-    def __init__(self, kernels: Collection[Callable]):
-        self.kernels = kernels
-    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
-        result = 0
-        for kernel in self.kernels:
-            result += kernel(kx, ky, kz, kx_prime, ky_prime, kz_prime)
-        return result
 
 
 def build_kernel(kernel, kernel_params):
@@ -765,21 +652,11 @@ def build_kernel(kernel, kernel_params):
           | ``\\nu_{bs}``, ``'phi_bc'``, and ``'phi_bs'``.
           | Any omitted parameters will be set to zero, except for ``'m'``,
           | which will be set to 1 by default.
-        * | ``'hotspot'``: See
+        * | ``'hotspot_phi'``: See
           | `elecboltz.kernel.AzimuthalHotspotScattering` for details.
-          | The parameters are ``'m_h'`` (number of hotspots),
-          | ``'phi_h0'`` (shift of the hotspots from zero, in degrees.
-          | if omitted, set to 0 by default),
-          | ``dphi_h`` (array of connecting angles between
-          | the hotspots, in degrees),
-          | ``'C_h'`` (array of strengths for each connecting angle),
-          | and ``'sigma_h'`` (array of widths for each
-          | connecting angle).
 
         If a list of kernels is provided, the resulting kernel is the
-        sum of all the kernels in the list. Note that you cannot mix
-        kernels with explicit basis functions and kernels without
-        explicit basis functions.
+        sum of all the kernels in the list.
 
     kernel_params : dict or list of dict
         The parameters for the kernel(s). If a list of explicit basis
@@ -791,12 +668,7 @@ def build_kernel(kernel, kernel_params):
         kernel (see `elecboltz.kernel.CustomKernel`).
     """
     if isinstance(kernel, list):
-        is_explicit = is_kernel_name_for_explicit(kernel[0])
-        for k in kernel:
-            if is_kernel_name_for_explicit(k) != is_explicit:
-                raise ValueError("Cannot mix kernels with and without "
-                                 "explicit basis functions.")
-        decomp_params = None
+        decomp_params = {}
         if len(kernel_params) == len(kernel) + 1:
             decomp_params = kernel_params[-1]
             kernel_params = kernel_params[:-1]
@@ -810,61 +682,24 @@ def build_kernel(kernel, kernel_params):
         kernels = []
         for k, p in zip(kernel, kernel_params):
             kernels.append(build_kernel(k, p))
-        if is_explicit:
-            return SumKernel(kernels)
-        else:
-            return CustomKernel(
-                {'kernel_func': SumKernelFunction(
-                    k.params['kernel_func'] for k in kernels),
-                 **(decomp_params or {})})
-    elif kernel == 'isotropic':
-        return CustomKernel({'kernel_func': IsotropicKernelFunction(
-            kernel_params['C_0']), **kernel_params})
-    elif kernel == 'azimuthal':
-        return CustomKernel({'kernel_func': AzimuthalKernelFunction(
-            kernel_params['C_1'], kernel_params.get('m', 1),
-            kernel_params.get('nu', 1), kernel_params.get('phi', 0)),
-            **kernel_params})
-    elif kernel == 'forward':
-        return CustomKernel({'kernel_func': GaussianScattering(
-            kernel_params['C_f'], kernel_params['sigma_f']), **kernel_params})
-    elif kernel == 'backward':
-        return CustomKernel({'kernel_func': GaussianScattering(
-            kernel_params['C_b'], kernel_params['sigma_b'], backward=True),
-            **kernel_params})
-    elif kernel == 'forward_phi':
-        return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            kernel_params['C_f'], 0, kernel_params['sigma_f'], 0, 1, 0),
-            **kernel_params})
-    elif kernel == 'backward_phi':
-        return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            kernel_params['C_b'], 0, kernel_params['sigma_b'], 0, 1, 0,
-            delta=180), **kernel_params})
-    elif kernel == 'forward_anisotropic':
-        return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            C_0=kernel_params.get('C_f0', 0), C_1=kernel_params.get('C_f1', 0),
-            sigma_0=kernel_params['sigma_f0'],
-            sigma_1=kernel_params.get('sigma_f1', 0),
-            m=kernel_params.get('m', 1), nu_c=kernel_params.get('nu_fc', 1),
-            nu_s=kernel_params.get('nu_fs', 1),
-            phi_c=kernel_params.get('phi_fc', 0),
-            phi_s=kernel_params.get('phi_fs', 0)),
-            **kernel_params})
-    elif kernel == 'backward_anisotropic':
-        return CustomKernel({'kernel_func': AnisotropicGaussianScattering(
-            C_0=kernel_params.get('C_b0', 0), C_1=kernel_params.get('C_b1', 0),
-            sigma_0=kernel_params['sigma_b0'],
-            sigma_1=kernel_params.get('sigma_b1', 0),
-            m=kernel_params.get('m', 1), nu_c=kernel_params.get('nu_bc', 1),
-            nu_s=kernel_params.get('nu_bs', 1),
-            phi_c=kernel_params.get('phi_bc', 0),
-            phi_s=kernel_params.get('phi_bs', 0),
-            delta=180),**kernel_params})
-    elif kernel == 'hotspot':
-        return CustomKernel({'kernel_func': HotspotScattering(
-            kernel_params.get('m_h', 4), kernel_params['dphi_h'],
+        return SumKernel(kernels, **decomp_params)
+    kernel_builders = [_build_explicit_kernel, _build_anisotropic_gaussian_kernel,
+                       _build_gaussian_kernel]
+    for builder in kernel_builders:
+        built_kernel = builder(kernel, kernel_params)
+        if built_kernel is not None:
+            return built_kernel
+    raise ValueError(f"Unsupported kernel type: {kernel}")
+
+
+def _build_explicit_kernel(kernel, kernel_params):
+    if kernel == 'isotropic':
+        return IsotropicKernel(kernel_params['C_0'])
+    elif kernel == 'hotspot_phi':
+        return AzimuthalHotspotKernel(
+            kernel_params['phi_h'], kernel_params['dphi_h'],
             kernel_params['C_h'], kernel_params['sigma_h'],
-            kernel_params.get('phi_h0', 0)), **kernel_params})
+            kernel_params.get('tol', 1e-5))
     elif kernel == 'spherical':
         return SphericalKernel(kernel_params)
     elif kernel == 'cylindrical':
@@ -876,17 +711,60 @@ def build_kernel(kernel, kernel_params):
         return CylindricalKernel(kernel_params)
     elif kernel == 'legendre':
         return LegendreKernel(kernel_params)
-    else:
-        raise ValueError(f"Unsupported kernel type: {kernel}")
+    return None
+
+
+def _build_gaussian_kernel(kernel, kernel_params):
+    if kernel == 'azimuthal':
+        return CustomKernel(AzimuthalKernelFunction(
+            kernel_params['C_1'], kernel_params.get('m', 1),
+            kernel_params.get('nu', 1), kernel_params.get('phi', 0)),
+            **kernel_params)
+    elif kernel == 'forward':
+        return CustomKernel(GaussianScattering(
+            kernel_params['C_f'], kernel_params['sigma_f']), **kernel_params)
+    elif kernel == 'backward':
+        return CustomKernel(GaussianScattering(
+            kernel_params['C_b'], kernel_params['sigma_b'], backward=True),
+            **kernel_params)
+    elif kernel == 'forward_phi':
+        return CustomKernel(AnisotropicGaussianScattering(
+            kernel_params['C_f'], 0, kernel_params['sigma_f'], 0, 1, 0),
+            **kernel_params)
+    elif kernel == 'backward_phi':
+        return CustomKernel(AnisotropicGaussianScattering(
+            kernel_params['C_b'], 0, kernel_params['sigma_b'], 0, 1, 0,
+            delta=180), **kernel_params)
+    return None
+
+
+def _build_anisotropic_gaussian_kernel(kernel, kernel_params):
+    if kernel == 'forward_anisotropic':
+        return CustomKernel(AnisotropicGaussianScattering(
+            C_0=kernel_params.get('C_f0', 0), C_1=kernel_params.get('C_f1', 0),
+            sigma_0=kernel_params['sigma_f0'],
+            sigma_1=kernel_params.get('sigma_f1', 0),
+            m=kernel_params.get('m', 1), nu_c=kernel_params.get('nu_fc', 1),
+            nu_s=kernel_params.get('nu_fs', 1),
+            phi_c=kernel_params.get('phi_fc', 0),
+            phi_s=kernel_params.get('phi_fs', 0)),
+            **kernel_params)
+    elif kernel == 'backward_anisotropic':
+        return CustomKernel(AnisotropicGaussianScattering(
+            C_0=kernel_params.get('C_b0', 0), C_1=kernel_params.get('C_b1', 0),
+            sigma_0=kernel_params['sigma_b0'],
+            sigma_1=kernel_params.get('sigma_b1', 0),
+            m=kernel_params.get('m', 1), nu_c=kernel_params.get('nu_bc', 1),
+            nu_s=kernel_params.get('nu_bs', 1),
+            phi_c=kernel_params.get('phi_bc', 0),
+            phi_s=kernel_params.get('phi_bs', 0),
+            delta=180), **kernel_params)
+    return None
 
 
 def _make_angle_periodic(angle):
     return (np.fmod(angle, np.pi) - np.sign(angle)
             * np.pi * np.fmod(np.abs(angle)//np.pi, 2))
-
-
-def is_kernel_name_for_explicit(kernel_name):
-    return kernel_name in ['spherical', 'cylindrical', 'legendre']
 
 
 def _get_cylindrical_indices(key):

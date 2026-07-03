@@ -42,6 +42,8 @@ label_to_latex = {
     "tzppp": "t_z'''",
     "sigma_f": "\\sigma_f",
     "sigma_b": "\\sigma_b",
+    "sigma_h": "\\sigma_h",
+    "dphi_h": "\\Delta\\varphi_h",
     "C_f0": "C_{f0}",
     "C_f1": "C_{f1}",
     "sigma_f0": "\\sigma_{f0}",
@@ -54,6 +56,7 @@ label_to_latex = {
     "phi_fs": "\\varphi_{fs}",
     "phi_bc": "\\varphi_{bc}",
     "phi_bs": "\\varphi_{bs}",
+    "phi_h": "\\varphi_h",
     "nu_fc": "\\nu_{fc}",
     "nu_fs": "\\nu_{fs}",
     "nu_bc": "\\nu_{bc}",
@@ -63,21 +66,23 @@ label_to_latex = {
 
 def get_params():
     return {
-        'a': 3.75,
-        'b': 3.75,
-        'c': 13.2,
-        'energy_scale': 160,
-        'band_params': {'mu': -0.82439881, 't': 1, 'tp': -0.13642799,
+    'a': 3.75,
+    'b': 3.75,
+    'c': 13.2,
+    'energy_scale': 160,
+    'band_params': {'mu': -0.82439881, 't': 1, 'tp': -0.13642799,
                     'tpp': 0.06816836, 'tz': 0.06512192},
     'resolution': 41,
     'periodic': 2,
     'domain_size': [1.0, 1.0, 2.0],
     'Bamp': 45,
-    'scattering_kernel_names': ['isotropic', 'forward_phi'],
+    'scattering_kernel_names': ['isotropic', 'hotspot_phi'],
     'scattering_kernel_params': [
-        {'C0': 5.5}, {'Cf': 5.5, 'sigmaf': 0.5},
-        {'rank': 20}],
-    }
+        {'C_0': 2.9},
+        {'phi_h': [0, 90, 180, 270], 'dphi_h': 90,
+         'C_h': 85, 'sigma_h': 0.13},
+        {'rank': 20, 'low_res': 21}],
+}
 
 
 def get_scattering_latex(name, params):
@@ -139,8 +144,13 @@ def get_scattering_latex(name, params):
                 "\\right|^{\\nu_{bs}}\\right)}\\right)")
         else:
             return text + "{2\\sigma_{b0}^2}\\right)"
+    elif name == 'hotspot_phi':
+        return "\\sum_{i}C_h\\mathrm{exp}\\left(-\\frac" \
+            "{(\\varphi-\\varphi_{h,i})^2}{2\\sigma_h^2}\\right)" \
+            "\\mathrm{exp}\\left(-\\frac{(\\varphi'-\\varphi'_{h,i})^2}" \
+            "{2\\sigma_h^2}\\right)"
     else:
-        raise ValueError(f"Unknown scattering kernel name: {name}")
+        return ""
 
 
 def print_params_left(ax, renderer, params, name=None, xshift=0.05,
@@ -209,7 +219,12 @@ def print_params_right(ax, renderer, params, params_y=None, xshift=0.0):
     for i, kernel in enumerate(params['scattering_kernel_names']):
         for (label, value) in params['scattering_kernel_params'][i].items():
             label_latex = label_to_latex.get(label, label)
-            params_text += f"${label_latex}={value:.3g}$"
+            if isinstance(value, (list, np.ndarray)):
+                value = [f"{v:.3g}" for v in value]
+                value = ", ".join(value)
+            else:
+                value = f"{value:.3g}"
+            params_text += f"${label_latex}={value}$"
             if label_latex.startswith('C_'):
                 params_text += " Å$^2$ THz"
             elif label.startswith('sigma'):
@@ -379,7 +394,7 @@ def _calc_heatmap(params, res=101):
     kz = np.zeros_like(kx)
     kernel = elecboltz.kernel.build_kernel(
         params['scattering_kernel_names'], params['scattering_kernel_params'])
-    if kernel.is_explicit:
+    if hasattr(kernel, 'eval_basis'):   # explicit basis evaluation
         kernel_values = np.zeros((len(phis), len(phis)))
         for i in range(kernel.coeffs.shape[0]):
             basis_vec_i = kernel.eval_basis(i, kx, ky, kz)
@@ -633,7 +648,7 @@ def plot_admr(
         plt.close(fig1)
 
 
-def main():
+def single():
     phis = [0, 15, 30, 45]
     temperature = 25
     field = 45
@@ -650,8 +665,8 @@ def main():
     loader.interpolate(n_interp, x_normalize=0)
 
     folder_name = \
-        f"ADMR_NdLSCO_T{temperature}_relative_band=t+tp+tpp+tz_scat=forward" \
-        f"_free=C0+Cf1+sigmaf0+nufc"
+        f"ADMR_NdLSCO_T{temperature}_relative_band=t+tp+tpp+tz" \
+        f"_scat=hotspot_free=C0+Ch+sigmah"
     filedir = os.path.dirname(os.path.relpath(__file__))
     exp_info = f"Nd-LSCO, $p=0.24$\n$T={temperature}$ K, $B={field}$ T"
 
@@ -671,4 +686,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    single()

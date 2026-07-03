@@ -43,10 +43,11 @@ params = {
     'periodic': 2,
     'domain_size': [1.0, 1.0, 2.0],
     'Bamp': 45,
-    'scattering_kernel_names': ['isotropic', 'forward_anisotropic'],
+    'scattering_kernel_names': ['isotropic', 'hotspot_phi'],
     'scattering_kernel_params': [
-        {'C_0': 2.5},
-        {'m': 2, 'nu_fc': 20.0, 'C_f1': 300.0, 'sigma_f0': 0.3},
+        {'C_0': 2.9},
+        {'phi_h': [0, 90, 180, 270], 'dphi_h': 90,
+         'C_h': 85, 'sigma_h': 0.13},
         {'rank': 20, 'low_res': 21}],
 }
 
@@ -60,6 +61,7 @@ label_to_latex = {
     "tzppp": "t_z'''",
     "sigma_f": "\\sigma_f",
     "sigma_b": "\\sigma_b",
+    "sigma_h": "\\sigma_h",
     "C_f0": "C_{f0}",
     "C_f1": "C_{f1}",
     "sigma_f0": "\\sigma_{f0}",
@@ -68,6 +70,8 @@ label_to_latex = {
     "C_b1": "C_{b1}",
     "sigma_b0": "\\sigma_{b0}",
     "sigma_b1": "\\sigma_{b1}",
+    "phi_h": "\\varphi_h",
+    "dphi_h": "\\Delta\\varphi_h",
     "phi_fc": "\\varphi_{fc}",
     "phi_fs": "\\varphi_{fs}",
     "phi_bc": "\\varphi_{bc}",
@@ -138,8 +142,13 @@ def get_scattering_latex(name, params):
                 "\\right|^{\\nu_{bs}}\\right)}\\right)")
         else:
             return text + "{2\\sigma_{b0}^2}\\right)"
+    elif name == 'hotspot_phi':
+        return "\\sum_{i}C_h\\mathrm{exp}\\left(-\\frac" \
+            "{(\\varphi-\\varphi_{h,i})^2}{2\\sigma_h^2}\\right)" \
+            "\\mathrm{exp}\\left(-\\frac{(\\varphi'-\\varphi'_{h,i})^2}" \
+            "{2\\sigma_h^2}\\right)"
     else:
-        raise ValueError(f"Unknown scattering kernel name: {name}")
+        return ""
 
 
 def print_params_left(ax, renderer, params, name=None, xshift=0.22,
@@ -208,7 +217,12 @@ def print_params_right(ax, renderer, params, params_y=None, xshift=0.05):
     for i, kernel in enumerate(params['scattering_kernel_names']):
         for (label, value) in params['scattering_kernel_params'][i].items():
             label_latex = label_to_latex.get(label, label)
-            params_text += f"${label_latex}={value:.3g}$"
+            if isinstance(value, (list, np.ndarray)):
+                value = [f"{v:.3g}" for v in value]
+                value = ", ".join(value)
+            else:
+                value = f"{value:.3g}"
+            params_text += f"${label_latex}={value}$"
             if label_latex.startswith('C_'):
                 params_text += " Å$^2$ THz"
             elif label.startswith('sigma'):
@@ -374,7 +388,7 @@ def _calc_heatmap(params, res=101):
     kx, ky = np.cos(phis), np.sin(phis)
     kz = np.zeros_like(kx)
     kernel = elecboltz.easy_params(params)['scattering_kernel']
-    if kernel.is_explicit:
+    if hasattr(kernel, 'eval_basis'):  # explicit basis evaluation
         kernel_values = np.zeros((len(phis), len(phis)))
         for i in range(kernel.coeffs.shape[0]):
             basis_vec_i = kernel.eval_basis(i, kx, ky, kz)

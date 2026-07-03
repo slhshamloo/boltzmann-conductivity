@@ -1,5 +1,5 @@
 from .bandstructure import BandStructure
-from .kernel import ScatteringKernel, CustomKernel
+from .kernel import ScatteringKernel, CustomKernel, SumKernel
 from .integrate import quad_points, quad_weights
 
 import numpy as np
@@ -370,37 +370,64 @@ class Conductivity:
             self._discretize_independent_out_scattering()
             return
 
-        if not self.scattering_kernel.is_explicit:
-            self.scattering_kernel.decompose(self.band)
-
-        if isinstance(self.scattering_kernel, CustomKernel):
-            self._fem_to_kernel = (
-                self._overlap_matrix @ self.scattering_kernel.projector).T
-            area_sums = self._jacobian_sums.diagonal() / 6
-            fem_basis_scattering_rate = angstrom**2 * (
-                (area_sums[None, :] @ self.scattering_kernel.projector)
-                @ self.scattering_kernel.coeffs
-                @ self.scattering_kernel.projector.T).flatten()
+        if isinstance(self.scattering_kernel, SumKernel):
+            self._fem_to_kernel = np.empty((0, len(self.band.kpoints)))
+            fem_basis_scattering_rate = np.zeros(len(self.band.kpoints))
+            coeffs = np.empty((0, 0))
+            if self.scattering_kernel.custom_kernel is not None:
+                fem_to_kernel, scattering_rate = \
+                    self._discretize_custom_kernel(
+                        self.scattering_kernel.custom_kernel)
+                coeffs = scipy.linalg.block_diag(
+                    coeffs, self.scattering_kernel.custom_kernel.coeffs)
+                self._fem_to_kernel = np.vstack(
+                    (self._fem_to_kernel, fem_to_kernel))
+                fem_basis_scattering_rate += scattering_rate
+            if len(self.scattering_kernel.explicit_kernels) > 0:
+                fem_to_kernel, scattering_rate = \
+                    self._discretize_explicit_kernel(self.scattering_kernel)
+                coeffs = scipy.linalg.block_diag(
+                    coeffs, self.scattering_kernel.coeffs)
+                self._fem_to_kernel = np.vstack(
+                    (self._fem_to_kernel, fem_to_kernel))
+                fem_basis_scattering_rate += scattering_rate
+        elif isinstance(self.scattering_kernel, CustomKernel):
+            self._fem_to_kernel, fem_basis_scattering_rate = \
+                self._discretize_custom_kernel(self.scattering_kernel)
+            coeffs = self.scattering_kernel.coeffs
         else:
-            self._fem_to_kernel = np.zeros(
-                (self.scattering_kernel.coeffs.shape[0],
-                 len(self.band.kpoints)),
-                dtype=self.scattering_kernel.coeffs.dtype)
-            sym_basis_scattering_rate, symmetry_overlap = \
-                self._calculate_kernel_quadratures()
-            # (U^(-1))^i_a = sum_j (M^(-1))^ij U^dagger_ja
-            transformed_scatrate = \
-                self._fem_to_kernel.conj().T @ sym_basis_scattering_rate
-            overlap_matrix_factor = scipy.sparse.linalg.splu(
-                self._overlap_matrix)
-            fem_basis_scattering_rate = \
-                overlap_matrix_factor.solve(transformed_scatrate.real)
-            if transformed_scatrate.dtype == complex:
-                fem_basis_scattering_rate += 1j * overlap_matrix_factor.solve(
-                    transformed_scatrate.imag)
-        self._in_scattering_matrix = \
-            -angstrom**2 * THz * self.scattering_kernel.coeffs
+            self._fem_to_kernel, fem_basis_scattering_rate = \
+                self._discretize_explicit_kernel(self.scattering_kernel)
+            coeffs = self.scattering_kernel.coeffs
+        self._in_scattering_matrix = -angstrom**2 * THz * coeffs
         self._calculate_scattering_invlen(fem_basis_scattering_rate)
+    
+    def _discretize_custom_kernel(self, kernel):
+        kernel.decompose(self.band)
+        fem_to_kernel = (self._overlap_matrix @ kernel.projector).T
+        area_sums = self._jacobian_sums.diagonal() / 6
+        fem_basis_scattering_rate = angstrom**2 * (
+            (area_sums[None, :] @ kernel.projector)
+            @ kernel.coeffs @ kernel.projector.T).flatten()
+        return fem_to_kernel, fem_basis_scattering_rate
+
+    def _discretize_explicit_kernel(self, kernel):
+        fem_to_kernel = np.zeros(
+            (kernel.coeffs.shape[0], len(self.band.kpoints)),
+            dtype=kernel.coeffs.dtype)
+        sym_basis_scattering_rate = self._calculate_kernel_quadratures(
+            kernel, fem_to_kernel)
+        # (U^(-1))^i_a = sum_j (M^(-1))^ij U^dagger_ja
+        transformed_scatrate = \
+            fem_to_kernel.conj().T @ sym_basis_scattering_rate
+        overlap_matrix_factor = scipy.sparse.linalg.splu(
+            self._overlap_matrix)
+        fem_basis_scattering_rate = \
+            overlap_matrix_factor.solve(transformed_scatrate.real)
+        if transformed_scatrate.dtype == complex:
+            fem_basis_scattering_rate += 1j * overlap_matrix_factor.solve(
+                transformed_scatrate.imag)
+        return fem_to_kernel, fem_basis_scattering_rate
 
     def _discretize_independent_out_scattering(self):
         if self.scattering_rate is None:
@@ -416,47 +443,36 @@ class Conductivity:
                 scattering = self.scattering_rate
         self._calculate_scattering_invlen(scattering)
     
-    def _calculate_kernel_quadratures(self):
+    def _calculate_kernel_quadratures(self, kernel, fem_to_kernel):
         scattering_quadratures = np.empty(
-            (self.scattering_kernel.coeffs.shape[0],
+            (kernel.coeffs.shape[0],
              *self._quadrature_points.shape[:-1]))
         weights = quad_weights[self.quadrature_order]
-        for a in range(self.scattering_kernel.coeffs.shape[0]):
-            scattering_quadratures[a] = self.scattering_kernel.eval_basis(
+        for a in range(kernel.coeffs.shape[0]):
+            scattering_quadratures[a] = kernel.eval_basis(
                 a, angstrom * self._quadrature_points[:, :, 0],
                 angstrom * self._quadrature_points[:, :, 1],
                 angstrom * self._quadrature_points[:, :, 2]).conj()
             for vertex in range(3):
                 fem_basis = quad_points[self.quadrature_order][:, vertex]
                 integrals = scattering_quadratures[a] @ (weights * fem_basis)
-                np.add.at(self._fem_to_kernel[a], self.band.kfaces[:, vertex],
+                np.add.at(fem_to_kernel[a], self.band.kfaces[:, vertex],
                           self._jacobians / 2 * integrals.flatten())
-        return self._integrate_kernel_quadratures(scattering_quadratures)
+        return self._integrate_kernel_quadratures(kernel, scattering_quadratures)
     
-    def _integrate_kernel_quadratures(self, scattering_quadratures):
+    def _integrate_kernel_quadratures(self, kernel, scattering_quadratures):
         sym_basis_scattering_rate = np.zeros(
-            self.scattering_kernel.coeffs.shape[0],
-            dtype=self.scattering_kernel.coeffs.dtype)
-        symmetry_overlap = np.zeros(
-            self.scattering_kernel.coeffs.shape,
-            dtype=self.scattering_kernel.coeffs.dtype)
+            kernel.coeffs.shape[0], dtype=kernel.coeffs.dtype)
         weights = quad_weights[self.quadrature_order]
-        for a in range(self.scattering_kernel.coeffs.shape[0]):
+        for a in range(kernel.coeffs.shape[0]):
             sym_basis_integral = np.sum(
                 self._jacobians / 2 # triangle areas
                 * (scattering_quadratures[a] @ weights[:, None]).flatten())
-            for b in range(self.scattering_kernel.coeffs.shape[1]):
+            for b in range(kernel.coeffs.shape[1]):
                 # 1/tau_b = sum_a C_ab^* int dk psi_a(k)
-                sym_basis_scattering_rate[b] += (
-                    angstrom**2 * np.conj(self.scattering_kernel.coeffs[a, b])
-                    * sym_basis_integral)
-                # tilde{M} = int dk psi_a(k) psi_b^*(k)
-                symmetry_overlap[a, b] = np.sum(
-                    self._jacobians / 2
-                    * ((scattering_quadratures[a]
-                        * scattering_quadratures[b].conj())
-                        @ weights[:, None]).flatten())
-        return sym_basis_scattering_rate, symmetry_overlap
+                sym_basis_scattering_rate[b] += angstrom**2 * (
+                    np.conj(kernel.coeffs[a, b]) * sym_basis_integral)
+        return sym_basis_scattering_rate
 
     def _calculate_scattering_invlen(self, scattering):
         # scattering_invlen is the inverse scattering length gamma
