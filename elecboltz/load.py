@@ -74,9 +74,11 @@ class Loader:
     x_vary_label : Union[str, Sequence[str]], optional
         Label of the independent variable(s) that varies inside the
         files.
-    x_search: Mapping[str, Union[int, float]]
+    x_label: Mapping[str, Union[int, float]]
         Dictionary mapping labels of independent variables inside file
         names to their values.
+    loaded_files : list[pathlib.Path]
+        List of the files that were loaded.
     """
     def __init__(self, x_vary_label: Union[str, Sequence[str]] = None,
                  x_search: Mapping[str, Sequence[Union[int, float]]] = {},
@@ -84,6 +86,8 @@ class Loader:
                  save_new_labels: bool = False, save_new_values: bool = False):
         self.x_vary_label = x_vary_label
         self.x_search = x_search
+        self.x_label = {}
+        self.loaded_files = []
         self._new_labels = set()
         self._found_idx = set()
         self.y_label = y_label
@@ -170,60 +174,38 @@ class Loader:
                 continue
 
             label_map = _extract_labels_and_values(file.name)
+            is_matched_to_search = True
             for label, value in label_map.items():
                 if self.save_new_labels:
                     if label not in self.x_search:
-                        if self.x_search != {}:
-                            self.x_search[label] = [value] * len(
-                                next(iter(self.x_search.values())))
-                        else:
-                            self.x_search[label] = []
+                        self.x_search[label] = [value]
                         self._new_labels.add(label)
-                if (self.save_new_values and label not in self._new_labels
-                        and label in self.x_search):
-                    self.x_search[label].append(value)
-
-            if self.save_new_values and (set(self.x_search.keys())
-                                         == self._new_labels):
-                # If all labels are new, we need to add a new index
-                for label in self.x_search:
-                    if label in label_map:
-                        self.x_search[label].append(label_map[label])
-                idx = len(next(iter(self.x_search.values()))) - 1
+                    elif label in self._new_labels:
+                        if value not in self.x_search[label]:
+                            self.x_search[label].append(value)
+                if self.save_new_values and label in self.x_search:
+                    if value not in self.x_search[label]:
+                        self.x_search[label].append(value)
+                if (label not in self.x_search
+                        or value not in self.x_search[label]):
+                    is_matched_to_search = False
+                    break
+            if not is_matched_to_search:
+                continue
             else:
-                possible_idx = set()
-                first_set = True
-                for label in set(self.x_search.keys()) - self._new_labels:
-                    if label in label_map:
-                        new_idx = [
-                            i for i, value in enumerate(self.x_search[label])
-                            if value == label_map[label]]
-                        if first_set:
-                            possible_idx = set(new_idx)
-                            first_set = False
-                        else:
-                            possible_idx.intersection_update(new_idx)
-                if not possible_idx:
-                    continue
+                self.loaded_files.append(file)
+            
+            for label, value in label_map.items():
+                if label not in self.x_label:
+                    self.x_label[label] = []
+                    while len(self.x_label[label]) < len(self.loaded_files)-1:
+                        self.x_label[label].append(np.nan)
+                    self.x_label[label].append(value)
                 else:
-                    idx = min(possible_idx)
-                    while possible_idx and idx in self._found_idx:
-                        possible_idx.remove(idx)
-                        idx = min(possible_idx, default=idx)
-                    # If the index is still repeated, add new index
-                    if idx in self._found_idx:
-                        for label in self.x_search:
-                            if label in label_map:
-                                self.x_search[label].append(label_map[label])
-                        idx = len(next(iter(self.x_search.values()))) - 1
-                    if self.save_new_labels:
-                        for label in self._new_labels:
-                            while len(self.x_search[label]) <= idx:
-                                self.x_search[label].append(label_map[label])
-                            self.x_search[label][idx] = label_map[label]
-                    self._found_idx.add(idx)
-
-            self._extract_data(file, idx, x_columns, y_columns,
+                    while len(self.x_label[label]) < len(self.loaded_files)-1:
+                        self.x_label[label].append(np.nan)
+                    self.x_label[label].append(value)
+            self._extract_data(file, x_columns, y_columns,
                                x_units, y_units, **kwargs)
         self.process_data()
 
@@ -306,19 +288,19 @@ class Loader:
             self.y_data[label] = np.concatenate(data)
 
         if isinstance(self.x_vary_label, str):
-            x_vary_label = [self.x_vary_label]
+            x_vary = [self.x_vary_label]
         else:
-            x_vary_label = self.x_vary_label
+            x_vary = self.x_vary_label
         if self.x_data_interpolated != {}:
             x_separate = self.x_data_interpolated
         else:
             x_separate = self.x_data_raw
 
-        for label in self.x_search:
-            for i, value in enumerate(self.x_search[label]):
+        for label in self.x_label:
+            for i, value in enumerate(self.x_label[label]):
                 self.x_data[label].append(
-                    np.full(len(x_separate[x_vary_label[0]][i]), value))
-        for label in x_vary_label:
+                    np.full(len(x_separate[x_vary[0]][i]), value))
+        for label in x_vary:
             for i, data in enumerate(x_separate[label]):
                 while len(self.x_data[label]) <= i:
                     self.x_data[label].append(np.array([]))
@@ -327,7 +309,7 @@ class Loader:
                        for label, data in self.x_data.items()}
 
         if self.split_by is not None:
-            split_values = np.unique(np.array(self.x_search[self.split_by]))
+            split_values = np.unique(np.array(self.x_label[self.split_by]))
             x_split = {label: [] for label in self.x_data}
             y_split = {label: [] for label in self.y_data}
             for value in split_values:
@@ -347,7 +329,7 @@ class Loader:
             elif label in ['theta', 'Btheta', 'Htheta']:
                 self.x_data['Btheta'] = self.x_data.pop(label, None)
 
-    def _extract_data(self, file, idx, x_columns, y_columns,
+    def _extract_data(self, file, x_columns, y_columns,
                       x_units, y_units, **kwargs):
         x_columns, y_columns = self._extract_xy_labels(
             file, x_columns, y_columns, **kwargs)
@@ -355,9 +337,9 @@ class Loader:
 
         # "pack" single labels into a list
         if isinstance(self.x_vary_label, str):
-            x_vary_label = [self.x_vary_label]
+            x_vary = [self.x_vary_label]
         else:
-            x_vary_label = self.x_vary_label
+            x_vary = self.x_vary_label
         if isinstance(self.y_label, str):
             y_label = [self.y_label]
         else:
@@ -367,14 +349,16 @@ class Loader:
         if isinstance(y_units, (int, float)):
             y_units = [y_units] * len(y_columns)
 
-        for label, col, unit in zip(x_vary_label, x_columns, x_units):
-            while len(self.x_data_raw[label]) <= idx:
+        for label, col, unit in zip(x_vary, x_columns, x_units):
+            while len(self.x_data_raw[label]) < len(self.loaded_files):
                 self.x_data_raw[label].append(np.array([]))
-            self.x_data_raw[label][idx] = unit * data[:, col]
+            self.x_data_raw[label][len(self.loaded_files)-1] = \
+                unit * data[:, col]
         for label, col, unit in zip(y_label, y_columns, y_units):
-            while len(self.y_data_raw[label]) <= idx:
+            while len(self.y_data_raw[label]) < len(self.loaded_files):
                 self.y_data_raw[label].append(np.array([]))
-            self.y_data_raw[label][idx] = unit * data[:, col]
+            self.y_data_raw[label][len(self.loaded_files)-1] = \
+                unit * data[:, col]
 
     def _extract_xy_labels(self, file, x_columns, y_columns, **kwargs):
         with open(file, 'r') as f:
