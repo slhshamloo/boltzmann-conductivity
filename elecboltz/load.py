@@ -366,8 +366,6 @@ class Loader:
                 line = f.readline()
             while line.startswith(kwargs.get('comments', '#')):
                 line = f.readline()
-            if self.x_vary_label is None:
-                self.x_vary_label = line.split(',')[0].strip()
 
             headers = [header.strip() for header in line.split(',')]
             if x_columns is None:
