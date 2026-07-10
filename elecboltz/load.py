@@ -186,8 +186,8 @@ class Loader:
                 if self.save_new_values and label in self.x_search:
                     if value not in self.x_search[label]:
                         self.x_search[label].append(value)
-                if (label not in self.x_search
-                        or value not in self.x_search[label]):
+                if (label in self.x_search
+                        and value not in self.x_search[label]):
                     is_matched_to_search = False
                     break
             if not is_matched_to_search:
