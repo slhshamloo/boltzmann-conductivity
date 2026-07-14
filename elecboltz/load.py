@@ -101,17 +101,6 @@ class Loader:
         self.x_data_interpolated = defaultdict(list)
         self.y_data_interpolated = defaultdict(list)
 
-    def __setattr__(self, name, value):
-        if name == 'x_search':
-            if value != {}:
-                values = list(value.values())
-                value_len = len(values[0])
-                for values in values:
-                    if value_len != len(values):
-                        raise ValueError("All labels in x_search must have"
-                                         " the same number of values.")
-        super().__setattr__(name, value)
-
     def load(self, folder_path: str = '.', prefix: str = '',
              recursive: bool = True,
              x_columns: Union[Sequence[int], Sequence[str]] = None,
