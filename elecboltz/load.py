@@ -298,7 +298,7 @@ class Loader:
                        for label, data in self.x_data.items()}
 
         if self.split_by is not None:
-            split_values = np.unique(np.array(self.x_label[self.split_by]))
+            split_values = np.sort(np.unique(np.array(self.x_label[self.split_by])))
             x_split = {label: [] for label in self.x_data}
             y_split = {label: [] for label in self.y_data}
             for value in split_values:
