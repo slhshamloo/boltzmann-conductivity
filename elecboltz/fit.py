@@ -286,6 +286,7 @@ class FittingRoutine:
                     for label in y_fit:
                         y_fit[label] *= y_normalize[label][i]
             x_data_set = {label: x[i] for label, x in x_data.items()}
+            y_data_set = {label: y[i] for label, y in y_data.items()}
             y_data_set = preprocess(x_data_set, y_data_set)
             y_fit = postprocess(x_data_set, y_fit)
             total_loss += loss(y_fit, y_data_set) / n_data_sets
@@ -395,8 +396,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         the values.
     x_normalize : Mapping, optional
         If provided, the y values will be normalized by the y value
-        at this x point. Note that shifting will always be done
-        before normalization. The mapping must have the same structure
+        at this x point. The mapping must have the same structure
         as ``x_data``, but with single values instead of arrays as
         the values. Note that shifts are applied before normalization.
     y_shift : Mapping, optional
