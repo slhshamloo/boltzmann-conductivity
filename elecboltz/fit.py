@@ -311,10 +311,10 @@ class FittingRoutine:
             x_data_set = {label: x[i] for label, x in x_data.items()}
             y_data_set = {label: y[i] for label, y in y_data.items()}
             y_data_set = preprocess(x_data_set, y_data_set)
-            y_fit_data_set = postprocess(x_data_set, y_fit)
-            y_fit_data_set = np.concatenate(list(y_fit.values()))
-            y_data_set = np.concatenate(list(y_data.values()))
-            total_loss += loss(y_fit_data_set, y_data_set) / n_data_sets
+            y_fit = postprocess(x_data_set, y_fit)
+            y_fit = np.concatenate(list(y_fit.values()))
+            y_data_set = np.concatenate(list(y_data_set.values()))
+            total_loss += loss(y_fit, y_data_set) / n_data_sets
         return total_loss
 
     def _build_obj(self, params):
