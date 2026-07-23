@@ -38,6 +38,20 @@ class FittingRoutine:
         Used for updating the ``params`` attribute and logging. If not
         provided, ``params`` will not be updated and the parameter names
         will not be mentioned in the log.
+    multi_params : Collection[str], optional
+        A collection of parameters that are to be fitted differently for
+        the different datasets in ``x_data`` and ``y_data``, if there is
+        more than one. To make it precise, each label must be a
+        dot-separated string, showing the "path" to the value in the
+        parameters dictionary, e.g. ``"band_params.mu"`` or
+        ``"scattering_params.nu.0"``.
+    multi_params_labels : Collection[str], optional
+        A collection of labels for the different datasets in ``x_data``
+        and ``y_data``. The output of fits that contain multi-parameters
+        will be saved in separate files for each dataset, and the labels
+        will be appended to the ``save_label`` with an underscore. If
+        not provided, the datasets will be labeled with their index
+        in the collection, e.g. ``"fit_label_0.json"``.
     print_log : bool, optional
         If True, the fitting progress will be printed to the console.
     
@@ -62,11 +76,15 @@ class FittingRoutine:
     """
     def __init__(self, init_params: Mapping, save_path: str = None,
                  save_label: str = "fit", update_keys: Collection[str] = None,
+                 multi_params: Collection[str] = None,
+                 multi_params_labels: Collection[str] = None,
                  print_log: bool = True):
         self.init_params = init_params
         self.save_path = save_path
         self.save_label = save_label
         self.update_keys = update_keys
+        self.multi_params = multi_params
+        self.multi_params_labels = multi_params_labels
         self.print_log = print_log
         self.iteration = 0
         self.last_time = time()
@@ -186,20 +204,25 @@ class FittingRoutine:
         if self.update_keys is not None:
             update_params = _build_params_from_flat(
                 self.update_keys, param_values)
+            if self.multi_params is not None:
+                for multi_param in self.multi_params:
+                    multi_param_list = _extract_flat_value(
+                        update_params, multi_param)
+                    labels = (self.multi_params_labels or [
+                        str(i) for i in range(len(multi_param_list))])
+                    _update_flat_value(update_params, multi_param,
+                                       dict(zip(labels, multi_param_list)))
+
             log_message += pformat(update_params) + "\n"
         else:
             log_message += pformat(param_values) + "\n"
         if convergence is not None:
             log_message += f"Convergence: {convergence:.5f}\n\n"
-        log_message += f"Iteration Runtime: {iter_time:.3f} seconds\n"
-        minutes, seconds = divmod(self.total_time, 60)
-        hours, minutes = divmod(minutes, 60)
-        log_message += f"Total Runtime: "
-        if hours > 0:
-            log_message += f"{int(hours)} hours "
-        if minutes > 0:
-            log_message += f"{int(minutes)} minutes "
-        log_message += f"{seconds:.1f} seconds\n"
+    
+        log_message += "Iteration Runtime: "
+        log_message += _get_hour_minute_second_string(iter_time) + "\n"
+        log_message += "Total Runtime: "
+        log_message += _get_hour_minute_second_string(self.total_time) + "\n\n"
 
         if self.print_log:
             print(log_message)
@@ -335,12 +358,14 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               init_params: Mapping, bounds: Mapping,
               multi_params: Collection[str] = [],
+              multi_params_labels: Collection[str] = None,
               x_shift: Mapping = None, x_normalize: Mapping = None,
               y_shift: Mapping = None, y_normalize: Mapping = None,
               loss: Callable = _mean_absolute_error,
               preprocess: Callable = _dummy_processor,
               postprocess: Callable = _dummy_processor,
-              save_path: str = None, save_label: str = None, **kwargs):
+              save_path: str = None, save_label: str = None,
+              print_log: bool = True, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
     This uses ``scipy.optimize.differential_evolution`` to perform a
@@ -389,6 +414,13 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         ``{'band_params': {'mu': [0.1, 0.2, 0.3]}}`` in ``init_params``
         or ``{'band_params': {'mu': [(0.1, 0.9), (0.2, 0.8),
         (0.3, 0.7)]}}`` in ``bounds``.
+    multi_params_labels : Collection, optional
+        A collection of labels for the different datasets in ``x_data``
+        and ``y_data``. The output of fits that contain multi-parameters
+        will be saved in separate files for each dataset, and the labels
+        will be appended to the ``save_label`` with an underscore. If
+        not provided, the datasets will be labeled with their index
+        in the collection, e.g. ``"fit_label_0.json"``.
     x_shift : Mapping, optional
         If provided, the y values will be shifted by the y value at
         this x point. The mapping must have the same structure as
@@ -429,6 +461,8 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         Label of the results. If not provided, will be set to
         ``f"y_label_x_label"``. If ``y_label` or ``x_label`` are
         collections of string, they will be joined with an underscore.
+    print_log : bool, optional
+        If True, the fitting progress will be printed to the console.
     **kwargs : dict, optional
         Additional keyword arguments passed to
         `scipy.optimize.differential_evolution`.
@@ -451,8 +485,9 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
             x0[i] = (x_min + x_max) / 2
 
     begin_time = datetime.now()
-    fitter = FittingRoutine(init_params, save_path, save_label,
-                            update_keys=update_keys)
+    fitter = FittingRoutine(
+        init_params, save_path, save_label, update_keys=update_keys,
+        multi_params_labels=multi_params_labels, print_log=print_log)
     result = differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
         args=(update_keys, x_data, y_data, multi_params,
@@ -465,7 +500,8 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     print()
     return _save_fit_result(
         result, init_params, update_keys, begin_time, end_time,
-        save_path, save_label)
+        save_path, save_label, multi_params=multi_params,
+        multi_params_labels=multi_params_labels)
 
 
 def _multiply_multi_params(update_keys, bounds, x0, init_params,
@@ -661,18 +697,19 @@ def _calc_y(cond, x_data, y_data, name, y_label_i, y_label_j):
 
 
 def _save_fit_result(result, init_params, update_keys, begin_time,
-                     end_time, save_path, save_label):
+                     end_time, save_path, save_label,
+                     multi_params=None, multi_params_labels=None):
     result = _result_to_serializable(result)
     result['fit_params'] = _build_params_from_flat(update_keys, result['x'])
     result['residual'] = result['fun']
     result['evaluations'] = result['nfev']
     result['iterations'] = result['nit']
-    result.pop('x')
-    result.pop('population')
-    result.pop('population_energies')
-    result.pop('fun')
-    result.pop('nfev')
-    result.pop('nit')
+    result.pop('x', None)
+    result.pop('population', None)
+    result.pop('population_energies', None)
+    result.pop('fun', None)
+    result.pop('nfev', None)
+    result.pop('nit', None)
 
     result['init_params'] = _build_params_from_flat(
         update_keys, [_extract_flat_value(init_params, key)
@@ -690,10 +727,33 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
     result['end_time'] = end_time.isoformat()
     result['runtime'] = (end_time - begin_time).total_seconds()
 
+    if multi_params:
+        # get length of multi-parameter values
+        multi_param_length = len(_extract_flat_value(
+            init_params, multi_params[0]))
+        multi_results = {}
+        for i in range(multi_param_length):
+            multi_result = deepcopy(result)
+            for multi_param in multi_params:
+                value = _extract_flat_value(init_params, multi_param)[i]
+                _update_flat_value(multi_result['fit_params'], multi_param, value)
+                _update_flat_value(multi_result['init_params'], multi_param, value)
+            if multi_params_labels is not None:
+                label = multi_params_labels[i]
+            else:
+                label = str(i)
+            multi_results[label] = multi_result
+
     if save_path is not None:
-        path = Path(save_path) / f"{save_label}.json"
-        with path.open('w') as f:
-            json.dump(result, f, indent=2)
+        if multi_params:
+            for multi_label, multi_result in multi_results.items():
+                path = Path(save_path) / f"{save_label}_{multi_label}.json"
+                with path.open('w') as f:
+                    json.dump(multi_result, f, indent=2)
+        else:
+            path = Path(save_path) / f"{save_label}.json"
+            with path.open('w') as f:
+                json.dump(result, f, indent=2)
     return result
 
 
@@ -710,10 +770,10 @@ def _update_result_chemical_potential(result):
         result['init_params']['band_params']['mu'] = \
             result['fixed_params']['band_params'].pop('mu')
         if len(result['fixed_params']['band_params']) == 0:
-            del result['fixed_params']['band_params'] 
+            result['fixed_params'].pop('band_params', None)
     else:
         result['fit_params']['chemical_potential'] = band.chemical_potential
-        del result['fixed_params']['chemical_potential']
+        result['fixed_params'].pop('chemical_potential', None)
 
 
 def _result_to_serializable(result):
@@ -732,3 +792,15 @@ def _result_to_serializable(result):
             except (TypeError, OverflowError):
                 serializable[key] = str(value)
     return serializable
+
+
+def _get_hour_minute_second_string(seconds):
+    minutes, seconds = divmod(seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    time_string = ""
+    if hours > 0:
+        time_string += f"{int(hours)} hours "
+    if minutes > 0:
+        time_string += f"{int(minutes)} minutes "
+    time_string += f"{int(round(seconds))} seconds"
+    return time_string
