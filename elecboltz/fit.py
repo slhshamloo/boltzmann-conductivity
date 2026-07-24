@@ -51,7 +51,12 @@ class FittingRoutine:
         will be saved in separate files for each dataset, and the labels
         will be appended to the ``save_label`` with an underscore. If
         not provided, the datasets will be labeled with their index
-        in the collection, e.g. ``"fit_label_0.json"``.
+        in the collection, e.g. ``"fit_label_0.json"``. These parameters must
+        themselves be collections in the parameters dictionary,
+        showing the value for every dataset e.g. ``{'band_params':
+        {'mu': [0.1, 0.2, 0.3]}}`` in ``init_params`` or
+        ``{'band_params': {'mu': [(0.1, 0.9), (0.2, 0.8),
+        (0.3, 0.7)]}}`` in ``bounds``.
     print_log : bool, optional
         If True, the fitting progress will be printed to the console.
     
@@ -94,9 +99,8 @@ class FittingRoutine:
             self, param_values: Sequence, param_keys: Sequence[str],
             x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
             y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
-            multi_params: Collection = [], x_shift: Mapping = None,
-            x_normalize: Mapping = None, y_shift: Mapping = None,
-            y_normalize: Mapping = None,
+            x_shift: Mapping = None, x_normalize: Mapping = None,
+            y_shift: Mapping = None, y_normalize: Mapping = None,
             loss: Callable = lambda y_fit, y_data: np.mean(
                 np.abs(y_fit - y_data)),
             preprocess: Callable = lambda x, y: y,
@@ -128,18 +132,6 @@ class FittingRoutine:
             collection of sequences, where each sequence corresponds to
             a different parameter to be fitted, e.g.
             ``{'rho_zz': [[1.1, 2.4, 3.8], [1.2, 2.5, 3.9]]}``.
-        multi_params : Collection, optional
-            A collection of parameters that are to be fitted differently
-            for the different datasets in ``x_data`` and ``y_data``, if
-            there is more than one. To make it precise, each label must
-            be a dot-separated string, showing the "path" to the value
-            in the parameters dictionary, e.g. ``"band_params.mu"`` or
-            ``"scattering_params.nu.0"``. These parameters must
-            themselves be collections in the parameters dictionary,
-            showing the value for every dataset e.g. ``{'band_params':
-            {'mu': [0.1, 0.2, 0.3]}}`` in ``init_params`` or
-            ``{'band_params': {'mu': [(0.1, 0.9), (0.2, 0.8),
-            (0.3, 0.7)]}}`` in ``bounds``.
         x_shift : Mapping, optional
             If provided, the y values will be shifted by the y value at
             this x point.
@@ -169,9 +161,9 @@ class FittingRoutine:
             Like ``preprocess``, but applied to the fit y values.
             By default, no postprocessing is applied.
         """
-        if multi_params:
+        if self.multi_params:
             return self._calculate_multi(
-                param_values, param_keys, x_data, y_data, multi_params,
+                param_values, param_keys, x_data, y_data,
                 x_shift, x_normalize, y_shift, y_normalize,
                 loss, preprocess, postprocess)
         else:
@@ -212,7 +204,6 @@ class FittingRoutine:
                         str(i) for i in range(len(multi_param_list))])
                     _update_flat_value(update_params, multi_param,
                                        dict(zip(labels, multi_param_list)))
-
             log_message += pformat(update_params) + "\n"
         else:
             log_message += pformat(param_values) + "\n"
@@ -269,7 +260,7 @@ class FittingRoutine:
         return loss(y_fit, y_data)
     
     def _calculate_multi(
-            self, param_values, param_keys, x_data, y_data, multi_params,
+            self, param_values, param_keys, x_data, y_data,
             x_shift, x_normalize, y_shift, y_normalize, loss,
             preprocess, postprocess):
         n_data_sets = len(next(iter(x_data.values())))
@@ -281,7 +272,7 @@ class FittingRoutine:
         params_data_set = deepcopy(params)
         for i in range(n_data_sets):
             y_fit = {label: np.zeros_like(y[i]) for label, y in y_data.items()}
-            for multi_param in multi_params:
+            for multi_param in self.multi_params:
                 _update_flat_value(
                     params_data_set, multi_param,
                     _extract_flat_value(params, multi_param)[i])
@@ -359,7 +350,7 @@ def _dummy_processor(x, y):
 def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               init_params: Mapping, bounds: Mapping,
-              multi_params: Collection[str] = [],
+              multi_params: Collection[str] = None,
               multi_params_labels: Collection[str] = None,
               x_shift: Mapping = None, x_normalize: Mapping = None,
               y_shift: Mapping = None, y_normalize: Mapping = None,
@@ -489,12 +480,12 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     begin_time = datetime.now()
     fitter = FittingRoutine(
         init_params, save_path, save_label, update_keys=update_keys,
-        multi_params_labels=multi_params_labels, print_log=print_log)
+        multi_params=multi_params, multi_params_labels=multi_params_labels,
+        print_log=print_log)
     result = differential_evolution(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
-        args=(update_keys, x_data, y_data, multi_params,
-              x_shift, x_normalize, y_shift, y_normalize,
-              loss, preprocess, postprocess),
+        args=(update_keys, x_data, y_data, x_shift, x_normalize,
+              y_shift, y_normalize, loss, preprocess, postprocess),
         **kwargs)
     end_time = datetime.now()
 
@@ -737,9 +728,8 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
         for i in range(multi_param_length):
             multi_result = deepcopy(result)
             for multi_param in multi_params:
-                value = _extract_flat_value(init_params, multi_param)[i]
+                value = _extract_flat_value(result['fit_params'], multi_param)[i]
                 _update_flat_value(multi_result['fit_params'], multi_param, value)
-                _update_flat_value(multi_result['init_params'], multi_param, value)
             if multi_params_labels is not None:
                 label = multi_params_labels[i]
             else:
