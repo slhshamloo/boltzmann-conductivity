@@ -269,8 +269,8 @@ class FittingRoutine:
         params = deepcopy(self.init_params)
         for key, value in zip(param_keys, param_values):
             _update_flat_value(params, key, value)
-        params_data_set = deepcopy(params)
         for i in range(n_data_sets):
+            params_data_set = deepcopy(params)
             y_fit = {label: np.zeros_like(y[i]) for label, y in y_data.items()}
             for multi_param in self.multi_params:
                 _update_flat_value(
