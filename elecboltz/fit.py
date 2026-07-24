@@ -85,6 +85,8 @@ class FittingRoutine:
                  multi_params_labels: Collection[str] = None,
                  print_log: bool = True):
         self.init_params = init_params
+        if multi_params:
+            self._init_params_multi = deepcopy(init_params)
         self.save_path = save_path
         self.save_label = save_label
         self.update_keys = update_keys
@@ -229,8 +231,7 @@ class FittingRoutine:
         params = deepcopy(self.init_params)
         for key, value in zip(param_keys, param_values):
             _update_flat_value(params, key, value)
-        params = easy_params(params)
-        cond = self._build_obj(params)
+        cond = self._build_obj(easy_params(params))
 
         name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
         y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
@@ -276,8 +277,7 @@ class FittingRoutine:
                 _update_flat_value(
                     params_data_set, multi_param,
                     _extract_flat_value(params, multi_param)[i])
-            params_data_set = easy_params(params_data_set)
-            cond = self._build_obj(params_data_set)
+            cond = self._build_obj(easy_params(params_data_set))
             for j in range(len(next(iter(y_fit.values())))):
                 x = {label: x[i][j] for label, x in x_data.items()}
                 y = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
@@ -309,20 +309,9 @@ class FittingRoutine:
         return total_loss
 
     def _build_obj(self, params):
-        """
-        Build the conductivity object with the given parameters.
-        """
-        band = BandStructure(**easy_params(self.init_params))
-        cond = Conductivity(band, **easy_params(self.init_params))
-        for key, value in params.items():
-            if key == 'band_params':
-                for band_key, band_value in value.items():
-                    band.band_params[band_key] = band_value
-            elif hasattr(band, key):
-                setattr(band, key, value)
-            elif hasattr(cond, key):
-                setattr(cond, key, value)
+        band = BandStructure(**params)
         band.discretize()
+        cond = Conductivity(band, **params)
         return cond
 
     def _get_label_indices(self, labels: Collection[str]):
