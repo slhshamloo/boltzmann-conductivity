@@ -241,9 +241,9 @@ class AzimuthalHotspotKernel(ScatteringKernel):
     the x-y plane with "hotspot" pairs.
 
     .. math::
-    C(\\phi, \\phi') = \sum_i C_{hi}\sum_j \\mathrm{exp}\\left(
-        -\\frac{(\phi-\phi_{hj})^2}{2\\sigma_h^2}\\right)
-        \\mathrm{exp}\\left(-\\frac{(\phi-\phi'_{hj})^2}
+    C(\\phi, \\phi') = C_h\sum_i \\mathrm{exp}\\left(
+        -\\frac{(\phi-\phi_{hi})^2}{2\\sigma_h^2}\\right)
+        \\mathrm{exp}\\left(-\\frac{(\phi-\phi'_{hi})^2}
         {2\\sigma_h^2}\\right)
     
     Pairs of "hotspots" separated by a particular angle will contribute
@@ -291,6 +291,71 @@ class AzimuthalHotspotKernel(ScatteringKernel):
         hotspot = _make_angle_periodic(self.phi_h[index])
         phi_diff = _make_angle_periodic(phi - hotspot)
         return np.exp(-phi_diff**2 / (2*self.sigma_h**2))
+
+
+class Quasi2DHotspotKernel(ScatteringKernel):
+    """Scattering kernel based on a Gaussian of the difference of the
+    angles of the wavevectors of the incoming and outgoing states in
+    the x-y plane with "hotspot" pairs, and a Gaussian in the
+    z-direction.
+
+    .. math::
+    C(\\phi, \\phi') = C_h \\mathrm{exp}\\left(
+        \\frac{k_z^2}{2\\sigma_z^2}\\right)
+        \\sum_i \\mathrm{exp}\\left(
+        -\\frac{(\phi-\phi_{hi})^2}{2\\sigma_phi^2}\\right)
+        \\mathrm{exp}\\left(-\\frac{(\phi-\phi'_{hi})^2}
+        {2\\sigma_phi^2}\\right)
+    
+    Pairs of "hotspots" separated by a particular angle will contribute
+    to the scattering kernel in the form of a double Gaussian peak.
+
+    Parameters
+    ----------
+    phi_h: Sequence of float
+        The position of the hotspots by their angle in the x-y plane.
+        In degrees, but converted to radians internally.
+    dphi_h : float
+        The connecting angle between the hotspots. In degrees, but
+        converted to radians internally. Only pairs of hotspots with
+        this particular connecting angle will contribute to the
+        scattering kernel.
+    C_h : float
+        The amplitude of each Gaussian pair in the scattering kernel.
+        In units of angstrom^2 THz.
+    sigma_phi : Sequence of float
+        The width of the Gaussians in phi (in radians).
+    sigma_z : float
+        The width of the Gaussian in the z-direction (in 1/angstrom).
+    tol : float
+        The tolerance for determining whether a pair of hotspots is
+        connected by the given connecting angle. This is in absolute
+        terms, in radians.
+    """
+    def __init__(self, phi_h, dphi_h, C_h, sigma_phi, sigma_z, tol=1e-5):
+            self.phi_h = np.radians(np.array(phi_h))
+            self.dphi_h = np.radians(dphi_h)
+            self.C_h = C_h
+            self.sigma_phi = sigma_phi
+            self.sigma_z = sigma_z
+            self.tol = tol
+            self.build_coeffs()
+    
+    def build_coeffs(self):
+        self.coeffs = np.zeros((len(self.phi_h), len(self.phi_h)))
+        for i in range(len(self.phi_h)):
+            for j in range(i, len(self.phi_h)):
+                phi_diff = _make_angle_periodic(self.phi_h[i] - self.phi_h[j])
+                if abs(abs(phi_diff) - self.dphi_h) < self.tol:
+                    self.coeffs[i, j] = self.C_h
+                    self.coeffs[j, i] = self.C_h
+
+    def eval_basis(self, index, kx, ky, kz):
+        phi = np.arctan2(ky, kx)
+        hotspot = _make_angle_periodic(self.phi_h[index])
+        phi_diff = _make_angle_periodic(phi - hotspot)
+        return (np.exp(-kz**2 / (2*self.sigma_z**2))
+                * np.exp(-phi_diff**2 / (2*self.sigma_phi**2)))
 
 
 class CustomKernel(ScatteringKernel):
@@ -699,6 +764,12 @@ def _build_explicit_kernel(kernel, kernel_params):
         return AzimuthalHotspotKernel(
             kernel_params['phi_h'], kernel_params['dphi_h'],
             kernel_params['C_h'], kernel_params['sigma_h'],
+            kernel_params.get('tol', 1e-5))
+    elif kernel == 'hotspot_phi_z':
+        return Quasi2DHotspotKernel(
+            kernel_params['phi_h'], kernel_params['dphi_h'],
+            kernel_params['C_h'], kernel_params['sigma_phi'],
+            kernel_params['sigma_z'],
             kernel_params.get('tol', 1e-5))
     elif kernel == 'spherical':
         return SphericalKernel(kernel_params)
