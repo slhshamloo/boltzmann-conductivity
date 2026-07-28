@@ -479,7 +479,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     end_time = datetime.now()
 
     print(result.message)
-    print()
+    print("\n\n")
     return _save_fit_result(
         result, init_params, update_keys, begin_time, end_time,
         save_path, save_label, multi_params=multi_params,
