@@ -670,6 +670,10 @@ def build_kernel(kernel, kernel_params):
           | and :math:`P_{l'}(\\cos \\theta)`. Note that, to keep the
           | normalization consistent, this kernel actually uses the
           | spherical harmonics :math:`Y^{m=0}_l(\\theta, \\phi)`.
+        * | ``'hotspot_phi'``: See
+          | `elecboltz.kernel.AzimuthalHotspotScattering` for details.
+        * | ``'hotspot_phi_z'``: See
+          | `elecboltz.kernel.Quasi2DHotspotScattering` for details.
         
         Kernels without explicit basis functions include:
 
@@ -717,8 +721,6 @@ def build_kernel(kernel, kernel_params):
           | ``\\nu_{bs}``, ``'phi_bc'``, and ``'phi_bs'``.
           | Any omitted parameters will be set to zero, except for ``'m'``,
           | which will be set to 1 by default.
-        * | ``'hotspot_phi'``: See
-          | `elecboltz.kernel.AzimuthalHotspotScattering` for details.
 
         If a list of kernels is provided, the resulting kernel is the
         sum of all the kernels in the list.
