@@ -66,7 +66,11 @@ class BandStructure:
         Fermi surface. If a collection of integers is provided, each
         element corresponds to the resolution along the respective
         axis. If a single integer is provided, it is used for all axes.
-    ncorrect : int, optional
+    filling_tuning_depth : int, optional
+        The depth of the adaptive octree integration used for calculating
+        the filling fraction when tuning the chemical potential to match
+        the fixed filling fraction.
+    n_correct : int, optional
         The number of correction steps for improving the accuracy of
         the discretization of the Fermi surface.
     sort_axis : int, optional
@@ -96,12 +100,6 @@ class BandStructure:
     periodic_projector : scipy.sparse.csr_array
         Projects quantities into the periodic k-space, where points that
         are periodic images of each other are mapped to the same point.
-    resolution : int or Sequence[int]
-        The resolution of the grids used for approximating the Fermi
-        surface geometry with the marching cubes algorithm.
-    ncorrect : int
-        The number of Newton--Raphson steps applied to correct the
-        triangulated surface after the marching cubes algorithm.
     """
     def __init__(
             self, dispersion: str, chemical_potential: float,
@@ -111,8 +109,9 @@ class BandStructure:
             periodic: Union[bool, Sequence[Union[int, bool]]] = True,
             axis_names: Union[Sequence[str], str] = ['a', 'b', 'c'],
             wavevector_names: Union[Sequence[str], str] = ['kx', 'ky', 'kz'],
-            resolution: Union[int, Sequence[int]] = 31, n_correct: int = 2,
-            sort_axis: int = None, **kwargs):
+            resolution: Union[int, Sequence[int]] = 31,
+            filling_tuning_depth: int = 6,
+            n_correct: int = 2,sort_axis: int = None, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         self.band_params = band_params
@@ -125,6 +124,7 @@ class BandStructure:
         self.axis_names = axis_names
         self.wavevector_names = wavevector_names
         self.resolution = resolution
+        self.filling_tuning_depth = filling_tuning_depth
         self.n_correct = n_correct
         self._parse_dispersion()
         self.kpoints = None
@@ -277,15 +277,9 @@ class BandStructure:
         self.m = np.sum(hbar * k_perp / v_perp * dks) / np.sum(dks) / m_e
         return self.m
     
-    def tune_chemical_potential(self, depth: int = 6) -> float:
+    def tune_chemical_potential(self) -> float:
         """Tune the ``chemical_potential`` to match the electron
         ``fixed_filling`` fraction.
-        
-        Parameters
-        ----------
-        depth : int, optional
-            The depth of the adaptive octree integration in
-            ``calculate_filling_fraction``.
         
         Returns
         -------
@@ -297,7 +291,8 @@ class BandStructure:
                 self.band_params['mu'] = mu
             else:
                 self.chemical_potential = mu
-            return (self.calculate_filling_fraction(depth=depth)
+            return (self.calculate_filling_fraction(
+                        depth=self.filling_tuning_depth)
                     - self.fixed_filling)
         energy_scale_guess = max(np.abs(self.energy_func(0, 0, 0)),
                                  np.abs(self.energy_func(*self._gvec)))
