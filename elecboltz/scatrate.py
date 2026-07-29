@@ -71,6 +71,29 @@ class AzimuthalScattering(ScatteringFunction):
             self.params['sym']*phi)) ** self.params['power'])
 
 
+class ExpAzimuthalScattering(ScatteringFunction):
+    """A class for exponential azimuthal scattering.
+
+    This class represents a scattering function that depends on the
+    azimuthal angle of the wavevector in the x-y plane, defined by
+    parameters `gamma_k`, `power`, `trig`, and `sym`. The scattering
+    function is defined as `gamma_k * exp(-power * abs(trig(sym * phi)))`,
+    where `phi` is the angle of the projection of the wavevector k in
+    the x-y plane with the x axis, and `trig` is a trigonometric
+    function (cos, sin, tan, or cot) depending on the `trig` parameter.
+    """
+    def __init__(self, params):
+        super().__init__(params)
+        trig_funcs = {'cos': np.cos, 'sin': np.sin, 'tan': np.tan, 'cot': _cot}
+        self.trig_func = trig_funcs[params['trig']]
+        if 'sym' not in params:
+            self.params['sym'] = 1
+    def __call__(self, kx, ky, **kwargs):
+        phi = np.arctan2(ky, kx)
+        return (self.params['gamma_k'] * np.exp(-self.params['power'] *
+                np.abs(self.trig_func(self.params['sym']*phi))))
+
+
 class ScatteringSum(ScatteringFunction):
     """A class for summing multiple scattering functions.
 
@@ -104,6 +127,18 @@ def build_scattering_function(
       | Alias for ``'cos'`` with sym being set to the integer in [n].
     * | ``'sin[n]phi'``, ``'tan[n]phi'``, and ``'cot[n]phi'``: Same as
       | ``'cos[n]phi'`` but using different trigonometric functions.
+    * | ``'expcos'``: ``gamma_k * exp(-power * abs(cos(sym*phi)))``
+      | where `phi` is the angle of the projection of the wavevector k
+      | in the x-y plane with the x axis. The rest are parameters of
+      | the model.
+    * | ``'expsin'``, ``'exptan'``, and ``'expcot'``: Same as
+      | ``'expcos'`` but using different trigonometric functions.
+    * | ``'expcos[n]phi'``: Where [n] is some integer, e.g.
+      | ``'expcos2phi'``. Alias for ``'expcos'`` with sym being set to
+      | the integer in [n].
+    * | ``'expsin[n]phi'``, ``'exptan[n]phi'``, and ``'expcot[n]phi'``:
+      | Same as ``'expcos[n]phi'`` but using different trigonometric
+      | functions.
 
     Parameters
     ----------
@@ -132,6 +167,12 @@ def build_scattering_function(
             if len(model) > 3:
                 params['sym'] = int(model[3:-3])
             scattering_functions.append(AzimuthalScattering(params))
+        elif model.startswith('exp'):
+            params = _get_params(scattering_params, ['gamma_k', 'power'], i)
+            params['trig'] = model[3:6]
+            if len(model) > 6:
+                params['sym'] = int(model[6:-3])
+            scattering_functions.append(ExpAzimuthalScattering(params))
     return ScatteringSum(scattering_functions)
 
 
