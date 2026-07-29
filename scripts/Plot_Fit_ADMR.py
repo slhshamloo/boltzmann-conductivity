@@ -1,5 +1,5 @@
 import elecboltz
-import os, pathlib
+import os, pathlib, re
 import sympy, scipy
 import numpy as np
 import matplotlib as mpl
@@ -32,60 +32,69 @@ mpl.rcParams['lines.markersize'] = 20
 mpl.rcParams['axes.formatter.useoffset'] = False
 
 
-label_to_latex = {
-    "tp": "t'",
-    "tpp": "t''",
-    "tppp": "t'''",
-    "tz": "t_z",
-    "tzp": "t_z'",
-    "tzpp": "t_z''",
-    "tzppp": "t_z'''",
-    "sigma_f": "\\sigma_f",
-    "sigma_b": "\\sigma_b",
-    "sigma_h": "\\sigma_h",
-    "dphi_h": "\\Delta\\varphi_h",
-    "C_f0": "C_{f0}",
-    "C_f1": "C_{f1}",
-    "sigma_f0": "\\sigma_{f0}",
-    "sigma_f1": "\\sigma_{f1}",
-    "C_b0": "C_{b0}",
-    "C_b1": "C_{b1}",
-    "sigma_b0": "\\sigma_{b0}",
-    "sigma_b1": "\\sigma_{b1}",
-    "phi_fc": "\\varphi_{fc}",
-    "phi_fs": "\\varphi_{fs}",
-    "phi_bc": "\\varphi_{bc}",
-    "phi_bs": "\\varphi_{bs}",
-    "phi_h": "\\varphi_h",
-    "nu_fc": "\\nu_{fc}",
-    "nu_fs": "\\nu_{fs}",
-    "nu_bc": "\\nu_{bc}",
-    "nu_bs": "\\nu_{bs}"
-}
-
-
 def get_params():
     return {
-    'a': 3.75,
-    'b': 3.75,
-    'c': 13.2,
+    'a': 3.76,
+    'b': 3.76,
+    'c': 13.22,
     'energy_scale': 160,
-    'band_params': {'mu': -0.82439881, 't': 1, 'tp': -0.13642799,
-                    'tpp': 0.06816836, 'tz': 0.06512192},
+    'band_params': {'mu': -0.81, 't': 1, 'tp': -0.132,
+                    'tpp': 0.066, 'tz': 0.07},
     'resolution': 41,
     'periodic': 2,
     'domain_size': [1.0, 1.0, 2.0],
-    'Bamp': 45,
+    'Bamp': 42.8,
     'scattering_kernel_names': ['isotropic', 'hotspot_phi'],
     'scattering_kernel_params': [
-        {'C_0': 2.9},
+        {'C_0': 3.0},
         {'phi_h': [0, 90, 180, 270], 'dphi_h': 90,
-         'C_h': 85, 'sigma_h': 0.13},
+            'C_h': 220, 'sigma_h': 0.1},
         {'rank': 20, 'low_res': 21}],
-}
+    }
 
 
-def get_scattering_latex(name, params):
+def label_to_latex(label: str):
+    latex_map = {
+        'sigma': r"\sigma",
+        'phi': r"\varphi",
+        'nu': r"\nu",
+        'gamma': r"\Gamma",
+        'dphi': r"\Delta\varphi",
+        'power': r"\nu",
+    }
+
+    # primes for t / tz variants: tp -> t', tpp -> t'' etc.
+    m = re.match(r'^(t|tz)(p+)$', label)
+    if m:
+        base = m.group(1)
+        primes = "'" * len(m.group(2))
+        return ("t_z" if base == "tz" else "t") + primes
+
+    parts = label.split("_")
+    head = parts[0]
+    tail = "".join(parts[1:]) if len(parts) > 1 else ""
+    head = latex_map.get(head, head)
+    tail = latex_map.get(tail, tail)
+    if len(tail) > 1:
+        tail = "{" + tail + "}"
+    return head + "_" + tail if tail else head
+
+
+def get_scattering_latex(model, params):
+    if model == 'isotropic':
+        return "\\Gamma_0"
+    elif any(model.startswith(trig) for trig in ['cos', 'sin', 'tan', 'cot']):
+        trig = model[:3]
+        if len(model) > 3:
+            sym = int(model[3:-3])
+        else:
+            sym = params.get('sym', 1)
+        return f"\\Gamma_k |{trig}({sym}\\phi)|^{{\\nu}}"
+    else:
+        return ""
+
+
+def get_scattering_kernel_latex(name, params):
     if name == 'isotropic':
         return "C_0"
     elif name == 'forward':
@@ -144,7 +153,7 @@ def get_scattering_latex(name, params):
                 "\\right|^{\\nu_{bs}}\\right)}\\right)")
         else:
             return text + "{2\\sigma_{b0}^2}\\right)"
-    elif name == 'hotspot_phi':
+    elif name.startswith('hotspot_phi'):
         return "\\sum_{i}C_h\\mathrm{exp}\\left(-\\frac" \
             "{(\\varphi-\\varphi_{h,i})^2}{2\\sigma_h^2}\\right)" \
             "\\mathrm{exp}\\left(-\\frac{(\\varphi'-\\varphi'_{h,i})^2}" \
@@ -181,7 +190,7 @@ def print_params_left(ax, renderer, params, name=None, xshift=0.05,
     for (label, value) in params['band_params'].items():
         if label != 't':
             value /= params['band_params']['t']
-            label = label_to_latex.get(label, label)
+            label = label_to_latex(label)
             if value != 0:
                 params_text += f"\n${label}={value:.4g}t$"
             else:
@@ -215,10 +224,30 @@ def print_params_right(ax, renderer, params, params_y=None, xshift=0.0):
     bbox = t.get_window_extent(renderer=renderer)
     ypos -= ax.transAxes.inverted().transform_bbox(bbox).height + 0.005
 
+    if 'scattering_kernel_names' in params:
+        params_text = get_scat_params_kernel(params)
+    else:
+        params_text = get_scat_params(params)
+    ax.text(xshift, ypos, params_text, color="black", fontsize='x-small',
+            ha='left', va='top', transform=ax.transAxes)
+
+
+def get_scat_params(params):
+    params_text = ''
+    for (label, value) in params['scattering_params'].items():
+        label_latex = label_to_latex(label)
+        params_text += f"${label_latex}={value:.4g}$"
+        if label.startswith('gamma'):
+            params_text += " THz"
+        params_text += '\n'
+    return params_text
+
+
+def get_scat_params_kernel(params):
     params_text = ''
     for i, kernel in enumerate(params['scattering_kernel_names']):
         for (label, value) in params['scattering_kernel_params'][i].items():
-            label_latex = label_to_latex.get(label, label)
+            label_latex = label_to_latex(label)
             if isinstance(value, (list, np.ndarray)):
                 value = [f"{v:.3g}" for v in value]
                 value = ", ".join(value)
@@ -229,15 +258,14 @@ def print_params_right(ax, renderer, params, params_y=None, xshift=0.0):
                 params_text += " Å$^2$ THz"
             elif label.startswith('sigma'):
                 if kernel in ['forward_phi', 'backward_phi',
-                              'forward_anisotropic', 'backward_anisotropic']:
+                                'forward_anisotropic', 'backward_anisotropic']:
                     params_text += " rad"
                 else:
                     params_text += " Å$^{-1}$"
             elif label.startswith('phi'):
                 params_text += "$^\\circ$"
             params_text += '\n'
-    ax.text(xshift, ypos, params_text, color="black", fontsize='x-small',
-            ha='left', va='top', transform=ax.transAxes)
+    return params_text
 
 
 def print_equations(ax, renderer, params, xshift=0.02):
@@ -253,30 +281,45 @@ def print_equations(ax, renderer, params, xshift=0.02):
     for direction in ['x', 'y', 'z']:
         latex_dispersion = latex_dispersion.replace(
             f"k{direction}", f"k_{direction}")
-    for label in label_to_latex:
-        latex_dispersion = latex_dispersion.replace(
-            label, label_to_latex[label])
+    for m in re.finditer(r'^(t|tz)(p+)$', latex_dispersion):
+        base = m.group(1)
+        primes = "'" * len(m.group(2))
+        return ("t_z" if base == "tz" else "t") + primes
     yshift = _print_wrapped_equation(
         ax, renderer, xshift, ypos, "\\varepsilon_{\\mathbf{k}}",
         latex_dispersion, fontsize='x-small')
     ypos -= yshift + 0.05
 
-    t = ax.text(xshift, ypos, "Scattering Kernel", color="darkturquoise",
+    t = ax.text(xshift, ypos, "Scattering Model", color="darkturquoise",
                 fontsize='small', ha='left', va='top', transform=ax.transAxes)
     bbox = t.get_window_extent(renderer=renderer)
     ypos -= ax.transAxes.inverted().transform_bbox(bbox).height + 0.03
-    latex_scattering = get_scattering_latex(
-        params['scattering_kernel_names'][0],
-        params['scattering_kernel_params'][0])
-    for i, kernel in enumerate(params['scattering_kernel_names'][1:], start=1):
-        part = get_scattering_latex(
-            kernel, params['scattering_kernel_params'][i])
-        if part.startswith('+') or part.startswith('-'):
-            latex_scattering += part
-        else:
-            latex_scattering += " + " + part
-    _print_wrapped_equation(ax, renderer, xshift, ypos,
-                            "C(\\mathbf{k}, \\mathbf{k'})", latex_scattering)
+    if 'scattering_kernel_names' in params:
+        latex_scattering = get_scattering_kernel_latex(
+            params['scattering_kernel_names'][0],
+            params['scattering_kernel_params'][0])
+        for i, kernel in enumerate(params['scattering_kernel_names'][1:], start=1):
+            part = get_scattering_kernel_latex(
+                kernel, params['scattering_kernel_params'][i])
+            if part.startswith('+') or part.startswith('-'):
+                latex_scattering += part
+            else:
+                latex_scattering += " + " + part
+        _print_wrapped_equation(
+            ax, renderer, xshift, ypos, "C(\\mathbf{k}, \\mathbf{k'})",
+            latex_scattering)
+    else:
+        latex_scattering = get_scattering_latex(
+            params['scattering_models'][0], params['scattering_params'])
+        for model in params['scattering_models'][1:]:
+            part = get_scattering_latex(model, params['scattering_params'])
+            if part.startswith('+') or part.startswith('-'):
+                latex_scattering += part
+            else:
+                latex_scattering += " + " + part
+        _print_wrapped_equation(
+            ax, renderer, xshift, ypos, "\\Gamma_{\\mathrm{tot}}",
+            latex_scattering)
 
 
 def _print_wrapped_equation(ax, renderer, xpos, ypos, lhs, equation,
@@ -332,8 +375,8 @@ def _print_wrapped_equation(ax, renderer, xpos, ypos, lhs, equation,
     return yshift
 
 
-def plot_full_fermi_surface_slices(ax, renderer, params, n_interp=300, res=101,
-                                   **kwargs):
+def plot_full_fermi_surface_slices(
+        ax, renderer, params, n_interp=300, res=101, **kwargs):
     band = elecboltz.BandStructure(**params)
     ax.set_xlim(-band.domain_size[0] * np.pi / band.unit_cell[0],
                 band.domain_size[0] * np.pi / band.unit_cell[0])
@@ -345,10 +388,10 @@ def plot_full_fermi_surface_slices(ax, renderer, params, n_interp=300, res=101,
     ax_text = divider.append_axes("right", size="5%", pad=0.1)
     ax_text.axis('off')
 
-    colors = ['lime', 'red', 'blue']
-    labels = [r'$0$', r'$\frac{3\pi}{2c}$', r'$\frac{3\pi}{c}$']
-    kzs = [0.0, 1.5 * np.pi / band.unit_cell[2],
-           3.0 * np.pi / band.unit_cell[2]]
+    colors = ['limegreen', 'red', 'blue']
+    labels = [r'$0$', r'$\frac{\pi}{c}$', r'$\frac{2\pi}{c}$']
+    kzs = [0.0, np.pi / band.unit_cell[2],
+           2 * np.pi / band.unit_cell[2]]
     ypos = 0.0
     for kz, color, label in zip(kzs, colors, labels):
         plot_fermi_surface_slice(ax, band, kz=kz, n_interp=n_interp,
@@ -362,11 +405,19 @@ def plot_full_fermi_surface_slices(ax, renderer, params, n_interp=300, res=101,
     ax.tick_params(axis='both', labelsize='x-small')
     ax.set_xlabel("$k_x$ (Å$^{-1}$)", fontsize='x-small', labelpad=2)
     ax.set_ylabel("$k_y$ (Å$^{-1}$)", fontsize='x-small', labelpad=2)
+    ax.set_xticks(
+        [-np.pi / band.unit_cell[0], 0, np.pi / band.unit_cell[0]],
+        labels=[f"$\\pi/{band.axis_names[0]}$", "$0$",
+                f"$\\pi/{band.axis_names[0]}$"])
+    ax.set_yticks(
+        [-np.pi / band.unit_cell[1], 0, np.pi / band.unit_cell[1]],
+        labels=[f"$\\pi/{band.axis_names[1]}$", "$0$",
+                f"$\\pi/{band.axis_names[1]}$"])
 
 
 def plot_fermi_surface_slice(ax, band, kz=0.0, n_interp=300, res=101,
                              **kwargs):
-    kxs, kys = _get_plane_kx_ky(band, kz, n_interp, res)
+    kxs, kys = _get_fermi_surface_slice(band, kz, n_interp, res)
     for kx, ky in zip(kxs, kys):
         ax.plot(kx, ky, **kwargs)
 
@@ -386,6 +437,64 @@ def plot_scattering_heatmap(fig, ax, params, res=101, **kwargs):
     ax.set_ylabel(r"$\varphi'$ ($^\circ$)", fontsize='x-small', labelpad=2)
     ax.set_xticks([-180, -90, 0, 90, 180])
     ax.set_yticks([-180, -90, 0, 90, 180])
+
+
+def plot_scattering_curve_heatmap(
+        fig, ax, params, kz=0.0, n_interp=300, res=101,**kwargs):
+    # Code based on the example at:
+    # https://matplotlib.org/stable/gallery/lines_bars_and_markers/multicolored_line.html
+    kwargs['capstyle'] = 'butt'
+    easy_params = elecboltz.easy_params(params)
+    band = elecboltz.BandStructure(**easy_params)
+    band.discretize()
+    cond = elecboltz.Conductivity(band, **easy_params)
+    cond.calculate()
+
+    kxs, kys = _get_fermi_surface_slice(
+        band, kz=kz, n_interp=n_interp, res=res)
+    for kx, ky in zip(kxs, kys):
+        kx_mid = np.hstack((kx[0], 0.5 * (kx[1:] + kx[:-1]), kx[-1]))
+        ky_mid = np.hstack((ky[0], 0.5 * (ky[1:] + ky[:-1]), ky[-1]))
+        coord_start = np.column_stack((kx_mid[:-1], ky_mid[:-1])
+                                      )[:, np.newaxis, :]
+        coord_mid = np.column_stack((kx, ky))[:, np.newaxis, :]
+        coord_end = np.column_stack((kx_mid[1:], ky_mid[1:]))[:, np.newaxis, :]
+        segments = np.concatenate((coord_start, coord_mid, coord_end), axis=1)
+
+        lc = mpl.collections.LineCollection(segments, **kwargs)
+        if isinstance(cond.scattering_rate, (int, float)):
+            lc.set_array(np.full_like(kx, cond.scattering_rate))
+        else:
+            scat = cond.scattering_rate(kx=kx, ky=ky, kz=kz)
+            if isinstance(scat, (int, float)):
+                scat = np.full_like(kx, scat)
+            lc.set_array(scat)
+        ax.add_collection(lc)
+
+    ax.tick_params(axis='both', labelsize='x-small')
+    ax.set_xlabel("$k_x$ (Å$^{-1}$)", fontsize='x-small', labelpad=2)
+    ax.set_ylabel("$k_y$ (Å$^{-1}$)", fontsize='x-small', labelpad=2)
+    ax.set_xticks(
+            [-np.pi / band.unit_cell[0], 0, np.pi / band.unit_cell[0]],
+            labels=[f"$\\pi/{band.axis_names[0]}$", "$0$",
+                    f"$\\pi/{band.axis_names[0]}$"])
+    ax.set_yticks(
+        [-np.pi / band.unit_cell[1], 0, np.pi / band.unit_cell[1]],
+        labels=[f"$\\pi/{band.axis_names[1]}$", "$0$",
+                f"$\\pi/{band.axis_names[1]}$"])
+    # ax.set_xlim(-band.domain_size[0] * np.pi / band.unit_cell[0],
+    #                 band.domain_size[0] * np.pi / band.unit_cell[0])
+    # ax.set_ylim(-band.domain_size[1] * np.pi / band.unit_cell[1],
+    #             band.domain_size[1] * np.pi / band.unit_cell[1])
+    ax.autoscale()
+    ax.set_aspect('equal')
+
+    divider = make_axes_locatable(ax)
+    cax = divider.append_axes("right", size="5%", pad=0.1)
+    cbar = fig.colorbar(ax.collections[-1], cax=cax,
+                        label=r"$\Gamma_{\mathrm{tot}}(\mathbf{k})$ (THz)")
+    cbar.ax.tick_params(labelsize='xx-small')
+    cbar.ax.set_ylabel(cbar.ax.get_ylabel(), fontsize='xx-small')
 
 
 def _calc_heatmap(params, res=101):
@@ -434,7 +543,7 @@ def _interpolate_to_phi(values, kx, ky, phi_interp):
     return interp(interp_points).reshape(len(phi_interp), len(phi_interp))
 
 
-def _get_plane_kx_ky(band, kz, n_interp=300, res=None):
+def _get_fermi_surface_slice(band, kz, n_interp=300, res=None):
     gvec = band.domain_size * np.pi / band.unit_cell
     res = res or band.resolution
     if isinstance(res, (int, float)):
@@ -445,8 +554,8 @@ def _get_plane_kx_ky(band, kz, n_interp=300, res=None):
         band.chemical_potential)
     kx, ky = _get_interpolated_contours_in_order(contours, res, n_interp)
     for i in range(len(kx)):
-        kx[i] = kx[i] * 2 * gvec[0] / res[0] - gvec[0]
-        ky[i] = ky[i] * 2 * gvec[1] / res[1] - gvec[1]
+        kx[i] = kx[i] * 2 * gvec[0] / res[0] - gvec[0] + gvec[0] / res[0]
+        ky[i] = ky[i] * 2 * gvec[1] / res[1] - gvec[1] + gvec[1] / res[1]
     return kx, ky
 
 
@@ -524,13 +633,12 @@ def _plot_data_and_fit_curves(axs, theta_range, rho_zz, x_data, y_data,
         axs[1].plot(theta_range, units_fit * rho_zz[i, :], color=color,
                     label = f"${phi}^\\circ$", **kwargs)
 
-    axs[1].legend(title=r"$\phi$", fontsize='x-small',
-                  title_fontsize='small', frameon=False)
+    axs[1].legend(title=r"$\phi$", frameon=False)
 
 
 def _set_fit_plot_labels(fig, axs, theta_norm, exp_info, units_label, ticks):
     if exp_info is not None:
-        axs[0].text(0.05, 0.03, exp_info, fontsize='small',
+        axs[0].text(0.05, 0.04, exp_info,
                     ha='left', va='bottom', transform=axs[0].transAxes)
 
     ylabel = "$\\rho_{zz}(\\theta)$"
@@ -609,7 +717,13 @@ def plot_info(fig, params, name=None, electron_doped=False,
 
     plot_full_fermi_surface_slices(ax_fermi, renderer, params,
                                    n_interp=n_interp, res=res, lw=1)
-    plot_scattering_heatmap(fig, ax_scat_heat, params, res=res, cmap='plasma')
+    if 'scattering_kernel_names' in params:
+        plot_scattering_heatmap(
+            fig, ax_scat_heat, params, res=res, cmap='plasma')
+    else:
+        plot_scattering_curve_heatmap(
+            fig, ax_scat_heat, params, n_interp=n_interp,
+            res=res, cmap='plasma', lw=6)
     params_y = print_params_left(ax_band_params, renderer, params,
                                  name=name, electron_doped=electron_doped)
     print_params_right(ax_scat_params, renderer, params, params_y=params_y)
@@ -648,42 +762,74 @@ def plot_admr(
         plt.close(fig1)
 
 
-def single():
-    phis = [0, 15, 30, 45]
-    temperature = 25
-    field = 45
-    n_interp = 35
-
+def single(temperature=20, field=42.8, n_interp=100):
+    runpath = os.path.dirname(os.path.relpath(__file__))
     loader = elecboltz.Loader(
         x_vary_label='theta', y_label='rho_zz',
-        x_search={'phi': phis.copy(), 'H': [field] * 4},
-        save_new_labels=False)
-    loader.load(
-        os.path.dirname(os.path.relpath(__file__)) + "/../data/ADMR_NdLSCO",
-        f"NdLSCO_0p25_rho_c-vs-theta_{temperature}K_",
-        x_columns=[0], y_columns=[1])
+        x_search={'H': [field], 'T': [temperature], 'phi': [15, 45]},
+        save_new_labels=True)
+    loader.load(runpath + f"/../data/processed/",
+                x_columns=[0], y_columns=[1], delimiter=',')
     loader.interpolate(n_interp, x_normalize=0)
 
     folder_name = \
-        f"ADMR_NdLSCO_T{temperature}_relative_band=t+tp+tpp+tz" \
-        f"_scat=hotspot_free=C0+Ch+sigmah"
-    filedir = os.path.dirname(os.path.relpath(__file__))
-    exp_info = f"Nd-LSCO, $p=0.24$\n$T={temperature}$ K, $B={field}$ T"
+        f"LSCO_ADMR_p=0.24_T={temperature}_phi=15+45_relative" \
+        f"_band=t+tp+tpp+tz_scat=hotspot_free=C0+Ch"
+    exp_info = f"LSCO, $p=0.24$\n$T={temperature}$ K, $B={field}$ T"
 
-    save_path = (filedir + "/../fits/ADMR_NdLSCO/" + folder_name
+    save_path = (runpath + "/../fits/" + folder_name
                  + "/" + folder_name)
     fit_path = save_path + ".json"
 
     # forward calculation
-    # save_path = filedir + "/test"
+    # save_path = runpath + "/test"
     # fit_path = None
 
     plot_admr(
         loader.x_data, loader.y_data, save_path+".pdf", fit_path=fit_path,
-        name="Nd-LSCO", exp_info=exp_info, save_rho=True, theta_norm=0,
-        cmap='Blues', n_interp_fit=n_interp, electron_doped=False,
-        ticks=[0, 30, 60, 90, 120])
+        name="LSCO", exp_info=exp_info, save_rho=True, theta_norm=0,
+        cmap='Blues', n_interp_fit=n_interp, electron_doped=False)
+
+
+def batch(experiment_label, fit_label, temperatures, field, n_interp=100):
+    runpath = os.path.dirname(os.path.relpath(__file__))
+    folder_name = experiment_label + "_" + fit_label
+
+    for T in temperatures:
+        loader = elecboltz.Loader(
+            x_vary_label='theta', y_label='rho_zz',
+            x_search={'H': [field], 'T': [T], 'phi': [15, 45]},
+            save_new_labels=True)
+        loader.load(runpath + f"/../data/processed/",
+                    x_columns=[0], y_columns=[1], delimiter=',')
+        loader.interpolate(n_interp, x_normalize=0)
+
+        if 'multi' in fit_label:
+            fit_name = folder_name + f"_T={T}"
+        else:
+            fit_name = experiment_label + f"_T={T}_" + fit_label
+        save_path = (runpath + "/../fits/" + folder_name
+                     + "/" + fit_name)
+        fit_path = save_path + ".json"
+
+        # forward calculation
+        # save_path = runpath + "/test"
+        # fit_path = None
+
+        exp_info = f"LSCO, $p=0.24$\n$T={T}$ K, $B={field}$ T"
+        plot_admr(
+            loader.x_data, loader.y_data, save_path+".pdf", fit_path=fit_path,
+            name="LSCO", exp_info=exp_info, save_rho=True, theta_norm=0,
+            cmap='Blues', n_interp_fit=n_interp, electron_doped=False)
 
 
 if __name__ == "__main__":
-    single()
+    # for temperature in [5, 10, 15, 20, 25, 30, 40, 50]:
+    #     single(temperature=temperature)
+    batch(
+        experiment_label="LSCO_ADMR_p=0.24",
+        fit_label="phi=15+45_relative_band=t+tp+tpp+tz_scat=iso+cos2phi"
+                  "_free=g0_multi=gk+power",
+        temperatures=[5, 10, 15, 20, 25, 30, 40, 50],
+        field=42.8
+    )
