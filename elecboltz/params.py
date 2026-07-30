@@ -31,12 +31,16 @@ def easy_params(params):
       | for supported scattering models and their parameters.
       | ``scattering_models`` is assumed to be only one ``isotropic``
       | model if not specified.
-    * | Build the scattering kernel using a predefined
-      | ``scattering_kernel`` (or a list of ``scattering_kernels``)
-      | and the ``kernel_params`` associated with it (or a list of
-      | ``kernel_params`` associated with each kernel). See
+    * | Build the scattering kernel using a predefined list of
+      | ``scattering_kernel_names`` and the ``scattering_kernel_params``
+      | associated with each of them. See
       | :func:`elecboltz.kernel.build_kernel` for supported kernels
-      | and their parameters.
+      | and their parameters. For spin fluctuations in particular,
+      | you can specify the connecting wavevector in terms of a
+      | multiple of the inverse of the unit cell by using the
+      | parameter ``'Qratio'``, e.g. ``Qratio=[pi, pi, 0]``. This is
+      | only possible here because the unit cell information is
+      | available in the parameters.
 
     Parameters
     ----------
@@ -85,17 +89,18 @@ def easy_params(params):
         new_params['scattering_rate'] = build_scattering_function(
             new_params['scattering_params'], new_params['scattering_models'])
     if 'scattering_kernel_params' in params:
-        if ('scattering_kernel_name' not in params
-                and 'scattering_kernel_names' not in params):
-            new_params['scattering_kernel_name'] = 'spherical'
-        if 'scattering_kernel_name' in params:
-            new_params['scattering_kernel'] = build_kernel(
-                new_params['scattering_kernel_name'],
-                new_params['scattering_kernel_params'])
-        else:
-            new_params['scattering_kernel'] = build_kernel(
-                new_params['scattering_kernel_names'],
-                new_params['scattering_kernel_params'])
+        if 'scattering_kernel_names' not in params:
+            new_params['scattering_kernel_names'] = ['isotropic']
+        for i, name in enumerate(new_params['scattering_kernel_names']):
+            if name == 'spin_fluctuation':
+                if 'Qratio' in new_params['scattering_kernel_params'][i]:
+                    Qratio = new_params['scattering_kernel_params'][i]['Qratio']
+                    a, b, c = new_params['unit_cell']
+                    new_params['scattering_kernel_params'][i]['Q'] = [
+                        Qratio[0] / a, Qratio[1] / b, Qratio[2] / c]
+        new_params['scattering_kernel'] = build_kernel(
+            new_params['scattering_kernel_names'],
+            new_params['scattering_kernel_params'])
     return new_params
 
 
