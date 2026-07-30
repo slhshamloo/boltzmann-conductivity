@@ -25,7 +25,7 @@ mpl.rcParams['ytick.major.width'] = 1.0
 mpl.rcParams['pdf.fonttype'] = 3
 # plotting
 mpl.rcParams['lines.linewidth'] = 3
-mpl.rcParams['lines.markersize'] = 20
+mpl.rcParams['lines.markersize'] = 10
 mpl.rcParams['axes.formatter.useoffset'] = False
 
 
@@ -50,18 +50,26 @@ def calc_kernel_values(kernel, low_res=31, n_interp=201):
     band_low = elecboltz.BandStructure(**elecboltz.easy_params(params_low))
     band_low.discretize()
     kernel.decompose(band)
+    if isinstance(kernel, elecboltz.kernel.SumKernel):
+        kernel = kernel.custom_kernel
 
     phi = np.linspace(-np.pi, np.pi, n_interp)
-    kx, ky = np.cos(phi), np.sin(phi)
+    kx, ky = _get_interpolated_kx_ky(
+        band.kpoints[:, 0], band.kpoints[:, 1], phi)
     kz = np.zeros_like(kx)
-    kernel_values = kernel.params['kernel_func'](
+    kernel_values = kernel.kernel_func(
         kx[:, None], ky[:, None], kz[:, None],
         kx[None, :], ky[None, :], kz[None, :])
 
     kernel_decomposed = \
         kernel.eigenvectors @ kernel.coeffs @ kernel.eigenvectors.T
+    # get points roughly around the kz=0 plane
+    kz_low = band_low.kpoints[:, 2]
+    idx = np.where(np.abs(kz_low) < 1e-3)[0]
+    kx_low, ky_low = band_low.kpoints[idx, 0], band_low.kpoints[idx, 1]
+    kernel_decomposed = kernel_decomposed[np.ix_(idx, idx)]
     kernel_decomposed = _interpolate_to_phi(
-        kernel_decomposed, band_low.kpoints[:, 0], band_low.kpoints[:, 1], phi)
+        kernel_decomposed, kx_low, ky_low, phi)
     
     return kernel_values, kernel_decomposed
 
@@ -73,6 +81,16 @@ def calc_kernel_values_gaussian(
         {'kernel_func': elecboltz.kernel.AnisotropicGaussianScattering(
             C_f0, C_f1, sigma_f0, sigma_f1, m, delta),
          'rank': rank, 'low_res': low_res})
+    return calc_kernel_values(kernel, low_res=low_res, n_interp=n_interp)
+
+
+def calc_kernel_values_spinfluctuation(
+        C_s=1, xi=1, rank=20, low_res=31, n_interp=201):
+    params['scattering_kernel_names'] = ['spin_fluctuation']
+    params['scattering_kernel_params'] = [
+        {'C_s': C_s, 'xi': xi, 'Qratio': [np.pi, np.pi, 0]},
+        {'rank': rank, 'low_res': low_res}]
+    kernel = elecboltz.easy_params(params)['scattering_kernel']
     return calc_kernel_values(kernel, low_res=low_res, n_interp=n_interp)
 
 
@@ -175,21 +193,55 @@ def compare_decomposition_anisotropic(
     plt.show()
 
 
+def compare_decomposition_spinfluctuation(
+        C_s=1, xi=1, low_res=31, rank=20, n_interp=201):
+    kernel_values, kernel_decomposed = calc_kernel_values_spinfluctuation(
+        C_s=C_s, xi=xi, low_res=low_res, rank=rank, n_interp=n_interp)
+    fig, _ = plot_comparison(
+        kernel_values, kernel_decomposed,
+        title="$C(\\mathbf{k}, \\mathbf{k}') = "
+              "\\frac{C_s}{1 + \\xi^2 |\\mathbf{k}-\\mathbf{k}'-\\mathbf{Q}|^2}$, "
+              f"$C_s = {C_s}$, $\\xi = {xi}$, $\\mathrm{{rank}} = {rank}$",
+        figsize=(10.0, 4.5))
+    fig.savefig(os.path.dirname(os.path.relpath(__file__))
+                + "/Kernel/Decomposition Comparison/"
+                + f"NdLSCO_Cs={C_s}_xi={xi}_rank={rank}.pdf",
+                bbox_inches='tight')
+    plt.show()
+
+
+def _get_interpolated_kx_ky(kx, ky, phi_interp):
+    phi = np.arctan2(kx, ky)
+    idx = np.argsort(phi)
+    phi_fs = phi[idx]
+    kx_fs, ky_fs = kx[idx], ky[idx]
+
+    # avoid floating point precision issues
+    phi_fs = np.round(phi_fs, decimals=8)
+    phi_fs, idx = np.unique(phi_fs, return_index=True)
+    kx_fs, ky_fs = kx_fs[idx], ky_fs[idx]
+
+    r = np.sqrt(kx_fs**2 + ky_fs**2)
+    phi_periodic = np.concatenate([phi_fs - 2*np.pi, phi_fs, phi_fs + 2*np.pi])
+    r_periodic = np.concatenate([r, r, r])
+
+    r_interp = np.interp(phi_interp, phi_periodic, r_periodic)
+    return r_interp * np.cos(phi_interp), r_interp * np.sin(phi_interp)
+
+
 def _interpolate_to_phi(values, kx, ky, phi_interp):
     phi = np.arctan2(ky, kx)
-    phi_grid, phi_prime_grid = np.meshgrid(phi, phi)
-    points = np.column_stack((phi_grid.flatten(), phi_prime_grid.flatten()))
-    values_flat = values.flatten()
+    # avoid floating point precision issues
+    phi = np.round(phi, decimals=8)
+    phi, idx = np.unique(phi, return_index=True)
+    values = values[np.ix_(idx, idx)]
 
-    phi_interp = (phi_interp + np.pi) % (2*np.pi) - np.pi
-    phi_interp_grid, phi_prime_interp_grid = np.meshgrid(
-        phi_interp, phi_interp)
-    interp_points = np.column_stack((phi_interp_grid.flatten(),
-                                     phi_prime_interp_grid.flatten()))
-
-    interp = scipy.interpolate.NearestNDInterpolator(points, values_flat)
-    return interp(interp_points).reshape(len(phi_interp), len(phi_interp))
+    idx = np.argsort(phi)
+    phi = phi[idx]
+    values = values[np.ix_(idx, idx)]
+    interp = scipy.interpolate.RectBivariateSpline(phi, phi, values)
+    return interp(phi_interp, phi_interp)
 
 
 if __name__ == "__main__":
-    compare_decomposition_gaussian(sigma_f0=0.2, rank=30)
+    compare_decomposition_spinfluctuation(C_s=1, xi=10, rank=70, n_interp=201)
