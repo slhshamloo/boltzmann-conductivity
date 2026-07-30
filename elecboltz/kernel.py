@@ -241,7 +241,7 @@ class AzimuthalHotspotKernel(ScatteringKernel):
     the x-y plane with "hotspot" pairs.
 
     .. math::
-    C(\\phi, \\phi') = C_h\sum_i \\mathrm{exp}\\left(
+        C(\\phi, \\phi') = C_h\sum_i \\mathrm{exp}\\left(
         -\\frac{(\phi-\phi_{hi})^2}{2\\sigma_h^2}\\right)
         \\mathrm{exp}\\left(-\\frac{(\phi-\phi'_{hi})^2}
         {2\\sigma_h^2}\\right)
@@ -300,7 +300,7 @@ class Quasi2DHotspotKernel(ScatteringKernel):
     z-direction.
 
     .. math::
-    C(\\phi, \\phi') = C_h \\mathrm{exp}\\left(
+        C(\\phi, \\phi') = C_h \\mathrm{exp}\\left(
         \\frac{k_z^2}{2\\sigma_z^2}\\right)
         \\sum_i \\mathrm{exp}\\left(
         -\\frac{(\phi-\phi_{hi})^2}{2\\sigma_phi^2}\\right)
@@ -472,12 +472,57 @@ class CustomKernelSumCallable:
         return result
 
 
+class SpinFluctuationKernel(CustomKernel):
+    """Scattering kernel based on the spin fluctuations.
+    
+    .. math::
+        C(k, k') = \\frac{C_s}{1
+        + \\xi^2|\\mathbf{k}-\\mathbf{k'}-\\mathbf{Q}|^2}
+    
+    Parameters
+    ----------
+    C_s : float
+        The amplitude of the spin fluctuation kernel.
+    xi : float
+        The correlation length of the spin fluctuations (in angstroms).
+    Q : Sequence[float]
+        The wavevector of the spin fluctuations, in the units of the
+        ratio of the reciprocal lattice vectors.
+    rank : int
+        See :class:`CustomKernel`.
+    low_res : int
+        See :class:`CustomKernel`.
+    """
+    def __init__(self, C_s, xi, Q, rank=20, low_res=21, **kwargs):
+        self.C_s = C_s
+        self.xi = xi
+        self.Qunitless = Q
+        super().__init__(
+            self.kernel_func, rank=rank, low_res=low_res, **kwargs)
+
+    def decompose(self, band):
+        # Convert Q from unitless to 1/angstrom
+        super().decompose(band)
+        self.Q = np.array(self.Qunitless) * band.domain_size / band.unit_cell
+
+    def kernel_func(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+        diff_x = np.abs(kx - kx_prime)
+        diff_y = np.abs(ky - ky_prime)
+        diff_z = np.abs(kz - kz_prime)
+        i = 0
+        while i < min(len(self.Q), 3):
+            [diff_x, diff_y, diff_z][i] -= self.Q[i]
+            i += 1
+        diff_abs_sq = diff_x**2 + diff_y**2 + diff_z**2
+        return self.C_s / (1 + self.xi**2 * diff_abs_sq)
+
+
 class AzimuthalKernelFunction:
     """Scattering kernel that is a function of the angle of the
     wavevector in the x-y plane, but not the magnitude.
 
     .. math::
-    C(\\phi, \\phi') = C_1\\left|\\mathrm{cos}\\left(m
+        C(\\phi, \\phi') = C_1\\left|\\mathrm{cos}\\left(m
         \\left[\\frac{\\phi+\\phi'}{2}-\\phi_c\\right]\\right)
         \\right|^{\\nu_c}
     
@@ -518,7 +563,7 @@ class GaussianScattering:
 
     .. math::
         C(k, k') = C \\mathrm{exp}(
-        -(|\\mathbf{k}\\pm \\mathbf{k'}|-delta)^2/2\\sigma^2)
+        -(|\\mathbf{k}\\pm \\mathbf{k'}|-\\delta)^2/2\\sigma^2)
 
     Call the object like ``C(kx, ky, kz, kx_prime, ky_prime, kz_prime)``
     to evaluate the kernel function at the given wavevectors.
@@ -561,7 +606,7 @@ class AnisotropicGaussianScattering:
     the x-y plane, with anisotropic parameters.
 
     .. math::
-    C(\\phi, \\phi') = \\left(C_0 + C_1 \\left|\\mathrm{cos}\\left(m
+        C(\\phi, \\phi') = \\left(C_0 + C_1 \\left|\\mathrm{cos}\\left(m
         \\left[\\frac{\\phi+\\phi'}{2}-\\phi_c\\right]\\right)
         \\right|^{\\nu_c}\\right)\\mathrm{exp}\\left(
         -\\frac{(|\\phi-\\phi'|-\\delta)^2}{2\\left(
@@ -679,6 +724,8 @@ def build_kernel(kernel, kernel_params):
 
         * | ``'isotropic'``: Isotropic scattering, where the kernel is
           | just a constant value ``'C_0'`` at all wavevectors.
+        * | ``'spin_fluctuations'``: See
+          | `elecboltz.kernel.SpinFluctuationKernel` for details.
         * | ``'azimuthal'``: A kernel that is a function of the angle
           | of the wavevector in the x-y plane, but not the magnitude.
           | The function has the form
@@ -751,7 +798,7 @@ def build_kernel(kernel, kernel_params):
             kernels.append(build_kernel(k, p))
         return SumKernel(kernels, **decomp_params)
     kernel_builders = [_build_explicit_kernel, _build_anisotropic_gaussian_kernel,
-                       _build_gaussian_kernel]
+                       _build_gaussian_kernel, _build_misc_kernel]
     for builder in kernel_builders:
         built_kernel = builder(kernel, kernel_params)
         if built_kernel is not None:
@@ -832,6 +879,14 @@ def _build_anisotropic_gaussian_kernel(kernel, kernel_params):
             phi_c=kernel_params.get('phi_bc', 0),
             phi_s=kernel_params.get('phi_bs', 0),
             delta=180), **kernel_params)
+    return None
+
+
+def _build_misc_kernel(kernel, kernel_params):
+    if kernel == 'spin_fluctuations':
+        return SpinFluctuationKernel(
+            kernel_params['C_s'], kernel_params['xi'], kernel_params['Q'],
+            **kernel_params)
     return None
 
 
