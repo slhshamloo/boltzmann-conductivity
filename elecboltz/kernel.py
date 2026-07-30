@@ -472,7 +472,7 @@ class CustomKernelSumCallable:
         return result
 
 
-class SpinFluctuationKernel(CustomKernel):
+class SpinFluctuationScattering:
     """Scattering kernel based on the spin fluctuations.
     
     .. math::
@@ -486,33 +486,17 @@ class SpinFluctuationKernel(CustomKernel):
     xi : float
         The correlation length of the spin fluctuations (in angstroms).
     Q : Sequence[float]
-        The wavevector of the spin fluctuations, in the units of the
-        ratio of the reciprocal lattice vectors.
-    rank : int
-        See :class:`CustomKernel`.
-    low_res : int
-        See :class:`CustomKernel`.
+        The wavevector of the spin fluctuations, in units of 1/angstrom.
     """
-    def __init__(self, C_s, xi, Q, rank=20, low_res=21, **kwargs):
+    def __init__(self, C_s, xi, Q):
         self.C_s = C_s
         self.xi = xi
-        self.Qunitless = Q
-        super().__init__(
-            self.kernel_func, rank=rank, low_res=low_res, **kwargs)
+        self.Q = np.array(Q)
 
-    def decompose(self, band):
-        # Convert Q from unitless to 1/angstrom
-        super().decompose(band)
-        self.Q = np.array(self.Qunitless) * band.domain_size / band.unit_cell
-
-    def kernel_func(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
-        diff_x = np.abs(kx - kx_prime)
-        diff_y = np.abs(ky - ky_prime)
-        diff_z = np.abs(kz - kz_prime)
-        i = 0
-        while i < min(len(self.Q), 3):
-            [diff_x, diff_y, diff_z][i] -= self.Q[i]
-            i += 1
+    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+        diff_x = np.abs(kx - kx_prime) - self.Q[0]
+        diff_y = np.abs(ky - ky_prime) - self.Q[1]
+        diff_z = np.abs(kz - kz_prime) - self.Q[2]
         diff_abs_sq = diff_x**2 + diff_y**2 + diff_z**2
         return self.C_s / (1 + self.xi**2 * diff_abs_sq)
 
@@ -724,7 +708,7 @@ def build_kernel(kernel, kernel_params):
 
         * | ``'isotropic'``: Isotropic scattering, where the kernel is
           | just a constant value ``'C_0'`` at all wavevectors.
-        * | ``'spin_fluctuations'``: See
+        * | ``'spin_fluctuation'``: See
           | `elecboltz.kernel.SpinFluctuationKernel` for details.
         * | ``'azimuthal'``: A kernel that is a function of the angle
           | of the wavevector in the x-y plane, but not the magnitude.
@@ -883,9 +867,9 @@ def _build_anisotropic_gaussian_kernel(kernel, kernel_params):
 
 
 def _build_misc_kernel(kernel, kernel_params):
-    if kernel == 'spin_fluctuations':
-        return SpinFluctuationKernel(
-            kernel_params['C_s'], kernel_params['xi'], kernel_params['Q'],
+    if kernel == 'spin_fluctuation':
+        return CustomKernel(SpinFluctuationScattering(
+            kernel_params['C_s'], kernel_params['xi'], kernel_params['Q']),
             **kernel_params)
     return None
 
