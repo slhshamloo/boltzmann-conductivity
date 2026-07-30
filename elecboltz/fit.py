@@ -3,7 +3,7 @@ from .conductivity import Conductivity
 from .params import easy_params, _deep_update
 
 import numpy as np
-from scipy.optimize import differential_evolution
+import scipy.optimize
 import json
 from datetime import datetime
 from time import time
@@ -343,6 +343,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               multi_params_labels: Collection[str] = None,
               x_shift: Mapping = None, x_normalize: Mapping = None,
               y_shift: Mapping = None, y_normalize: Mapping = None,
+              optimizer: Callable = scipy.optimize.differential_evolution,
               loss: Callable = _mean_absolute_error,
               preprocess: Callable = _dummy_processor,
               postprocess: Callable = _dummy_processor,
@@ -350,9 +351,9 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
               print_log: bool = True, **kwargs):
     """Convenience function to set up and run a fitting routine.
 
-    This uses ``scipy.optimize.differential_evolution`` to perform a
-    global fit. The optimizer is hard-coded, because the callback
-    functions are highly specific to each optimizer.
+    This uses the `optimizer` (assumed to behave like a SciPy optimizer)
+    to perform a global fit. The optimizer is hard-coded, because the
+    callback functions are highly specific to each optimizer.
     Saves the results to the specified path.
 
     Parameters
@@ -423,6 +424,9 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         provided). The mapping must have the same structure as
         ``y_data``, but with single values instead of arrays as the
         values.
+    optimizer : Callable, optional
+        The optimizer function to use for fitting. It must have the
+        same interface as the SciPy optimizers.
     loss : Callable, optional
         A function that takes the fit and data y values, and returns a
         scalar loss value. By default, the mean absolute error is used.
@@ -446,8 +450,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
     print_log : bool, optional
         If True, the fitting progress will be printed to the console.
     **kwargs : dict, optional
-        Additional keyword arguments passed to
-        `scipy.optimize.differential_evolution`.
+        Additional keyword arguments passed to the `optimizer`
     """
     if save_label is None:
         x_string = x_label if isinstance(x_label, str) else "_".join(x_label)
@@ -471,7 +474,7 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         init_params, save_path, save_label, update_keys=update_keys,
         multi_params=multi_params, multi_params_labels=multi_params_labels,
         print_log=print_log)
-    result = differential_evolution(
+    result = optimizer(
         fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
         args=(update_keys, x_data, y_data, x_shift, x_normalize,
               y_shift, y_normalize, loss, preprocess, postprocess),
@@ -683,9 +686,10 @@ def _save_fit_result(result, init_params, update_keys, begin_time,
                      multi_params=None, multi_params_labels=None):
     result = _result_to_serializable(result)
     result['fit_params'] = _build_params_from_flat(update_keys, result['x'])
-    result['residual'] = result['fun']
-    result['evaluations'] = result['nfev']
-    result['iterations'] = result['nit']
+    result['residual'] = result.get('fun', None)
+    result['evaluations'] = result.get('nfev', None)
+    result['iterations'] = result.get('nit', None)
+    result['jacobian'] = result.get('jac', None)
     result.pop('x', None)
     result.pop('population', None)
     result.pop('population_energies', None)
