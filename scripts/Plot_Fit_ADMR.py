@@ -499,7 +499,8 @@ def plot_scattering_curve_heatmap(
 
 def _calc_heatmap(params, res=101):
     phis = np.linspace(-np.pi, np.pi, res)
-    kx, ky = np.cos(phis), np.sin(phis)
+    kx, ky = _get_interpolated_kx_ky(
+        np.zeros_like(phis), np.zeros_like(phis), phis)
     kz = np.zeros_like(kx)
     kernel = elecboltz.kernel.build_kernel(
         params['scattering_kernel_names'], params['scattering_kernel_params'])
@@ -522,25 +523,45 @@ def _calc_heatmap(params, res=101):
         kernel.decompose(band)
         kernel_values = \
             kernel.eigenvectors @ kernel.coeffs @ kernel.eigenvectors.T
-        return _interpolate_to_phi(
-            kernel_values, band_low.kpoints[:, 0],
-            band_low.kpoints[:, 1], phis)
+        # get points roughly around the kz=0 plane
+        kz_low = band_low.kpoints[:, 2]
+        idx = np.where(np.abs(kz_low) < 1e-3)[0]
+        kx_low, ky_low = band_low.kpoints[idx, 0], band_low.kpoints[idx, 1]
+        kernel_values = kernel_values[np.ix_(idx, idx)]
+        return _interpolate_to_phi(kernel_values, kx_low, ky_low, phis)
+
+
+def _get_interpolated_kx_ky(kx, ky, phi_interp):
+    phi = np.arctan2(kx, ky)
+    idx = np.argsort(phi)
+    phi_fs = phi[idx]
+    kx_fs, ky_fs = kx[idx], ky[idx]
+
+    # avoid floating point precision issues
+    phi_fs = np.round(phi_fs, decimals=8)
+    phi_fs, idx = np.unique(phi_fs, return_index=True)
+    kx_fs, ky_fs = kx_fs[idx], ky_fs[idx]
+
+    r = np.sqrt(kx_fs**2 + ky_fs**2)
+    phi_periodic = np.concatenate([phi_fs - 2*np.pi, phi_fs, phi_fs + 2*np.pi])
+    r_periodic = np.concatenate([r, r, r])
+
+    r_interp = np.interp(phi_interp, phi_periodic, r_periodic)
+    return r_interp * np.cos(phi_interp), r_interp * np.sin(phi_interp)
 
 
 def _interpolate_to_phi(values, kx, ky, phi_interp):
     phi = np.arctan2(ky, kx)
-    phi_grid, phi_prime_grid = np.meshgrid(phi, phi)
-    points = np.column_stack((phi_grid.flatten(), phi_prime_grid.flatten()))
-    values_flat = values.flatten()
+    # avoid floating point precision issues
+    phi = np.round(phi, decimals=8)
+    phi, idx = np.unique(phi, return_index=True)
+    values = values[np.ix_(idx, idx)]
 
-    phi_interp = (phi_interp + np.pi) % (2*np.pi) - np.pi
-    phi_interp_grid, phi_prime_interp_grid = np.meshgrid(
-        phi_interp, phi_interp)
-    interp_points = np.column_stack((phi_interp_grid.flatten(),
-                                     phi_prime_interp_grid.flatten()))
-
-    interp = scipy.interpolate.NearestNDInterpolator(points, values_flat)
-    return interp(interp_points).reshape(len(phi_interp), len(phi_interp))
+    idx = np.argsort(phi)
+    phi = phi[idx]
+    values = values[np.ix_(idx, idx)]
+    interp = scipy.interpolate.RectBivariateSpline(phi, phi, values)
+    return interp(phi_interp, phi_interp)
 
 
 def _get_fermi_surface_slice(band, kz, n_interp=300, res=None):
@@ -768,7 +789,7 @@ def single(temperature=20, field=42.8, n_interp=100):
         x_vary_label='theta', y_label='rho_zz',
         x_search={'H': [field], 'T': [temperature], 'phi': [15, 45]},
         save_new_labels=True)
-    loader.load(runpath + f"/../data/processed/",
+    loader.load(runpath + f"/data/processed/",
                 x_columns=[0], y_columns=[1], delimiter=',')
     loader.interpolate(n_interp, x_normalize=0)
 
@@ -777,7 +798,7 @@ def single(temperature=20, field=42.8, n_interp=100):
         f"_band=t+tp+tpp+tz_scat=hotspot_free=C0+Ch"
     exp_info = f"LSCO, $p=0.24$\n$T={temperature}$ K, $B={field}$ T"
 
-    save_path = (runpath + "/../fits/" + folder_name
+    save_path = (runpath + "/fits/" + folder_name
                  + "/" + folder_name)
     fit_path = save_path + ".json"
 
