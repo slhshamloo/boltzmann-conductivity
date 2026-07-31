@@ -499,27 +499,28 @@ def plot_scattering_curve_heatmap(
 
 def _calc_heatmap(params, res=101):
     phis = np.linspace(-np.pi, np.pi, res)
-    kx, ky = _get_interpolated_kx_ky(
-        np.zeros_like(phis), np.zeros_like(phis), phis)
-    kz = np.zeros_like(kx)
     kernel = elecboltz.kernel.build_kernel(
         params['scattering_kernel_names'], params['scattering_kernel_params'])
-    if hasattr(kernel, 'eval_basis'):   # explicit basis evaluation
+    if isinstance(kernel, elecboltz.kernel.SumKernel):
         kernel_values = np.zeros((len(phis), len(phis)))
-        for i in range(kernel.coeffs.shape[0]):
-            basis_vec_i = kernel.eval_basis(i, kx, ky, kz)
-            for j in range(kernel.coeffs.shape[0]):
-                basis_vec_j = kernel.eval_basis(j, kx, ky, kz)
-                kernel_values += kernel.coeffs[i, j] * np.outer(
-                    basis_vec_i, basis_vec_j)
+        if len(kernel.explicit_kernels) > 0:
+            kernel_values += _calc_kernel_values(kernel, params, phis)
+        if kernel.custom_kernel is not None:
+            kernel_values += _calc_kernel_values(
+                kernel.custom_kernel, params, phis)
         return kernel_values
     else:
-        band = elecboltz.BandStructure(**params)
+        return _calc_kernel_values(kernel, params, phis)
+
+
+def _calc_kernel_values(kernel, params, phis):
+    band = elecboltz.BandStructure(**params)
+    band.discretize()
+
+    if isinstance(kernel, elecboltz.kernel.CustomKernel):
         band_low = copy(band)
         band_low.resolution = kernel.params.get('low_res', 21)
-        band.discretize()
         band_low.discretize()
-
         kernel.decompose(band)
         kernel_values = \
             kernel.eigenvectors @ kernel.coeffs @ kernel.eigenvectors.T
@@ -529,6 +530,18 @@ def _calc_heatmap(params, res=101):
         kx_low, ky_low = band_low.kpoints[idx, 0], band_low.kpoints[idx, 1]
         kernel_values = kernel_values[np.ix_(idx, idx)]
         return _interpolate_to_phi(kernel_values, kx_low, ky_low, phis)
+    else:
+        kx, ky = _get_interpolated_kx_ky(
+            band.kpoints[:, 0], band.kpoints[:, 1], phis)
+        kz = np.zeros_like(kx)
+        kernel_values = np.zeros((len(phis), len(phis)))
+        for i in range(kernel.coeffs.shape[0]):
+            basis_vec_i = kernel.eval_basis(i, kx, ky, kz)
+            for j in range(kernel.coeffs.shape[0]):
+                basis_vec_j = kernel.eval_basis(j, kx, ky, kz)
+                kernel_values += kernel.coeffs[i, j] * np.outer(
+                    basis_vec_i, basis_vec_j)
+        return kernel_values
 
 
 def _get_interpolated_kx_ky(kx, ky, phi_interp):
