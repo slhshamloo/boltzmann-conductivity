@@ -25,9 +25,10 @@ class Conductivity:
         The magnetic field in the x, y, and z directions in units of
         Tesla.
     scattering_rate : Callable or float or None
-        The (out-)scattering rate, in units of THz, as a function of
-        any of the parameters (wavevectors) kx, ky, kz, in units of
-        1/angstrom, (velocities) vx, vy, vz, in units of m/s,
+        The (out-)scattering rate, in units of THz. If expressed as
+        a ``Callable`` it is a function of any of the parameters:
+        (wavevectors) kx, ky, kz, in units of 1/angstrom,
+        (velocities) vx, vy, vz, in units of m/s,
         temperature in units of K, and energy (difference with the
         Fermi level) in units of meV. The function signature should
         have matching names for these parameters, and also collect
@@ -35,9 +36,11 @@ class Conductivity:
         function signature consistent. Note that with this type of
         function signature, the function doesn't need to explicitly
         specify parameters that is does not use, and the order of the
-        parameters also doesn't matter. Can also be a constant value
-        instead of a function. If None, it will be calculated from
-        the scattering kernel.
+        parameters also doesn't matter. Instead of a ``Callable``, it
+        can also be a constant over the full Fermi surface, or set to
+        custom values over the different ``kpoints`` of the Fermi
+        surface in the `band` object. If None, it will be calculated
+        from the scattering kernel.
     scattering_kernel : ScatteringKernel
         See the `elecboltz.kernel` module for more details on this
         object. If provided, ``scattering_rate`` will be ignored
@@ -108,15 +111,22 @@ class Conductivity:
         self._is_scattering_saved = False
 
     def __setattr__(self, name, value):
-        super().__setattr__(name, value)
         if name == 'band':
             self.erase_memory()
+            super().__setattr__(name, value)
         if name in ['frequency', 'scattering_rate', 'scattering_kernel']:
             self.erase_memory(elements=False, scattering=True,
                               derivative=False)
+            if name == 'scattering_rate':
+                if len(self.band.kpoints) != len(value):
+                    raise ValueError(
+                        "The scattering_rate must have the same length as "
+                        "the number of kpoints in the band structure.")
+            super().__setattr__(name, value)
         if name in ['field', 'Bamp', 'Btheta', 'Bphi']:
             self.erase_memory(elements=False, scattering=False,
                               derivative=True)
+            super().__setattr__(name, value)
             if name == 'field':
                 super().__setattr__('Bamp', None)
                 super().__setattr__('Btheta', None)
