@@ -24,7 +24,7 @@ class Conductivity:
     field : Sequence[float]
         The magnetic field in the x, y, and z directions in units of
         Tesla.
-    scattering_rate : Callable or float or None
+    scattering_rate : Callable or Sequence or float or None
         The (out-)scattering rate, in units of THz. If expressed as
         a ``Callable`` it is a function of any of the parameters:
         (wavevectors) kx, ky, kz, in units of 1/angstrom,
@@ -78,7 +78,7 @@ class Conductivity:
     """
     def __init__(
             self, band: BandStructure, field: Sequence[float] = np.zeros(3),
-            scattering_rate: Union[Callable, float, None] = None,
+            scattering_rate: Union[Callable, Sequence, float, None] = None,
             scattering_kernel: Union[ScatteringKernel, None] = None,
             frequency: float = 0.0, correct_curvature: bool = True,
             quadrature_order: int = 2, Bamp: float = None,
@@ -117,11 +117,12 @@ class Conductivity:
         if name in ['frequency', 'scattering_rate', 'scattering_kernel']:
             self.erase_memory(elements=False, scattering=True,
                               derivative=False)
-            if name == 'scattering_rate':
+            if name == 'scattering_rate' and isinstance(value, Sequence):
                 if len(self.band.kpoints) != len(value):
                     raise ValueError(
                         "The scattering_rate must have the same length as "
                         "the number of kpoints in the band structure.")
+                value = np.array(value)
             super().__setattr__(name, value)
         if name in ['field', 'Bamp', 'Btheta', 'Bphi']:
             self.erase_memory(elements=False, scattering=False,
