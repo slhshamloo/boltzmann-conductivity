@@ -124,15 +124,15 @@ Since there are no currents in equilibrium, we have
 \end{equation}
 plugging in the expression for $g(\vb{k})$,
 \begin{equation}
-    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d} \int_{\text{BZ}}\dd{\vb{k}} \frac{v_a(\vb{k})}{v(\vb{k})}
-    \int\dd{\vb{k'}} A^{-1}(\vb{k}, \vb{k'}) v_b(\vb{k'})\qty(\pdv{f_0}{\varepsilon}).
+    \sigma_{ab} = \frac{2e^2}{(2\pi)^d} \int_{\text{BZ}}\dd{\vb{k}} \frac{v_a(\vb{k})}{v(\vb{k})}
+    \int\dd{\vb{k'}} A^{-1}(\vb{k}, \vb{k'}) v_b(\vb{k'})\qty(-\pdv{f_0}{\varepsilon}).
 \end{equation}
 As $T\to0$, the Fermi-Dirac distribution becomes a step function, so the term
-$\pdv*{f_0}{\varepsilon}$ becomes a Dirac delta at the Fermi energy. If we apply the integral over
+$-\pdv*{f_0}{\varepsilon}$ becomes a Dirac delta at the Fermi energy. If we apply the integral over
 the delta function, an extra factor of $(\grad_{k}\varepsilon)^{-1} = (\hbar v)^{-1}$ (the Jacobian)
 is added. In the end, we have
 \begin{equation}
-    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \int_{\text{FS}}\dd{\vb{k}}\int\dd{\vb{k'}}
+    \sigma_{ab} = \frac{2e^2}{(2\pi)^d\hbar} \int_{\text{FS}}\dd{\vb{k}}\int\dd{\vb{k'}}
     \hat{v}_a(\vb{k}) A^{-1}(\vb{k}, \vb{k'}) \hat{v}_b(\vb{k'}),
     \label{eq:conductivity}
 \end{equation}
@@ -339,12 +339,12 @@ $\hat{v}_a$ would have to have an index on the bottom to perform the multiplicat
 
 Putting everything together, we have
 \begin{equation}
-    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \sum_{ij} \qty(\hat{v}_a)_i
+    \sigma_{ab} = \frac{2e^2}{(2\pi)^d\hbar} \sum_{ij} \qty(\hat{v}_a)_i
     \qty(A^{-1})^{ij} \qty(\hat{v}_b)_j,
 \end{equation}
 or, in terms of all the terms we know how to calculate,
 \begin{equation}
-    \sigma_{ab} = -\frac{2e^2}{(2\pi)^d\hbar} \sum_{ij} \qty[
+    \sigma_{ab} = \frac{2e^2}{(2\pi)^d\hbar} \sum_{ij} \qty[
     \qty(\sum_k M_{ik} (\hat{v}_a)^k) \qty(A_{ij})^{-1} \qty(\sum_k M_{jk} \qty(\hat{v}_b)^k)].
 \end{equation}
 To do the computation in practice, $M_{ij}$ and $A_{ij}$ can be calculated from \eqref{eq:overlap}
