@@ -200,11 +200,11 @@ class Conductivity:
         
         i, j = self._get_calculation_indices(i, j)
         # (A^{-1})^{ij} (v_b)_j
-        linear_solution = self._solve(j)
-        if len(linear_solution.shape) == 1:
-            linear_solution = linear_solution[:, None]
+        self._linear_solution = self._solve(j)
+        if len(self._linear_solution.shape) == 1:
+            self._linear_solution = self._linear_solution[:, None]
         # (v_a)_i (A^{-1} v_b)^i
-        sigma_result = self._vhat_projections[:, i].T @ linear_solution
+        sigma_result = self._vhat_projections[:, i].T @ self._linear_solution
         sigma_result *= e**2 / (4 * np.pi**3 * hbar) / self.band.bz_ratio
         if self.frequency == 0.0:
             sigma_result = sigma_result.real
@@ -253,11 +253,14 @@ class Conductivity:
         if derivative:
             self._derivative_term = None
         self._differential_operator = None
+        self._factorization = None
+        self._linear_solution = None
     
     def _solve(self, j):
         if self.scattering_kernel is None:
-            return scipy.sparse.linalg.spsolve(
-                self._differential_operator, self._vhat_projections[:, j])
+            self._factorization = scipy.sparse.linalg.splu(
+                self._differential_operator)
+            return self._factorization.solve(self._vhat_projections[:, j])
         else:
             # S_ij = C_ij / |v|_i, therefore we scale one of the U or V
             # matrices by the velocity magnitude to include the 1/|v|
@@ -268,12 +271,13 @@ class Conductivity:
             if self.band.periodic:
                 U = self.band.periodic_projector @ U
                 V = V @ self.band.periodic_projector.T
-            factor = scipy.sparse.linalg.splu(self._differential_operator)
+            self._factorization = scipy.sparse.linalg.splu(
+                self._differential_operator)
             # A = A_0 + U^dagger S U
             return solve_sparse_plus_lowrank(
                 self._differential_operator, self._in_scattering_matrix,
-                U, V, self._vhat_projections[:, j],
-                sparse_solver = lambda _, b: factor.solve(b))
+                U, V, self._vhat_projections[:, j], factor=self._factorization,
+                sparse_solver = lambda _, b: self._factorization.solve(b))
 
     def _get_calculation_indices(self, i, j):
         if i is None:
