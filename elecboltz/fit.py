@@ -3,8 +3,10 @@ from .conductivity import Conductivity
 from .params import easy_params, _deep_update
 
 import numpy as np
-import scipy.optimize
+import scipy
 import json
+from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from datetime import datetime
 from time import time
 from copy import deepcopy
@@ -12,6 +14,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import Union, Callable
 from collections.abc import Sequence, Collection, Mapping
+from scipy.constants import e, hbar, angstrom
 
 
 class FittingRoutine:
@@ -27,11 +30,60 @@ class FittingRoutine:
         Initial parameters for the fitting routine, and also other
         parameters for initiallizing the classes. This is passed through
         ``easy_params`` to the ``BandStructure`` and ``Conductivity``.
+    param_keys : Sequence[str]
+        The "flat keys of the parameters to update.
+    x_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
+        The independent variable data (e.g. field). The name of the
+        variable is mapped to the data, e.g.
+        ``{'field': [0.5, 1.5, 2.5]}``. In case of a nonempty
+        ``multi_params``, the value must be a collection of
+        sequences, where each sequence corresponds to a different
+        parameter to be fitted,
+        e.g. ``{'field': [[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
+    y_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
+        The dependent variable data (e.g. conductivity). The name of
+        the variable is mapped to the data, e.g.
+        ``{'sigma_xx': [1.1, 2.4, 3.8]}``. The name of each variable
+        must start with "sigma" or "rho" (for conductivity or
+        resistivity, respectively), and you can add a suffix to
+        specify the component (e.g. ``"sigma_xx"``, ``"rho_xy"``).
+        In case of nonempty ``multi_params``, the value must be a
+        collection of sequences, where each sequence corresponds to
+        a different parameter to be fitted, e.g.
+        ``{'rho_zz': [[1.1, 2.4, 3.8], [1.2, 2.5, 3.9]]}``.
+    x_shift : Mapping, optional
+        If provided, the y values will be shifted by the y value at
+        this x point.
+    x_normalize : Mapping, optional
+        If provided, the y values will be normalized by the y value
+        at this x point.  Note that shifts are applied before
+        normalization.
+    y_shift : float, optional
+        The y values will be normalized to this value
+        (if ``x_normalize`` is provided).
+    y_normalize : float, optional
+        The y values will be shifted to this value (if ``x_shift``
+        is provided).
+    loss : Callable, optional
+        A function that takes the fit and data y values, and
+        returns a scalar loss value. By default, the mean absolute
+        error is used.
+    preprocess : Callable, optional
+        This callable is applied to the data y values before
+        calculating the loss. It takes ``x_data`` and a ``y`` with
+        a format similar to ``y_data``, and returns the processed
+        ``y``, again with a format similar to ``y_data``.
+        By default, no postprocessing is applied. An example
+        use case is filtering out parts of the values where the
+        data can be unreliable.
+    postprocess : Callable, optional
+        Like ``preprocess``, but applied to the fit y values.
+                By default, no postprocessing is applied.
     save_path : str, optional
         The directory where the fitting logs will be saved. If not
         provided, logs will not be saved.
     save_label : str, optional
-        Label of the results.
+        Label of the results (used as file names).
     update_keys : Collection[str], optional
         The "flattened" keys of the parameters that will be updated
         during the fitting. See ``extract_keys`` for more information.
@@ -64,14 +116,6 @@ class FittingRoutine:
     ----------
     params : Mapping
         The current parameters dictionary.
-    save_path : Path
-        The directory where the fitting logs will be saved.
-    save_label : Path
-        The label of the results.
-    update_keys : Collection[str]
-        The "flattened" keys of the parameters that will be updated
-        during the fitting. This is used for updating the `params`
-        attribute and logging.
     iteration : int
         The current iteration number.
     last_time : float
@@ -79,7 +123,15 @@ class FittingRoutine:
     total_time : float
         The total time spent on the fitting routine.
     """
-    def __init__(self, init_params: Mapping, save_path: str = None,
+    def __init__(self, init_params: Mapping, param_keys: Sequence[str],
+                 x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
+                 y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
+                 x_shift: Mapping = None, x_normalize: Mapping = None,
+                 y_shift: Mapping = None, y_normalize: Mapping = None,
+                 loss: Callable = lambda y_fit, y_data: np.mean(
+                     np.abs(y_fit - y_data)),
+                 preprocess: Callable = lambda x, y: y,
+                 postprocess: Callable = lambda x, y: y, save_path: str = None,
                  save_label: str = "fit", update_keys: Collection[str] = None,
                  multi_params: Collection[str] = None,
                  multi_params_labels: Collection[str] = None,
@@ -87,6 +139,16 @@ class FittingRoutine:
         self.init_params = init_params
         if multi_params:
             self._init_params_multi = deepcopy(init_params)
+        self.param_keys = param_keys
+        self.x_data = x_data
+        self.y_data = y_data
+        self.x_shift = x_shift
+        self.x_normalize = x_normalize
+        self.y_shift = y_shift
+        self.y_normalize = y_normalize
+        self.loss = loss
+        self.preprocess = preprocess
+        self.postprocess = postprocess
         self.save_path = save_path
         self.save_label = save_label
         self.update_keys = update_keys
@@ -97,82 +159,18 @@ class FittingRoutine:
         self.last_time = time()
         self.total_time = 0.0
 
-    def residual(
-            self, param_values: Sequence, param_keys: Sequence[str],
-            x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
-            y_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
-            x_shift: Mapping = None, x_normalize: Mapping = None,
-            y_shift: Mapping = None, y_normalize: Mapping = None,
-            loss: Callable = lambda y_fit, y_data: np.mean(
-                np.abs(y_fit - y_data)),
-            preprocess: Callable = lambda x, y: y,
-            postprocess: Callable = lambda x, y: y):
+    def residual(self, param_values: Sequence):
         """Compute the residual for the given parameters and data.
 
         Parameters
         ----------
         param_values : Sequence
             The values of the parameters to update.
-        param_keys : Sequence[str]
-            The "flat keys of the parameters to update.
-        x_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
-            The independent variable data (e.g. field). The name of the
-            variable is mapped to the data, e.g.
-            ``{'field': [0.5, 1.5, 2.5]}``. In case of a nonempty
-            ``multi_params``, the value must be a collection of
-            sequences, where each sequence corresponds to a different
-            parameter to be fitted,
-            e.g. ``{'field': [[0.5, 1.5, 2.5], [0.6, 1.6, 2.6]]}``.
-        y_data : Mapping[str, Union[Sequence, Sequence[Sequence]]]
-            The dependent variable data (e.g. conductivity). The name of
-            the variable is mapped to the data, e.g.
-            ``{'sigma_xx': [1.1, 2.4, 3.8]}``. The name of each variable
-            must start with "sigma" or "rho" (for conductivity or
-            resistivity, respectively), and you can add a suffix to
-            specify the component (e.g. ``"sigma_xx"``, ``"rho_xy"``).
-            In case of nonempty ``multi_params``, the value must be a
-            collection of sequences, where each sequence corresponds to
-            a different parameter to be fitted, e.g.
-            ``{'rho_zz': [[1.1, 2.4, 3.8], [1.2, 2.5, 3.9]]}``.
-        x_shift : Mapping, optional
-            If provided, the y values will be shifted by the y value at
-            this x point.
-        x_normalize : Mapping, optional
-            If provided, the y values will be normalized by the y value
-            at this x point.  Note that shifts are applied before
-            normalization.
-        y_shift : float, optional
-            The y values will be normalized to this value
-            (if ``x_normalize`` is provided).
-        y_normalize : float, optional
-            The y values will be shifted to this value (if ``x_shift``
-            is provided).
-        loss : Callable, optional
-            A function that takes the fit and data y values, and
-            returns a scalar loss value. By default, the mean absolute
-            error is used.
-        preprocess : Callable, optional
-            This callable is applied to the data y values before
-            calculating the loss. It takes ``x_data`` and a ``y`` with
-            a format similar to ``y_data``, and returns the processed
-            ``y``, again with a format similar to ``y_data``.
-            By default, no postprocessing is applied. An example
-            use case is filtering out parts of the values where the
-            data can be unreliable.
-        postprocess : Callable, optional
-            Like ``preprocess``, but applied to the fit y values.
-            By default, no postprocessing is applied.
         """
         if self.multi_params:
-            return self._calculate_multi(
-                param_values, param_keys, x_data, y_data,
-                x_shift, x_normalize, y_shift, y_normalize,
-                loss, preprocess, postprocess)
+            return self._calculate_multi(param_values)
         else:
-            return self._calculate_single(
-                param_values, param_keys, x_data, y_data,
-                x_shift, x_normalize, y_shift, y_normalize,
-                loss, preprocess, postprocess)
+            return self._calculate_single(param_values)
 
     def log(self, param_values, convergence: float = None):
         """Log the current fitting iteration and parameters.
@@ -225,87 +223,87 @@ class FittingRoutine:
             with open(path, mode) as log_file:
                 log_file.write(log_message)
 
-    def _calculate_single(self, param_values, param_keys, x_data, y_data,
-                          x_shift, x_normalize, y_shift, y_normalize,
-                          loss, preprocess, postprocess):
+    def _calculate_single(self, param_values):
         params = deepcopy(self.init_params)
-        for key, value in zip(param_keys, param_values):
+        for key, value in zip(self.param_keys, param_values):
             _update_flat_value(params, key, value)
         cond = self._build_obj(easy_params(params))
+        name, y_label_i, y_label_j = _get_label_indices(self.y_data.keys())
 
-        name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
-        y_fit = {label: np.zeros_like(y) for label, y in y_data.items()}
-        for i in range(len(next(iter(x_data.values())))):
-            x = {label: x[i] for label, x in x_data.items()}
-            y = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
+        y_fit = {label: np.zeros_like(y) for label, y in self.y_data.items()}
+        for i in range(len(next(iter(self.x_data.values())))):
+            x = {label: x[i] for label, x in self.init_params.items()}
+            y = _calc_y(cond, x, self.y_data, name, y_label_i, y_label_j)
             for label in y_fit:
                 y_fit[label][i] = y[label]
-        if x_shift is not None:
-            y0 = _calc_y(cond, x_shift, y_data, name, y_label_i, y_label_j)
-            for label in y_fit:
+
+        if self.x_shift is not None:
+            y0 = _calc_y(cond, self.x_shift, self.y_data,
+                         name, y_label_i, y_label_j)
+            for label in y0:
                 y_fit[label] -= y0[label]
-            if y_shift is not None:
-                for label in y_fit:
-                    y_fit[label] += y_shift[label]
-        if x_normalize is not None:
-            y0 = _calc_y(cond, x_normalize, y_data, name, y_label_i, y_label_j)
-            for label in y_fit:
+            if self.y_shift is not None:
+                for label in self.y_shift:
+                    y_fit[label] += self.y_shift[label]
+        if self.x_normalize is not None:
+            y0 = _calc_y(cond, self.x_normalize, self.y_data,
+                         name, y_label_i, y_label_j)
+            for label in y0:
                 y_fit[label] /= y0[label]
-            if y_normalize is not None:
-                for label in y_fit:
-                    y_fit[label] *= y_normalize[label]
-        y_data = preprocess(x_data, y_data)
-        y_fit = postprocess(x_data, y_fit)
+            if self.y_normalize is not None:
+                for label in self.y_normalize:
+                    y_fit[label] *= self.y_normalize[label]
+
+        y_data = self.preprocess(self.x_data, self.y_data)
+        y_fit = self.postprocess(self.x_data, y_fit)
         y_fit = np.concatenate(list(y_fit.values()))
         y_data = np.concatenate(list(y_data.values()))
-        return loss(y_fit, y_data)
+        return self.loss(y_fit, y_data)
     
-    def _calculate_multi(
-            self, param_values, param_keys, x_data, y_data,
-            x_shift, x_normalize, y_shift, y_normalize, loss,
-            preprocess, postprocess):
-        n_data_sets = len(next(iter(x_data.values())))
+    def _calculate_multi(self, param_values):
+        n_data_sets = len(next(iter(self.x_data.values())))
         total_loss = 0.0
-        name, y_label_i, y_label_j = self._get_label_indices(y_data.keys())
+        name, y_label_i, y_label_j = _get_label_indices(self.y_data.keys())
         params = deepcopy(self.init_params)
-        for key, value in zip(param_keys, param_values):
+        for key, value in zip(self.param_keys, param_values):
             _update_flat_value(params, key, value)
         for i in range(n_data_sets):
             params_data_set = deepcopy(params)
-            y_fit = {label: np.zeros_like(y[i]) for label, y in y_data.items()}
+            y_fit = {label: np.zeros_like(y[i])
+                     for label, y in self.y_data.items()}
             for multi_param in self.multi_params:
-                _update_flat_value(
-                    params_data_set, multi_param,
-                    _extract_flat_value(params, multi_param)[i])
+                _update_flat_value(params_data_set, multi_param,
+                                   _extract_flat_value(params, multi_param)[i])
             cond = self._build_obj(easy_params(params_data_set))
             for j in range(len(next(iter(y_fit.values())))):
-                x = {label: x[i][j] for label, x in x_data.items()}
-                y = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
+                x = {label: x[i][j] for label, x in self.x_data.items()}
+                y = _calc_y(cond, x, self.y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
                     y_fit[label][j] = y[label]
-            if x_shift is not None:
-                x = {label: x_shift[label][i] for label in x_shift}
-                y0 = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
+            if self.x_shift is not None:
+                x = {label: self.x_shift[label][i] for label in self.x_shift}
+                y0 = _calc_y(cond, x, self.y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
                     y_fit[label] -= y0[label]
-                if y_shift is not None:
+                if self.y_shift is not None:
                     for label in y_fit:
-                        y_fit[label] += y_shift[label][i]
-            if x_normalize is not None:
-                x = {label: x_normalize[label][i] for label in x_normalize}
-                y0 = _calc_y(cond, x, y_data, name, y_label_i, y_label_j)
+                        y_fit[label] += self.y_shift[label][i]
+            if self.x_normalize is not None:
+                x = {label: self.x_normalize[label][i]
+                     for label in self.x_normalize}
+                y0 = _calc_y(cond, x, self.y_data, name, y_label_i, y_label_j)
                 for label in y_fit:
                     y_fit[label] /= y0[label]
-                if y_normalize is not None:
+                if self.y_normalize is not None:
                     for label in y_fit:
-                        y_fit[label] *= y_normalize[label][i]
-            x_data_set = {label: x[i] for label, x in x_data.items()}
-            y_data_set = {label: y[i] for label, y in y_data.items()}
-            y_data_set = preprocess(x_data_set, y_data_set)
-            y_fit = postprocess(x_data_set, y_fit)
+                        y_fit[label] *= self.y_normalize[label][i]
+            x_data_set = {label: x[i] for label, x in self.x_data.items()}
+            y_data_set = {label: y[i] for label, y in self.y_data.items()}
+            y_data_set = self.preprocess(x_data_set, y_data_set)
+            y_fit = self.postprocess(x_data_set, y_fit)
             y_fit = np.concatenate(list(y_fit.values()))
             y_data_set = np.concatenate(list(y_data_set.values()))
-            total_loss += loss(y_fit, y_data_set) / n_data_sets
+            total_loss += self.loss(y_fit, y_data_set) / n_data_sets
         return total_loss
 
     def _build_obj(self, params):
@@ -314,14 +312,217 @@ class FittingRoutine:
         cond = Conductivity(band, **params)
         return cond
 
-    def _get_label_indices(self, labels: Collection[str]):
-        """Extract the names and indices from y_data keys."""
-        name, i, j = {}, {}, {}
-        for label in labels:
-            name[label], index_labels = label.split("_")
-            i[label] = {'x': 0, 'y': 1, 'z': 2}[index_labels[0]]
-            j[label] = {'x': 0, 'y': 1, 'z': 2}[index_labels[1]]
-        return name, i, j
+
+class FullScatteringFitter:
+    """This convenience class sets up a routine for full scattering
+    rate fitting.
+
+    Stores the necessary data and generates the functions used in
+    This includes handling the residual computation, parameter update,
+    logging the fitting progress, and saving the results to a file.
+
+    Parameters
+    ----------
+    init_params : Mapping
+        Initial parameters for the fitting routine, and also other
+        parameters for initiallizing the classes. This is passed through
+        ``easy_params`` to the ``BandStructure`` and ``Conductivity``.
+    save_path : str, optional
+        The directory where the fitting logs will be saved. If not
+        provided, logs will not be saved.
+    save_label : str, optional
+        Label of the results (used as file names).
+    print_log : bool, optional
+        If True, the fitting progress will be printed to the console.
+    
+    Attributes
+    ----------
+    scattering_rates : np.ndarray
+        The current scattering rates.
+    iteration : int
+        The current iteration number.
+    last_time : float
+        The timestamp of the last fitting iteration.
+    total_time : float
+        The total time spent on the fitting routine.
+    """
+    def __init__(self, init_params: Mapping, x_data, y_data, x_shift,
+                 x_normalize, y_shift, y_normalize, preprocess,
+                 save_path: str = None, save_label: str = "fit",
+                 print_log: bool = True, n_threads: int = 1):
+        self.params = easy_params(init_params)
+        self.band = BandStructure(**self.params)
+        self.band.discretize()
+
+        self.y_name, self.y_label_i, self.y_label_j = _get_label_indices(
+            y_data.keys())
+        self.x_data = x_data
+        self.y_data = y_data
+        self.x_shift = x_shift
+        self.x_normalize = x_normalize
+        self.y_shift = y_shift
+        self.y_normalize = y_normalize
+        self.preprocess = preprocess
+
+        self.save_path = save_path
+        self.save_label = save_label
+        self.print_log = print_log
+        self.iteration = 0
+        self.last_time = time()
+        self.total_time = 0.0
+        self.n_threads = n_threads
+        if self.n_threads > 1:
+            self.executor = ThreadPoolExecutor(max_workers=self.n_threads)
+
+        self._scat_cache = None
+        self.residual_vector = None
+        self.jacobian_matrix = None
+
+    def residual(self, scattering_rates):
+        self._calculate_shared(scattering_rates)
+        return self.residual_vector
+
+    def jacobian(self, scattering_rates):
+        self._calculate_shared(scattering_rates)
+        return self.jacobian_matrix
+
+    def log(self, intermediate_result: scipy.optimize.OptimizeResult):
+        self.iteration += 1
+        now = time()
+        iter_time = now - self.last_time
+        self.last_time = now
+        self.total_time += iter_time
+
+        log_message = f"Iteration {self.iteration}\n" \
+                      f"----------{'-' * len(str(self.iteration))}\n" \
+                      f"Best Scattering Rate Statistics (in THz):\n"
+        scattering_rates = intermediate_result.x
+        x_min, x_max = np.min(scattering_rates), np.max(scattering_rates)
+        x_mean, x_std = np.mean(scattering_rates), np.std(scattering_rates)
+        log_message += f"Mean: {x_mean:.4g}, Std: {x_std:.4g}, " \
+                       f"Min: {x_min:.4g}, Max: {x_max:.4g}\n"
+
+        log_message += "Iteration Runtime: "
+        log_message += _get_hour_minute_second_string(iter_time) + "\n"
+        log_message += "Total Runtime: "
+        log_message += _get_hour_minute_second_string(self.total_time) + "\n\n"
+
+        if self.print_log:
+            print(log_message)
+        if self.save_path is not None:
+            path = Path(self.save_path) / f"{self.save_label}.log"
+            mode = 'w' if self.iteration == 1 else 'a'
+            with open(path, mode) as log_file:
+                log_file.write(log_message)
+    
+    def _calculate_shared(self, scattering_rates):
+        if self._scat_cache is not None and np.array_equal(
+                self._scat_cache, scattering_rates):
+            return
+
+        cond = Conductivity(self.band, scattering_rate=scattering_rates,
+                            **self.params)
+        self._calc_y_multiplier(cond)
+        self._calc_iterations(scattering_rates)
+        self._apply_y_shifts(cond)
+
+
+        y_data = self.preprocess(self.x_data, self.y_data)
+        y_fit = np.concatenate(list(self.y_fit.values()))
+        y_data = np.concatenate(list(y_data.values()))
+        self.residual_vector = y_fit - y_data
+        self.jacobian_matrix = np.hstack(list(self.jacobian_matrix.values()))
+        self._scat_cache = np.copy(scattering_rates)
+
+    def _calc_y_multiplier(self, cond):
+        if self.x_normalize is not None:
+            y0 = _calc_y(cond, self.x_normalize, self.y_data,
+                            self.y_name, self.y_label_i, self.y_label_j)
+            self._y_multiply = {label: 1.0 / y0[label] for label in y0}
+        else:
+            self._y_multiply = {label: 1.0 for label in self.y_data}
+        if self.y_normalize is not None:
+            for label in self._y_multiply:
+                self._y_multiply[label] *= self.y_normalize[label]
+
+    def _apply_y_shifts(self, cond):
+        if self.x_shift is not None:
+            y0 = _calc_y(cond, self.x_shift, self.y_data,
+                            self.y_name, self.y_label_i, self.y_label_j)
+            for label in self.y_fit:
+                self.y_fit[label] -= y0[label]
+        if self.y_shift is not None:
+            for label in self.y_fit:
+                self.y_fit[label] += self.y_shift[label]
+
+    def _calc_iterations(self, scattering_rates):
+        n_data = len(next(iter(self.x_data.values())))
+        self.y_fit = {label: np.empty_like(y)
+                        for label, y in self.y_data.items()}
+        self.jacobian_matrix = {label: np.empty_like(y)
+                                for label, y in self.y_data.items()}
+        if self.n_threads > 1:
+            fn = partial(self._calc_single, scattering_rates=scattering_rates)
+            results = list(self.executor.map(fn, range(n_data)))
+        else:
+            results = [self._calc_single(scattering_rates, i)
+                        for i in range(n_data)]
+        for i, r in enumerate(results):
+            rho, jac = r
+            for label in self.y_data:
+                a, b = self.y_label_i[label], self.y_label_j[label]
+                self.y_fit[label][i] = self._y_multiply[label] * rho[a, b]
+                self.jacobian_matrix[label][i] = jac[a, b]
+
+    def _calc_single(self, scattering_rates, index):
+        cond = Conductivity(self.band, scattering_rate=scattering_rates,
+                            **self.params)
+        x = {label: x[index] for label, x in self.x_data.items()}
+        for label, value in x.items():
+            setattr(cond, label, value)
+        cond.calculate()
+        rho = np.linalg.inv(cond.sigma)
+
+        transpose_solution = cond._factorization.solve(
+            cond._vhat_projections, trans='T')
+        jac = self._calc_jac(cond._jacobian_sums, transpose_solution,
+                             cond._linear_solution, cond, rho)
+        return rho, jac
+
+    def _calc_jac(self, alpha, X, Y, cond, rho):
+        # "matrix-like" parts of Y^T dGamma/dgamma X
+        term_1 = np.array([
+            [alpha.T @ (Y[:, a] * X[:, b]) for b in range(X.shape[1])]
+            for a in range(Y.shape[1])])
+        # Y_pa sum_i alpha_pj X_jb
+        alpha_X = alpha @ X
+        term_2 = np.einsum("pa,pb->abp", Y, alpha_X)
+        # X_pb sum_i alpha_pi Y_ia
+        alpha_Y = alpha @ Y
+        term_3 = np.einsum("pb,pa->abp", X, alpha_Y)
+        jac = term_1 + term_2 + term_3
+
+        # "tensor-like" term of Y^T dGamma/dgamma X
+        i_idx = self.band.kfaces[:, 0]
+        j_idx = self.band.kfaces[:, 1]
+        k_idx = self.band.kfaces[:, 2]
+        for perm in [(i_idx, j_idx, k_idx), (j_idx, k_idx, i_idx),
+                        (k_idx, i_idx, j_idx)]:
+            i, j, p = perm
+            # sum_ij (alpha_ijp/2) Y_ia X_jb
+            X_vec = X[j, :]
+            Y_vec = Y[i, :]
+            for a in range(Y_vec.shape[1]):
+                for b in range(X_vec.shape[1]):
+                    np.add.at(
+                        jac[a, b], p, cond._jacobians*Y_vec[a]*X_vec[b]/2)
+        jac = rho @ jac @ rho
+        return e**2 / (4 * np.pi**3 * hbar) / self.band.bz_ratio / 60 * jac
+
+
+def _mean_squared_error(y_fit, y_data):
+    """Mean squared error loss function."""
+    return np.mean((y_fit - y_data) ** 2)
 
 
 def _mean_absolute_error(y_fit, y_data):
@@ -471,14 +672,13 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
 
     begin_time = datetime.now()
     fitter = FittingRoutine(
-        init_params, save_path, save_label, update_keys=update_keys,
+        init_params, x_data, y_data, x_shift, x_normalize,
+        y_shift, y_normalize, loss, preprocess, postprocess,
+        save_path, save_label, update_keys=update_keys,
         multi_params=multi_params, multi_params_labels=multi_params_labels,
         print_log=print_log)
-    result = optimizer(
-        fitter.residual, bounds=bounds, x0=x0, callback=fitter.log,
-        args=(update_keys, x_data, y_data, x_shift, x_normalize,
-              y_shift, y_normalize, loss, preprocess, postprocess),
-        **kwargs)
+    result = optimizer(fitter.residual, bounds=bounds, x0=x0,
+                       callback=fitter.log, **kwargs)
     end_time = datetime.now()
 
     print(result.message)
@@ -487,6 +687,148 @@ def fit_model(x_data: Mapping[str, Union[Sequence, Sequence[Sequence]]],
         result, init_params, update_keys, begin_time, end_time,
         save_path, save_label, multi_params=multi_params,
         multi_params_labels=multi_params_labels)
+
+
+def fit_full_scattering(
+        x_data: Mapping[str, Sequence], y_data: Mapping[str, Sequence],
+        init_params: Mapping, init_scattering: float = 1.0,
+        bounds: Union[Sequence[Sequence], Sequence] = (0, np.inf),
+        x_shift: Mapping = None, x_normalize: Mapping = None,
+        y_shift: Mapping = None, y_normalize: Mapping = None,
+        preprocess: Callable = _dummy_processor,
+        postprocess: Callable = _dummy_processor,
+        save_path: str = None, save_label: str = None,
+        print_log: bool = True, n_threads: int = 1, **kwargs):
+    """Convenience function to set up and run a fitting routine.
+
+    This uses the `optimizer` (assumed to behave like a SciPy optimizer)
+    to perform a global fit. The optimizer is hard-coded, because the
+    callback functions are highly specific to each optimizer.
+    Saves the results to the specified path.
+
+    Parameters
+    ----------
+    x_data : Mapping[str, Sequence]
+        The independent variable data (e.g. field). The name of the
+        variable is mapped to the data, e.g.
+        ``{'field': [0, 1, 2]}``.
+    y_data : Mapping[str, Sequence]
+        The dependent variable data (e.g. conductivity). The name of
+        the variable is mapped to the data, e.g.
+        ``{'sigma_xx': [1.1, 2.4, 3.8]}``. The name of each variable
+        must start with "sigma" or "rho" (for conductivity or
+        resistivity, respectively), and you can add a suffix to specify
+        the component (e.g. ``'sigma_xx'``, ``'rho_xy'``).
+    init_params : Mapping
+        Parameters for initiallizing the classes. This is passed through
+        ``easy_params`` to the ``BandStructure`` and ``Conductivity``.
+    init_scattering : float, optional
+        Initial (constant) scattering rate for the fitting routine.
+    bounds : Union[Sequence[Sequence], Sequence], optional
+        Bounds for the scattering rates. This would typically be a
+        single sequence of the form (min, max) to set the boundaries
+        of all scattering rates, but it can also be a sequence of
+        sequences, to set the individual boundaries of each scattering
+        rate of each ``kpoint`` of the band structure.
+    x_shift : Mapping, optional
+        If provided, the y values will be shifted by the y value at
+        this x point. The mapping must have the same structure as
+        ``x_data``, but with single values instead of arrays as
+        the values.
+    x_normalize : Mapping, optional
+        If provided, the y values will be normalized by the y value
+        at this x point. The mapping must have the same structure
+        as ``x_data``, but with single values instead of arrays as
+        the values. Note that shifts are applied before normalization.
+    y_shift : Mapping, optional
+        The y values will be normalized to this value (if
+        ``x_normalize`` is provided). The mapping must have the same
+        structure as ``y_data``, but with single values instead of
+        arrays as the values.
+    y_normalize : Mapping, optional
+        The y values will be shifted to this value (if ``x_shift`` is
+        provided). The mapping must have the same structure as
+        ``y_data``, but with single values instead of arrays as the
+        values.
+    loss : Callable, optional
+        A function that takes the fit and data y values, and returns a
+        scalar loss value. By default, the mean absolute error is used.
+    preprocess : Callable, optional
+        This callable is applied to the data y values before
+        calculating the loss. It takes ``x_data`` and a ``y`` with a
+        format similar to ``y_data``, and returns the processed ``y``,
+        again with a format similar to ``y_data``. By default, no
+        postprocessing is applied. An example use case is filtering out
+        parts of the values where the data can be unreliable.
+    save_path : str, optional
+        The directory where the fitting results will be saved.
+        If not provided, results will not be saved.
+    save_label : str, optional
+        Label of the results. If not provided, will be set to
+        ``f"y_label_x_label"``. If ``y_label` or ``x_label`` are
+        collections of string, they will be joined with an underscore.
+    print_log : bool, optional
+        If True, the fitting progress will be printed to the console.
+    **kwargs : dict, optional
+        Additional keyword arguments passed to the `optimizer`
+    """
+    if save_label is None:
+        x_string = x_label if isinstance(x_label, str) else "_".join(x_label)
+        y_string = y_label if isinstance(y_label, str) else "_".join(y_label)
+        save_label = f"{y_string}_{x_string}"
+
+    begin_time = datetime.now()
+    fitter = FullScatteringFitter(
+        init_params, x_data, y_data, x_shift, x_normalize,
+        y_shift, y_normalize, preprocess, save_path, save_label,
+        print_log=print_log, n_threads=n_threads)
+    x0 = np.full(len(fitter.band.kpoints), init_scattering)
+    result = scipy.optimize.least_squares(
+        fitter.residual, jac=fitter.jacobian,
+        bounds=bounds, x0=x0, callback=fitter.log, **kwargs)
+    result['fermi_surface_vertices'] = fitter.band.kpoints
+    result['fermi_surface_faces'] = fitter.band.kfaces
+    result['scattering_rates'] = result.x
+    result.pop('x')
+    end_time = datetime.now()
+
+    result['begin_time'] = begin_time.isoformat()
+    result['end_time'] = end_time.isoformat()
+    result['runtime'] = (end_time - begin_time).total_seconds()
+
+    print(result.message)
+    print("\n\n")
+    return result
+    
+
+def _get_label_indices(labels: Collection[str]):
+    """Extract the names and indices from y_data keys."""
+    name, i, j = {}, {}, {}
+    for label in labels:
+        name[label], index_labels = label.split("_")
+        i[label] = {'x': 0, 'y': 1, 'z': 2}[index_labels[0]]
+        j[label] = {'x': 0, 'y': 1, 'z': 2}[index_labels[1]]
+    return name, i, j
+
+
+def _calc_y(cond, x_data, y_data, name, y_label_i, y_label_j):
+    y = {}
+    for label, x in x_data.items():
+        setattr(cond, label, x)
+    if 'rho' in name.values():
+        cond.calculate()
+        rho = np.linalg.inv(cond.sigma)
+    else:
+        cond.calculate(sorted(set(y_label_i.values())),
+                       sorted(set(y_label_j.values())))
+    for label in y_data:
+        if name[label] == 'sigma':
+            y[label] = cond.sigma[y_label_i[label], y_label_j[label]]
+        elif name[label] == 'rho':
+            y[label] = rho[y_label_i[label], y_label_j[label]]
+        else:
+            raise ValueError(f"Unknown y_data key: {name[label]}")
+    return y
 
 
 def _multiply_multi_params(update_keys, bounds, x0, init_params,
@@ -659,26 +1001,6 @@ def _build_params_from_flat(param_keys, param_values):
             key = part
         level_params[key] = param_values.pop(0)
     return params
-
-
-def _calc_y(cond, x_data, y_data, name, y_label_i, y_label_j):
-    y = {}
-    for label, x in x_data.items():
-        setattr(cond, label, x)
-    if 'rho' in name.values():
-        cond.calculate()
-        rho = np.linalg.inv(cond.sigma)
-    else:
-        cond.calculate(sorted(set(y_label_i.values())),
-                       sorted(set(y_label_j.values())))
-    for label in y_data:
-        if name[label] == 'sigma':
-            y[label] = cond.sigma[y_label_i[label], y_label_j[label]]
-        elif name[label] == 'rho':
-            y[label] = rho[y_label_i[label], y_label_j[label]]
-        else:
-            raise ValueError(f"Unknown y_data key: {name[label]}")
-    return y
 
 
 def _save_fit_result(result, init_params, update_keys, begin_time,
