@@ -1,6 +1,6 @@
 import numpy as np
 import re
-from typing import Mapping, Sequence, Union
+from typing import Mapping, Sequence
 from pathlib import Path
 from collections import defaultdict
 
@@ -16,25 +16,25 @@ class Loader:
 
     Parameters
     ----------
-    x_vary_label : Union[str, Sequence[str]], optional
+    x_vary_label : str | Sequence[str], optional
         Label of the independent variable(s) that varies inside the
         files. If not provided, it will be inferred from the file
         contents (column headers).
-    x_search : Mapping[str, Sequence[Union[int, float]]], optional
+    x_search
         Dictionary mapping labels of independent variables to the values
         to be searched for in the file names. Example: 
         ``{'phi': [30, 60], 'field': [1.3, 2.7]}``.
-    y_label : Sequence[str], optional
+    y_label
         Labels of the dependent variables, used for fitting routine.
         See ``elecboltz.fit.fit_model`` for details about the allowed
         labels. If None, will be inferred from the file contents
         (column headers).
-    split_by : str, optional
+    split_by
         If provided, the processed data will be split into separate
         sequences by this label. This is useful for fitting models that
         require separate data sets for different values of a variable
         (e.g. when fitting band parameters to different temperatures).
-    save_new_labels : bool, optional
+    save_new_labels
         If True, new labels found in the file names will be saved to
         ``x_search``. If there are multiple values for the new labels
         for each indicated label in ``x_search``, then the values of
@@ -45,7 +45,7 @@ class Loader:
         are found, then ``x_search`` will be updated to
         ``{'phi': [30, 60, 30, 60], 'field': [1, 1, 2, 2]}`` (probably;
         it depends on the order that the files are read).
-    save_new_values : bool, optional
+    save_new_values
         If True, new values for existing labels in ``x_search`` will be
         added to the list of values for that label.
     
@@ -71,17 +71,17 @@ class Loader:
     y_data_interpolated : defaultdict[str, list[np.ndarray]]
         Interpolated, but unprocessed, data of the dependent variable
         collected from the files.
-    x_vary_label : Union[str, Sequence[str]], optional
+    x_vary_label
         Label of the independent variable(s) that varies inside the
         files.
-    x_label: Mapping[str, Union[int, float]]
+    x_label : Mapping[str, int | float]
         Dictionary mapping labels of independent variables inside file
         names to their values.
     loaded_files : list[pathlib.Path]
         List of the files that were loaded.
     """
-    def __init__(self, x_vary_label: Union[str, Sequence[str]] = None,
-                 x_search: Mapping[str, Sequence[Union[int, float]]] = {},
+    def __init__(self, x_vary_label: str | Sequence[str] = None,
+                 x_search: Mapping[str, Sequence[int | float]] = {},
                  y_label: Sequence[str] = None, split_by: str = None,
                  save_new_labels: bool = False, save_new_values: bool = False):
         self.x_vary_label = x_vary_label
@@ -103,10 +103,10 @@ class Loader:
 
     def load(self, folder_path: str = '.', prefix: str = '',
              recursive: bool = True,
-             x_columns: Union[Sequence[int], Sequence[str]] = None,
-             y_columns: Union[Sequence[int], Sequence[str]] = None,
-             x_units: Union[Sequence[float], float] = 1.0,
-             y_units: Union[Sequence[float], float] = 1.0,
+             x_columns: Sequence[int] | Sequence[str] = None,
+             y_columns: Sequence[int] | Sequence[str] = None,
+             x_units: Sequence[float] | float = 1.0,
+             y_units: Sequence[float] | float = 1.0,
              **kwargs):
         """Load the data from files in the specified folder.
 
@@ -129,24 +129,24 @@ class Loader:
         recursive : bool, optional
             If True, search for files recursively in the folder and its
             subfolders. If False, search only in the specified folder.
-        x_columns : Union[Sequence[int], Sequence[str]], optional
+        x_columns
             Override which columns to load for the independent variable.
             If a sequence of integers, it specifies the column indices
             to load. If a sequence of strings, it specifies the column
             names (headers) to load. If not provided, the first column
             is loaded as the independent variable.
-        y_columns : Union[Sequence[int], Sequence[str]], optional
+        y_columns
             Override which columns to load for the dependent variables.
             If a sequence of integers, it specifies the column indices
             to load. If a sequence of strings, it specifies the column
             names (headers) to load. If not provided, all columns except
             the first one (independent variable) are loaded.
-        x_units : Union[Sequence[float], float], optional
+        x_units
             Units for the independent variable(s). If a single float is
             provided, it is applied to all independent variables. If a
             sequence is provided, it must match the number of independent
             variables.
-        y_units : Union[Sequence[float], float], optional
+        y_units
             Units for the dependent variable(s). If a single float is
             provided, it is applied to all dependent variables. If a
             sequence is provided, it must match the number of dependent

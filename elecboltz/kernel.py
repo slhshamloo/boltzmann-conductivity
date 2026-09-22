@@ -45,7 +45,7 @@ class ScatteringKernel:
 
         Parameters
         ----------
-        params : dict
+        params
             A dictionary of parameters needed to construct the
             scattering kernel.
 
@@ -104,7 +104,7 @@ class SphericalKernel(ScatteringKernel):
 
     Parameters
     ----------
-    params : dict
+    params
         A dictionary mapping tuples of tuples of integers,
         ``((l, m), (l', m'))``, to the corresponding coefficients of
         the scattering kernel. Note that since the scattering kernel
@@ -199,7 +199,7 @@ class LegendreKernel(ScatteringKernel):
 
     Parameters
     ----------
-    params : dict
+    params
         Either a dictionary mapping ``(l, l')`` to the non-zero
         coefficients of the scattering kernel, or a 2D array of
         coefficients where the entry at (l, l') corresponds to the
@@ -423,7 +423,7 @@ class SumKernel(ScatteringKernel):
 
     Parameters
     ----------
-    kernels : list of ScatteringKernel
+    kernels
         The kernels to sum together.
     decomp_params : dict
         The parameters for the decomposition of the custom kernels.
@@ -559,14 +559,14 @@ class GaussianScattering:
     sigma : float
         The width of the Gaussian (in angstroms).
     backward : bool
-        Whether the Gaussian is a function of |k+k'| (backward scattering)
-        or |k-k'| (forward scattering). Default is False, which corresponds
+        Whether the Gaussian is a function of ``|k+k'|`` (backward scattering)
+        or ``|k-k'|`` (forward scattering). Default is False, which corresponds
         to forward scattering.
     delta : float
         The shift of the Gaussian from zero. This can be used to model
         scattering that is peaked at a non-zero momentum transfer, such
         as forward scattering (delta = 0) or backward scattering (delta
-        = 2|k|).
+        = ``2|k|``).
     """
     def __init__(self, C, sigma, delta=0.0, backward=False):
         self.C = C

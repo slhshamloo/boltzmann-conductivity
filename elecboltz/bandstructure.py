@@ -6,8 +6,8 @@ import scipy.sparse
 import scipy.optimize
 from skimage.measure import marching_cubes
 
-from typing import Union
 from collections.abc import Sequence
+from numbers import Real
 
 from scipy.constants import hbar, eV, angstrom, m_e
 # conversion from energy gradient units to m/s for velocity
@@ -23,30 +23,30 @@ class BandStructure:
 
     Parameters
     ----------
-    dispersion : str
+    dispersion
         The dispersion relation. Expresses the dispersion relation
         in terms of symbols in ``wavevector_names`` and additional
         parameters in ``band_params``. It must be parsable and
         differentiable by ``sympy``. Energy units are milli eV.
-    chemical_potential : float
+    chemical_potential
         The chemical potential in milli eV.
-    unit_cell : Sequence[float]
+    unit_cell
         The dimensions of the unit cell in angstrom.
-    band_params : dict, optional
+    band_params
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
-    fixed_filling : float or None
+    fixed_filling
         The fixed electronic filling fraction (``n``) of the material.
         If not None, this is used to set the chemical potential upon
         discretization of the Feri surface. The actual ``n`` value
         might be slightly different.
-    domain_size : Sequence[float]
+    domain_size
         The ratio of the reciprocal space domain sidelengths to simple
         cubic unit cell dimensions in reciprocal space. The product
         of the numbers in this collection must be equal to the number
         of atoms in the conventional unit cell specified by
         ``unit_cell``.
-    periodic : bool or int or Sequence[bool] or Sequence[int]
+    periodic
         If bool, whether periodic boundary conditions are applied to all
         axes or not. If a single int, specifies which single axis is 
         periodic. If a collection, specifies which axes are periodic.
@@ -55,25 +55,25 @@ class BandStructure:
         axes. If the collection is of booleans, it specifies whether
         each axis is periodic or not, e.g. ``[True, False, True]`` means
         periodic in `x` and `z` axes, but not in `y` axis.
-    axis_names : str or Sequence[str], optional
+    axis_names
         The names of the unit cell axes. Must be parsable by
         `sympy.symbols`.
-    wavevector_names : str or Sequence[str], optional
+    wavevector_names
         The names of the wavevector components. Must be parsable by
         `sympy.symbols`.
-    resolution :  int or Sequence[int], optional
+    resolution
         Controls the resolution of the grids used for discretizing the
         Fermi surface. If a collection of integers is provided, each
         element corresponds to the resolution along the respective
         axis. If a single integer is provided, it is used for all axes.
-    filling_tuning_depth : int, optional
+    filling_tuning_depth
         The depth of the adaptive octree integration used for calculating
         the filling fraction when tuning the chemical potential to match
         the fixed filling fraction.
-    n_correct : int, optional
+    n_correct
         The number of correction steps for improving the accuracy of
         the discretization of the Fermi surface.
-    sort_axis : int, optional
+    sort_axis
         The axis along which to sort the points after triangulation.
         If None, do not sort the points.
 
@@ -102,14 +102,14 @@ class BandStructure:
         are periodic images of each other are mapped to the same point.
     """
     def __init__(
-            self, dispersion: str, chemical_potential: float,
-            unit_cell: Sequence[float], band_params: dict = {},
-            fixed_filling: Union[float, None] = None,
-            domain_size: Sequence[float] = np.ones(3), bz_ratio: float = 1.0,
-            periodic: Union[bool, Sequence[Union[int, bool]]] = True,
-            axis_names: Union[Sequence[str], str] = ['a', 'b', 'c'],
-            wavevector_names: Union[Sequence[str], str] = ['kx', 'ky', 'kz'],
-            resolution: Union[int, Sequence[int]] = 31,
+            self, dispersion: str, chemical_potential: Real,
+            unit_cell: Sequence[Real], band_params: dict = {},
+            fixed_filling: Real | None = None,
+            domain_size: Sequence[Real] = np.ones(3), bz_ratio: Real = 1.0,
+            periodic: bool | Sequence[int | bool] = True,
+            axis_names: Sequence[str] | str = ['a', 'b', 'c'],
+            wavevector_names: Sequence[str] | str = ['kx', 'ky', 'kz'],
+            resolution: int | Sequence[int] = 31,
             filling_tuning_depth: int = 6,
             n_correct: int = 2,sort_axis: int = None, **kwargs):
         # avoid triggering the __setattr__ method for the first time
@@ -200,7 +200,7 @@ class BandStructure:
 
         Parameters
         ----------
-        depth : int, optional
+        depth
             The depth of the adaptive octree integration. Higher values
             result in more accurate integration, but take exponentially
             longer to compute.
@@ -232,7 +232,7 @@ class BandStructure:
 
         Parameters
         ----------
-        depth : int, optional
+        depth
             The depth of the adaptive octree integration in
             ``calculate_filling_fraction``.
 

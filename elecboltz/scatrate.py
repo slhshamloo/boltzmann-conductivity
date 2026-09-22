@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Union, Callable
+from typing import Callable
 from collections.abc import Sequence
 
 
@@ -111,7 +111,7 @@ class ScatteringSum(ScatteringFunction):
 
 
 def build_scattering_function(
-        scattering_params: dict[str, Union[float, Sequence[float]]],
+        scattering_params: dict[str, float | Sequence[float]],
         scattering_models: Sequence[str] = ['isotropic']):
     """Build a scattering function from the given parameters.
 
@@ -142,11 +142,11 @@ def build_scattering_function(
 
     Parameters
     ----------
-    scattering_params : dict[str, float or Sequence[float]]
+    scattering_params
         Dictionary mapping the names of the parameters to their value
         in each scattering model. If the value is a single number, it
         is assumed to be the parameter for all models. 
-    scattering_models : Sequence['str'], optional
+    scattering_models
         The type of scattering model to use.
     
     Returns
