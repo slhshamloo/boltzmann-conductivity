@@ -1,8 +1,10 @@
 import re
-from unittest import result
 import numpy as np
 import scipy
 from typing import Mapping, Collection, Callable
+from collections.abc import Sequence
+from numpy.typing import ArrayLike, NDArray
+from numbers import Real
 from copy import copy
 from scipy.special import sph_harm_y
 
@@ -14,18 +16,18 @@ class ScatteringKernel:
 
     Attributes
     ----------
-    coeffs : np.ndarray
+    coeffs : NDArray[np.complexfloating]
         The coefficients of the scattering kernel. The entry at (i, j)
         corresponds to the coefficient for the basis functions with
         indices i and j.
     
     Methods
     -------
-    build_coeffs(params) -> np.ndarray
+    build_coeffs(params)
         Build the coefficients of the scattering kernel from the given
         parameters and set the ``coeffs`` attribute. Only necessary if
         building a kernel with explicit basis functions.
-    eval_basis(index, kx, ky, kz) -> np.ndarray
+    eval_basis(index, kx, ky, kz)
         Evaluate the basis function with the given index at the given
         wavevector. Only necessary if you want to use explicit basis
         functions.
@@ -39,7 +41,7 @@ class ScatteringKernel:
     def __init__(self, params: Mapping):
         self.coeffs = self.build_coeffs(params)
     
-    def build_coeffs(self, params: Mapping) -> np.ndarray:
+    def build_coeffs(self, params: Mapping) -> NDArray[np.complexfloating]:
         """Build the coefficients of the scattering kernel
         from the given parameters and set the ``coeffs`` attribute.
 
@@ -51,13 +53,14 @@ class ScatteringKernel:
 
         Returns
         -------
-        np.ndarray
+        NDArray[np.complexfloating]
             The coefficients of the scattering kernel.
         """
         self.coeffs = params['coeffs']
         return self.coeffs
     
-    def eval_basis(self, index, kx, ky, kz) -> np.ndarray:
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike) -> NDArray[np.floating]:
         """Evaluate the basis function with the given index
         at the given wavevector.
 
@@ -70,7 +73,7 @@ class ScatteringKernel:
 
         Returns
         -------
-        np.ndarray
+        NDArray[np.floating]
             The values of the basis functions at the given wavevector.
         """
         raise NotImplementedError("Subclasses should implement this method.")
@@ -83,15 +86,16 @@ class IsotropicKernel(ScatteringKernel):
 
     Parameters
     ----------
-    C : float
+    C
         The value of the kernel function at all wavevectors. Should be in
         units of angstrom^2 THz.
     """
-    def __init__(self, C):
+    def __init__(self, C: Real):
         self.C = C
         self.coeffs = np.array([[C]])
 
-    def eval_basis(self, index, kx, ky, kz):
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike):
         return np.ones_like(kx)
 
 
@@ -129,7 +133,8 @@ class SphericalKernel(ScatteringKernel):
             self.coeffs[index_map[j], index_map[i]] = value
         return self.coeffs
     
-    def eval_basis(self, index, kx, ky, kz):
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike):
         index = self._inv_idx_map[index]
         theta = np.arccos(kz / np.sqrt(kx**2 + ky**2 + kz**2))
         phi = np.arctan2(ky, kx)
@@ -147,7 +152,7 @@ class CylindricalKernel(ScatteringKernel):
 
     Parameters
     ----------
-    params : dict or np.ndarray
+    params
         A dictionary mapping ``(m, m')`` to the non-zero coefficients
         of the scattering kernel. For the cosine basis functions,
         ``m`` is non-negative, while for the sine basis functions,
@@ -180,7 +185,8 @@ class CylindricalKernel(ScatteringKernel):
             self.coeffs[index_map[j], index_map[i]] = value
         return self.coeffs
 
-    def eval_basis(self, index, kx, ky, kz):
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike):
         index = self._inv_idx_map[index]
         phi = np.arctan2(ky, kx)
         if index % 2 == 0:
@@ -229,7 +235,8 @@ class LegendreKernel(ScatteringKernel):
         self.coeffs += self.coeffs.conj().T - np.diag(self.coeffs.diagonal())
         return self.coeffs
 
-    def eval_basis(self, index, kx, ky, kz):
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike):
         index = self._inv_idx_map[index]
         theta = np.arccos(kz / np.sqrt(kx**2 + ky**2 + kz**2))
         return np.real(sph_harm_y(index, 0, theta, 0))
@@ -251,25 +258,26 @@ class AzimuthalHotspotKernel(ScatteringKernel):
 
     Parameters
     ----------
-    phi_h: Sequence of float
+    phi_h
         The position of the hotspots by their angle in the x-y plane.
         In degrees, but converted to radians internally.
-    dphi_h : float
+    dphi_h
         The connecting angle between the hotspots. In degrees, but
         converted to radians internally. Only pairs of hotspots with
         this particular connecting angle will contribute to the
         scattering kernel.
-    C_h : float
+    C_h
         The amplitude of each Gaussian pair in the scattering kernel.
         In units of angstrom^2 THz.
-    sigma_h : Sequence of float
+    sigma_h
         The width of the Gaussians (in radians).
-    tol : float
+    tol
         The tolerance for determining whether a pair of hotspots is
         connected by the given connecting angle. This is in absolute
         terms, in radians.
     """
-    def __init__(self, phi_h, dphi_h, C_h, sigma_h, tol=1e-5):
+    def __init__(self, phi_h: Sequence[Real], dphi_h: Real, C_h: Real,
+                 sigma_h: Sequence[Real], tol: Real = 1e-5):
         self.phi_h = np.radians(np.array(phi_h))
         self.dphi_h = np.radians(dphi_h)
         self.C_h = C_h
@@ -286,7 +294,8 @@ class AzimuthalHotspotKernel(ScatteringKernel):
                     self.coeffs[i, j] = self.C_h
                     self.coeffs[j, i] = self.C_h
 
-    def eval_basis(self, index, kx, ky, kz):
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike):
         phi = np.arctan2(ky, kx)
         hotspot = _make_angle_periodic(self.phi_h[index])
         phi_diff = _make_angle_periodic(phi - hotspot)
@@ -312,27 +321,29 @@ class Quasi2DHotspotKernel(ScatteringKernel):
 
     Parameters
     ----------
-    phi_h: Sequence of float
+    phi_h
         The position of the hotspots by their angle in the x-y plane.
         In degrees, but converted to radians internally.
-    dphi_h : float
+    dphi_h
         The connecting angle between the hotspots. In degrees, but
         converted to radians internally. Only pairs of hotspots with
         this particular connecting angle will contribute to the
         scattering kernel.
-    C_h : float
+    C_h
         The amplitude of each Gaussian pair in the scattering kernel.
         In units of angstrom^2 THz.
-    sigma_phi : Sequence of float
+    sigma_phi
         The width of the Gaussians in phi (in radians).
-    sigma_z : float
+    sigma_z
         The width of the Gaussian in the z-direction (in 1/angstrom).
-    tol : float
+    tol
         The tolerance for determining whether a pair of hotspots is
         connected by the given connecting angle. This is in absolute
         terms, in radians.
     """
-    def __init__(self, phi_h, dphi_h, C_h, sigma_phi, sigma_z, tol=1e-5):
+    def __init__(self, phi_h: Sequence[Real], dphi_h: Real, C_h: Real,
+                 sigma_phi: Sequence[Real], sigma_z: Real,
+                 tol: Real = 1e-5):
             self.phi_h = np.radians(np.array(phi_h))
             self.dphi_h = np.radians(dphi_h)
             self.C_h = C_h
@@ -350,7 +361,8 @@ class Quasi2DHotspotKernel(ScatteringKernel):
                     self.coeffs[i, j] = self.C_h
                     self.coeffs[j, i] = self.C_h
 
-    def eval_basis(self, index, kx, ky, kz):
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike):
         phi = np.arctan2(ky, kx)
         hotspot = _make_angle_periodic(self.phi_h[index])
         phi_diff = _make_angle_periodic(phi - hotspot)
@@ -444,7 +456,8 @@ class SumKernel(ScatteringKernel):
             self.coeffs = scipy.linalg.block_diag(
                 *[k.coeffs for k in self.explicit_kernels])
     
-    def eval_basis(self, index, kx, ky, kz):
+    def eval_basis(self, index: int, kx: ArrayLike, ky: ArrayLike,
+                   kz: ArrayLike):
         current_index = 0
         for kernel in self.explicit_kernels:
             size = kernel.coeffs.shape[0]
@@ -465,7 +478,9 @@ class CustomKernelSumCallable:
     """
     def __init__(self, kernels: Collection[Callable]):
         self.kernels = kernels
-    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, kz: ArrayLike,
+                 kx_prime: ArrayLike, ky_prime: ArrayLike,
+                 kz_prime: ArrayLike):
         result = 0
         for kernel in self.kernels:
             result += kernel(kx, ky, kz, kx_prime, ky_prime, kz_prime)
@@ -481,19 +496,21 @@ class SpinFluctuationScattering:
     
     Parameters
     ----------
-    C_s : float
+    C_s
         The amplitude of the spin fluctuation kernel.
-    xi : float
+    xi
         The correlation length of the spin fluctuations (in angstroms).
-    Q : Sequence[float]
+    Q
         The wavevector of the spin fluctuations, in units of 1/angstrom.
     """
-    def __init__(self, C_s, xi, Q):
+    def __init__(self, C_s: Real, xi: Real, Q: Sequence[Real]):
         self.C_s = C_s
         self.xi = xi
         self.Q = np.array(Q)
 
-    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, kz: ArrayLike,
+                 kx_prime: ArrayLike, ky_prime: ArrayLike,
+                 kz_prime: ArrayLike):
         diff_x = np.abs(kx - kx_prime) - self.Q[0]
         diff_y = np.abs(ky - ky_prime) - self.Q[1]
         diff_z = np.abs(kz - kz_prime) - self.Q[2]
@@ -515,23 +532,26 @@ class AzimuthalKernelFunction:
 
     Parameters
     ----------
-    C_1 : float
+    C_1
         The coefficient for the anisotropic term in the kernel function.
-    m : int
+    m
         Sets the symmetry of the anisotropy over the angle in the x-y
         plane. For example, ``m=2`` repeats the peak every 90 degrees.
-    nu : float
+    nu
         Sets the sharpness of the anisotropy in the kernel function.
-    phi_0 : float
+    phi_0
         The phase shift of the anisotropy in the kernel function.
     """
-    def __init__(self, C_1, m=1, nu=1.0, phi_0=0.0):
+    def __init__(self, C_1: Real, m: int = 1, nu: Real = 1.0,
+                 phi_0: Real = 0.0):
         self.C_1 = C_1
         self.m = m
         self.nu = nu
         self.phi_0_rad = np.radians(phi_0)
 
-    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, kz: ArrayLike,
+                 kx_prime: ArrayLike, ky_prime: ArrayLike,
+                 kz_prime: ArrayLike):
         phi = np.arctan2(ky, kx)
         phi_prime = np.arctan2(ky_prime, kx_prime)
         phi_mean = (phi+phi_prime) / 2
@@ -554,27 +574,30 @@ class GaussianScattering:
 
     Parameters
     ----------
-    C : float
+    C
         The amplitude of the Gaussian.
-    sigma : float
+    sigma
         The width of the Gaussian (in angstroms).
-    backward : bool
+    backward
         Whether the Gaussian is a function of ``|k+k'|`` (backward scattering)
         or ``|k-k'|`` (forward scattering). Default is False, which corresponds
         to forward scattering.
-    delta : float
+    delta
         The shift of the Gaussian from zero. This can be used to model
         scattering that is peaked at a non-zero momentum transfer, such
         as forward scattering (delta = 0) or backward scattering (delta
         = ``2|k|``).
     """
-    def __init__(self, C, sigma, delta=0.0, backward=False):
+    def __init__(self, C: Real, sigma: Real, delta: Real = 0.0,
+                 backward: bool = False):
         self.C = C
         self.sigma = sigma
         self.delta = delta
         self.backward = backward
 
-    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, kz: ArrayLike,
+                 kx_prime: ArrayLike, ky_prime: ArrayLike,
+                 kz_prime: ArrayLike):
         sign = -1 if self.backward else 1
         diff_x = kx - sign * kx_prime
         diff_y = ky - sign * ky_prime
@@ -603,39 +626,41 @@ class AnisotropicGaussianScattering:
 
     Parameters
     ----------
-    C_0 : float
+    C_0
         The constant term in the amplitude of the Gaussian.
-    C_1 : float
+    C_1
         The coefficient for the anisotropic term in the amplitude of the
         Gaussian.
-    sigma_0 : float
+    sigma_0
         The constant term in the width of the Gaussian (in radians).
-    sigma_1 : float
+    sigma_1
         The coefficient for the anisotropic term in the width of the
         Gaussian (in radians).
-    m : int
+    m
         Sets the symmetry of the anisotropy over the angle in the x-y
         plane. For example, ``m=2`` repeats the peak every 90 degrees.
-    nu_c : float
+    nu_c
         Sets the sharpness of the anisotropy in the amplitude of
         the Gaussian.
-    nu_s : float
+    nu_s
         Sets the sharpness of the anisotropy in the width of the
         Gaussian.
-    phi_c : float
+    phi_c
         Sets the angle at which the peak of the amplitude of the
         anisotropy occurs.  In units of degrees.
-    phi_s : float
+    phi_s
         Sets the angle at which the width of the kernel is largest.
         In units of degrees.
-    delta : float
+    delta
         The shift of the Gaussian from zero, in degrees. This can be
         used to model scattering that is peaked at a non-zero angle
         difference, such as forward scattering (``delta=0``) or
         backward scattering (``delta=180``).
     """
-    def __init__(self, C_0, C_1, sigma_0, sigma_1, m=1,
-                 nu_c=1.0, nu_s=1.0, phi_c=0.0, phi_s=0.0, delta=0.0):
+    def __init__(self, C_0: Real, C_1: Real, sigma_0: Real, sigma_1: Real,
+                 m: int = 1, nu_c: Real = 1.0, nu_s: Real = 1.0,
+                 phi_c: Real = 0.0, phi_s: Real = 0.0,
+                 delta: Real = 0.0):
         self.C_0 = C_0
         self.C_1 = C_1
         self.sigma_0 = sigma_0
@@ -646,7 +671,9 @@ class AnisotropicGaussianScattering:
         self.phi_c_rad = np.radians(phi_c)
         self.phi_s_rad = np.radians(phi_s)
         self.delta_rad = np.radians(delta)
-    def __call__(self, kx, ky, kz, kx_prime, ky_prime, kz_prime):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, kz: ArrayLike,
+                 kx_prime: ArrayLike, ky_prime: ArrayLike,
+                 kz_prime: ArrayLike):
         phi = np.arctan2(ky, kx)
         phi_prime = np.arctan2(ky_prime, kx_prime)
         phi_mean = (phi+phi_prime) / 2

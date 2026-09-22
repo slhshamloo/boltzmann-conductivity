@@ -15,6 +15,7 @@ from pprint import pformat
 from typing import Callable
 from collections.abc import Sequence, Collection, Mapping
 from numbers import Real
+from numpy.typing import NDArray
 from scipy.constants import e, hbar, angstrom
 
 
@@ -162,7 +163,7 @@ class FittingRoutine:
         self.last_time = time()
         self.total_time = 0.0
 
-    def residual(self, param_values: Sequence) -> np.ndarray:
+    def residual(self, param_values: Sequence) -> NDArray[np.float64]:
         """Compute the residual for the given parameters and data.
 
         Parameters
@@ -340,7 +341,7 @@ class FullScatteringFitter:
     
     Attributes
     ----------
-    scattering_rates : np.ndarray
+    scattering_rates : NDArray[np.float64]
         The current scattering rates.
     iteration : int
         The current iteration number.

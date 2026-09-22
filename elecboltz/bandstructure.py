@@ -89,10 +89,10 @@ class BandStructure:
         The effective mass of the charge carriers divided by the
         rest mass of the electron, m_e. Only available after calling
         ``calculate_mass``.
-    kpoints : (N, 3) numpy.ndarray
+    kpoints : NDArray
         The discretized k-points on the Fermi surface. Each row
         corresponds to a k-point in the form ``[kx, ky, kz]``.
-    kfaces : (F, 3) numpy.ndarray
+    kfaces : NDArray
         The faces of the triangulated surface in k-space. Each row
         corresponds to a face in the form ``[i, j, k]``, where
         ``i``, ``j``, and ``k`` are the indices of the vertices of

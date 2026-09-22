@@ -216,7 +216,7 @@ class Conductivity:
             are calculated.
         Returns
         -------
-        numpy.ndarray or float
+        NDArray or float
             The conductivity tensor component(s) as an i by j matrix.
         """
         if not self._are_elements_saved:
@@ -587,16 +587,16 @@ def solve_sparse_plus_lowrank(
     ----------
     A : scipy.sparse matrix
         The sparse matrix part of the operator, with shape (n, n).
-    C : numpy.ndarray
+    C : NDArray
         A small dense matrix of shape (r, r), where r is the rank of
         the low-rank part.
-    U : numpy.ndarray
+    U : NDArray
         A matrix of shape (n, r) representing the left singular vectors
         of the low-rank part.
-    V : numpy.ndarray
+    V : NDArray
         A matrix of shape (r, n) representing the right singular vectors
         of the low-rank part.
-    b : numpy.ndarray
+    b : NDArray
         The right-hand side vector or matrix, with shape (n,) or (n, m).
     sparse_solver : Callable, optional
         The solver used to solve the sparse linear systems. Takes the
@@ -606,7 +606,7 @@ def solve_sparse_plus_lowrank(
 
     Returns
     -------
-    numpy.ndarray
+    NDArray
         The solution x to the linear system, with the same shape as b.
     """
     A_inv_b = sparse_solver(A, b)

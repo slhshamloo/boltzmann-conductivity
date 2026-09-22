@@ -4,7 +4,7 @@ from copy import deepcopy
 import json
 
 
-def easy_params(params):
+def easy_params(params: dict) -> dict:
     """Convenience function to set parameters for the simulation.
 
     List of convenience features:
@@ -44,7 +44,7 @@ def easy_params(params):
 
     Parameters
     ----------
-    params : dict
+    params
         Simplified (easy-to-use) parameters for the simulation.
     
     Returns
@@ -104,7 +104,7 @@ def easy_params(params):
     return new_params
 
 
-def get_tight_binding_dispersion(band_params) -> str:
+def get_tight_binding_dispersion(band_params: dict | set) -> str:
     """
     Get the tight-binding dispersion relation containing terms relating
     to the parameters in ``band_params``.
@@ -129,7 +129,7 @@ def get_tight_binding_dispersion(band_params) -> str:
 
     Parameters
     ----------
-    band_params : dict or set
+    band_params
         Dictionary or set of parameters for the tight-binding model.
     
     Returns

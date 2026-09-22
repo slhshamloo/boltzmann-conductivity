@@ -51,24 +51,24 @@ class Loader:
     
     Attributes
     ----------
-    x_data : defaultdict[str, list[np.ndarray]]
+    x_data : defaultdict[str, list[NDArray]]
         x_data variable for the fitting procedure.
-    y_data : defaultdict[str, list[np.ndarray]]
+    y_data : defaultdict[str, list[NDArray]]
         y_data variable for the fitting procedure.
-    x_data_raw : defaultdict[str, list[np.ndarray]]
+    x_data_raw : defaultdict[str, list[NDArray]]
         Raw data of the independent variable(s) collected from the
         files. Each ``x_vary_label`` is mapped to the corresponding
         arrays. Each array corresponds to a different value of the
         labels in ``x_search``.
-    y_data_raw : deefaultdict[str, list[np.ndarray]]
+    y_data_raw : deefaultdict[str, list[NDArray]]
         Raw data of the dependent variable collected from the files.
         Each sequence corresponds to a different dependent variable
         in ``y_label``, and each array inside that corresponds
         to a different value in ``x_search_values``.
-    x_data_interpolated : defaultdict[str, list[np.ndarray]]
+    x_data_interpolated : defaultdict[str, list[NDArray]]
         Interpolated, but unprocessed, data of the independent variable
         varying inside the files.
-    y_data_interpolated : defaultdict[str, list[np.ndarray]]
+    y_data_interpolated : defaultdict[str, list[NDArray]]
         Interpolated, but unprocessed, data of the dependent variable
         collected from the files.
     x_vary_label

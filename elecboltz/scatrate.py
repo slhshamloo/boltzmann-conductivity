@@ -1,6 +1,8 @@
 import numpy as np
 from typing import Callable
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
+from numpy.typing import ArrayLike
+from numbers import Real
 
 
 class ScatteringFunction:
@@ -10,21 +12,23 @@ class ScatteringFunction:
     evaluated at a given wavevector (kx, ky, kz). Subclasses should
     implement the `__call__` method.
     """
-    def __init__(self, params):
+    def __init__(self, params: Mapping):
         self.params = params
     
-    def __call__(self, kx, ky, kz, vx, vy, vz, temperature, epsilon, **kwargs):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, kz: ArrayLike,
+                 vx: ArrayLike, vy: ArrayLike, vz: ArrayLike,
+                 temperature: Real, epsilon: Real, **kwargs):
         """Evaluate the scattering function at the given wavevector.
 
         Parameters
         ----------
-        kx, ky, kz : float
+        kx, ky, kz
             The components of the wavevector in Cartesian coordinates.
-        vx, vy, vz : float
+        vx, vy, vz
             The components of the velocity at the given wavevector.
-        temperature : float
+        temperature
             The temperature at which to evaluate the scattering function.
-        epsilon : float
+        epsilon
             The energy at the given wavevector.
         **kwargs
             Additional parameters that may be needed for specific scattering models.
@@ -59,13 +63,13 @@ class AzimuthalScattering(ScatteringFunction):
     the x-y plane with the x axis, and `trig` is a trigonometric
     function (cos, sin, tan, or cot) depending on the `trig` parameter.
     """
-    def __init__(self, params):
+    def __init__(self, params: Mapping):
         super().__init__(params)
         trig_funcs = {'cos': np.cos, 'sin': np.sin, 'tan': np.tan, 'cot': _cot}
         self.trig_func = trig_funcs[params['trig']]
         if 'sym' not in params:
             self.params['sym'] = 1
-    def __call__(self, kx, ky, **kwargs):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, **kwargs):
         phi = np.arctan2(ky, kx)
         return (self.params['gamma_k'] * np.abs(self.trig_func(
             self.params['sym']*phi)) ** self.params['power'])
@@ -82,13 +86,13 @@ class ExpAzimuthalScattering(ScatteringFunction):
     the x-y plane with the x axis, and `trig` is a trigonometric
     function (cos, sin, tan, or cot) depending on the `trig` parameter.
     """
-    def __init__(self, params):
+    def __init__(self, params: Mapping):
         super().__init__(params)
         trig_funcs = {'cos': np.cos, 'sin': np.sin, 'tan': np.tan, 'cot': _cot}
         self.trig_func = trig_funcs[params['trig']]
         if 'sym' not in params:
             self.params['sym'] = 1
-    def __call__(self, kx, ky, **kwargs):
+    def __call__(self, kx: ArrayLike, ky: ArrayLike, **kwargs):
         phi = np.arctan2(ky, kx)
         return (self.params['gamma_k'] * np.exp(-self.params['power'] *
                 np.abs(self.trig_func(self.params['sym']*phi))))
