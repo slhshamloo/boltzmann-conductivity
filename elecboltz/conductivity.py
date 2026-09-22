@@ -5,8 +5,10 @@ from .integrate import quad_points, quad_weights
 import numpy as np
 import scipy.sparse
 
-from typing import Callable, Union
+from typing import Callable
 from collections.abc import Sequence
+from numbers import Real
+from  numpy.typing import NDArray
 
 from scipy.constants import e, hbar, angstrom
 THz = 1e12
@@ -19,12 +21,12 @@ class Conductivity:
 
     Parameters
     ----------
-    band : BandStructure
+    band
         The class holding band structure information of the material.
-    field : Sequence[float]
+    field
         The magnetic field in the x, y, and z directions in units of
         Tesla.
-    scattering_rate : Callable or Sequence or float or None
+    scattering_rate
         The (out-)scattering rate, in units of THz. If expressed as
         a ``Callable`` it is a function of any of the parameters:
         (wavevectors) kx, ky, kz, in units of 1/angstrom,
@@ -41,48 +43,48 @@ class Conductivity:
         custom values over the different ``kpoints`` of the Fermi
         surface in the `band` object. If None, it will be calculated
         from the scattering kernel.
-    scattering_kernel : ScatteringKernel
+    scattering_kernel
         See the `elecboltz.kernel` module for more details on this
         object. If provided, ``scattering_rate`` will be ignored
         and calculated from the kernel.
-    frequency : float
+    frequency
         The frequency of the applied field in units of THz.
-    correct_curvature : bool, optional
+    correct_curvature
         If True, correct for the curvature of the Fermi surface.
-    solver : Callable, optional
+    solver
         The solver used to solve the linear system. Takes the (sparse)
         matrix as the first argument and the right-hand side as the
         second argument. When using a custom solver, keep in mind that
         the right-hand side might not be a vector. So, solvers that
         only work with vectors need to be adapted to solve each column
         of the right-hand side separately.
-    quadrature_order : int, optional
+    quadrature_order
         The order of the quadrature used to integrate the scattering
         kernel. 2 should be sufficient for most cases.
-    Bamp : float, optional
+    Bamp
         The amplitude of the magnetic field in units of Tesla. If
         provided, it will be used to set the field.
-    Btheta : float, optional
+    Btheta
         The polar angle of the magnetic field in units of degrees. If
         provided, it will be used to set the field.
-    Bphi : float, optional
+    Bphi
         The azimuthal angle of the magnetic field in units of degrees.
         If provided, it will be used to set the field.
     
     Attributes
     ----------
-    sigma : numpy.ndarray
+    sigma : NDArray[complexfloating]
         The conductivity tensor, which is a 3 by 3 matrix. Can be
         calculated using the ``solve`` method. Elements that are not
         calculated yet are set to zero.
     """
     def __init__(
             self, band: BandStructure, field: Sequence[float] = np.zeros(3),
-            scattering_rate: Union[Callable, Sequence, float, None] = None,
-            scattering_kernel: Union[ScatteringKernel, None] = None,
-            frequency: float = 0.0, correct_curvature: bool = True,
-            quadrature_order: int = 2, Bamp: float = None,
-            Btheta: float = None, Bphi: float = None, **kwargs):
+            scattering_rate: Callable | Sequence | Real | None = None,
+            scattering_kernel: ScatteringKernel | None = None,
+            frequency: Real = 0.0, correct_curvature: bool = True,
+            quadrature_order: int = 2, Bamp: Real = None,
+            Btheta: Real = None, Bphi: Real = None, **kwargs):
         self.correct_curvature = correct_curvature
         self.quadrature_order = quadrature_order
         # avoid triggering setattr in the constructor
@@ -135,10 +137,34 @@ class Conductivity:
             self.set_field(
                 field=self.field, Bamp=self.Bamp,
                 Btheta=self.Btheta, Bphi=self.Bphi)
+        else:
+            super().__setattr__(name, value)
 
-    def set_field(self, field: Sequence[float] = np.zeros(3),
-                  Bamp: float = None, Btheta: float = None,
-                  Bphi: float = None):
+    def set_field(self, field: Sequence[Real] = np.zeros(3),
+                  Bamp: Real = None, Btheta: Real = None, Bphi: Real = None):
+        """Set the magnetic field.
+
+        Note that you can both provide the field in Cartesian
+        coordinates (x, y, z) or in spherical coordinates
+        (amplitude, polar angle, azimuthal angle). If both are provided,
+        the spherical coordinates will be used to set the field.
+
+        Parameters
+        ----------
+        field
+            If you want to directly set the field in Cartesian
+            coordinates, provide the field as a sequence of three values
+            in units of Tesla.
+        Bamp
+            If you want to set the field in spherical coordinates,
+            provide the amplitude of the field in units of Tesla.
+        Btheta
+            If you want to set the field in spherical coordinates,
+            provide the polar angle of the field in degrees.
+        Bphi
+            If you want to set the field in spherical coordinates,
+            provide the azimuthal angle of the field in degrees.
+        """
         if Bamp is not None:
             Btheta = Btheta or 0.0
             Bphi = Bphi or 0.0
@@ -174,17 +200,17 @@ class Conductivity:
         super().__setattr__('Btheta', Btheta)
         super().__setattr__('Bphi', Bphi)
 
-    def calculate(self, i: Union[Sequence[int], int, None] = None,
-                  j: Union[Sequence[int], int, None] = None
-                  ) -> Union[np.ndarray, float]:
+    def calculate(self, i: Sequence[int] | int | None = None,
+                  j: Sequence[int] | int | None = None
+                  ) -> NDArray[np.complexfloating]:
         """Calculate the conductivity tensor.
 
         Parameters
         ----------
-        i : Sequence[int] or int or None, optional
+        i
             The index of the first component (row) of the conductivity
             tensor. If None (default), all components are calculated.
-        j : Sequence[int] or int or None, optional
+        j
             The index of the second component (column) of the
             conductivity tensor. If None (default), all components
             are calculated.
@@ -276,7 +302,7 @@ class Conductivity:
             # A = A_0 + U^dagger S U
             return solve_sparse_plus_lowrank(
                 self._differential_operator, self._in_scattering_matrix,
-                U, V, self._vhat_projections[:, j], factor=self._factorization,
+                U, V, self._vhat_projections[:, j],
                 sparse_solver = lambda _, b: self._factorization.solve(b))
 
     def _get_calculation_indices(self, i, j):
