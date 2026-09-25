@@ -19,14 +19,10 @@ class TestChemicalPotentialTuning(unittest.TestCase):
             'resolution': 21,
             'domain_size': [1.0, 1.0, 2.0],
             'periodic': 2,
+            'fixed_filling': 0.84
         }
         params = elecboltz.easy_params(params)
-        band = elecboltz.BandStructure(
-            params['dispersion'], params['chemical_potential'],
-            params['unit_cell'], band_params=params['band_params'],
-            fixed_filling=0.84, domain_size=params['domain_size'],
-            periodic=params['periodic'], resolution=params['resolution'])
-
+        band = elecboltz.BandStructure(**params)
         band.discretize()
         self.assertAlmostEqual(band.n, 0.84, delta=0.02)
 
