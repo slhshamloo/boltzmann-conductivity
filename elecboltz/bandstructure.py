@@ -1,3 +1,5 @@
+from .fermisurface import IsoEnergySurface
+from .symmetry import Symmetry
 from .integrate import adaptive_octree_integrate
 
 import numpy as np
@@ -35,6 +37,11 @@ class BandStructure:
     band_params
         The parameters of the dispersion relation. Energy units are
         milli eV and distance units are angstrom.
+    symmetry
+        The point group symmetry of the material. Can be the lattice
+        type (e.g., 'tetragonal', 'trigonal', 'hexagonal'), or a
+        symmetry symbol: a Schoenflies symbol (e.g., 'D4h', 'D3d',
+        'C4v') or a Hermann-Mauguin symbol (e.g., '4/mmm', '-3m').
     fixed_filling
         The fixed electronic filling fraction (``n``) of the material.
         If not None, this is used to set the chemical potential upon
@@ -79,6 +86,9 @@ class BandStructure:
 
     Attributes
     ----------
+    surfaces : Mapping[float, FermiSurface]
+        A mapping from energy levels to the corresponding discretized
+        iso energy surfaces.
     n : float
         The electron filling fraction of the material. Only available
         after calling ``calculate_filling_fraction``.
@@ -89,32 +99,24 @@ class BandStructure:
         The effective mass of the charge carriers divided by the
         rest mass of the electron, m_e. Only available after calling
         ``calculate_mass``.
-    kpoints : NDArray
-        The discretized k-points on the Fermi surface. Each row
-        corresponds to a k-point in the form ``[kx, ky, kz]``.
-    kfaces : NDArray
-        The faces of the triangulated surface in k-space. Each row
-        corresponds to a face in the form ``[i, j, k]``, where
-        ``i``, ``j``, and ``k`` are the indices of the vertices of
-        the face in the ``kpoints`` array.
-    periodic_projector : scipy.sparse.csr_array
-        Projects quantities into the periodic k-space, where points that
-        are periodic images of each other are mapped to the same point.
     """
     def __init__(
             self, dispersion: str, chemical_potential: Real,
             unit_cell: Sequence[Real], band_params: dict = {},
-            fixed_filling: Real | None = None,
+            symmetry: str | None = None, fixed_filling: Real | None = None,
             domain_size: Sequence[Real] = np.ones(3), bz_ratio: Real = 1.0,
-            periodic: bool | Sequence[int | bool] = True,
+            periodic: bool | int | Sequence[int | bool] = 2,
             axis_names: Sequence[str] | str = ['a', 'b', 'c'],
             wavevector_names: Sequence[str] | str = ['kx', 'ky', 'kz'],
             resolution: int | Sequence[int] = 31,
-            filling_tuning_depth: int = 6,
-            n_correct: int = 2,sort_axis: int = None, **kwargs):
+            filling_tuning_depth: int = 6, n_correct: int = 2,
+            sort_axis: int | None = None, **kwargs):
         # avoid triggering the __setattr__ method for the first time
         super().__setattr__('dispersion', dispersion)
         self.band_params = band_params
+        self.symmetry = symmetry
+        if symmetry is not None:
+            self.symmetry = Symmetry(self.symmetry)
         self.fixed_filling = fixed_filling
         self.chemical_potential = chemical_potential
         self.unit_cell = unit_cell
@@ -127,9 +129,7 @@ class BandStructure:
         self.filling_tuning_depth = filling_tuning_depth
         self.n_correct = n_correct
         self._parse_dispersion()
-        self.kpoints = None
-        self.kfaces = None
-        self.periodic_projector = None
+        self.surfaces = {}
         self.sort_axis = sort_axis
         self.n = None
         self.p = None
@@ -171,24 +171,56 @@ class BandStructure:
         self.__dict__.update(state)
         # re-parse the dispersion relation to restore the full functions
         self._parse_dispersion()
-    
-    def discretize(self):
-        """Discretize the Fermi surface.
+
+    def get_surface(self, energy: float = 0.0):
+        """Get the discretized iso energy surface at the given
+        energy level.
+        
+        Generates the discretized surface if it doesn't already exist.
+        Takes into account the floating-point tolerance ``tol`` when
+        determining if a surface at the given energy level has already been
+        discretized.
+        
+        Parameters
+        ----------
+        energy
+            The difference of the energy level of the discretized
+            surface from the chemical potential. The default is 0.0,
+            which corresponds to the Fermi surface.
+        """
+        for energy_level in self.surfaces:
+            if energy_level - energy < self.tol:
+                return self.surfaces[energy_level]
+        return self.discretize(energy)
+
+    def discretize(self, energy: float = 0.0):
+        """Discretize the iso-energy surface at the given energy level.
 
         First, the surface is triangulated using the marching cubes
         algorithm with ``resolution`` controlling the resolution of the
         grid. Next, to improve the accuracy of the isosurface,
-        ``n_correct`` steps of the Newton--Raphson root-finding method
+        ``n_correct`` steps of  the Newton--Raphson root-finding method
         are applied to the output of marching cubes. Finally, after the
         surface construction, periodic boundary conditions are applied
         to "stitch" the open ends of the surface together.
+
+        Parameters
+        ----------
+        energy
+            The difference of the energy level of the discretized
+            surface from the chemical potential. The default is 0.0,
+            which corresponds to the Fermi surface.
         """
-        self._build_fermi_surface()
-        if self.fixed_filling is not None:
+        surface = self._build_surface(energy)
+        self.surfaces[energy] = surface
+        if self.symmetry is not None:
+            surface.symmetrize(self.symmetry)
+        if energy == 0 and self.fixed_filling is not None:
             self.tune_chemical_potential()
         if self.sort_axis is not None:
-            self._sort_and_reindex(self.sort_axis)
-        self._stitch_periodic_boundaries()
+            surface.sort_and_reindex(self.sort_axis)
+        surface.apply_periodicity(self._gvec, self.periodic)
+        return surface
 
     def calculate_filling_fraction(self, depth: int = 7) -> float:
         """Calculate the filling fraction n of the material.
@@ -336,6 +368,19 @@ class BandStructure:
         return [vfunc(kx, ky, kz, *self.unit_cell, **self.band_params)
                 for vfunc in self._velocity_funcs_full]
 
+    # For convenient access to the Fermi surface points and faces
+    @property
+    def kpoints(self):
+        return self.surfaces[0.0].kpoints if self.surfaces else None
+
+    @property
+    def kfaces(self):
+        return self.surfaces[0.0].kfaces if self.surfaces else None
+
+    @property
+    def periodic_projector(self):
+        return self.surfaces[0.0].periodic_projector if self.surfaces else None
+
     def _parse_dispersion(self):
         """
         Parse the dispersion relation and extract the necessary
@@ -360,114 +405,34 @@ class BandStructure:
             sympy.lambdify(all_symbols, vexpr, 'numpy')
             for vexpr in self._velocities_sympy]
     
-    def _build_fermi_surface(self):
+    def _build_surface(self, energy: Real = 0.0):
         self._gvec = self.domain_size * np.pi / self.unit_cell
-        self.kpoints, self.kfaces, _, _ = marching_cubes(
+        kpoints, kfaces, _, _ = marching_cubes(
             self.energy_func(*np.mgrid[
                 -self._gvec[0]:self._gvec[0]:1j*self.resolution[0],
                 -self._gvec[1]:self._gvec[1]:1j*self.resolution[1],
                 -self._gvec[2]:self._gvec[2]:1j*self.resolution[2]]),
-            level=self.chemical_potential)
-        self.kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
-        self.kpoints -= self._gvec[None, :]
+            level=self.chemical_potential + energy)
+        kpoints *= (2*self._gvec / (self.resolution-1))[None, :]
+        kpoints -= self._gvec[None, :]
         for _ in range(self.n_correct):
-            self.kpoints = self._apply_newton_correction(self.kpoints)
+            kpoints = self._apply_newton_correction(kpoints, energy)
+        return IsoEnergySurface(kpoints, kfaces)
 
-    def _sort_and_reindex(self, sort_axis):
-        new_order, self.kfaces = self._generate_reindex(sort_axis)
-        self.kpoints = self.kpoints[new_order]
+    def _apply_newton_correction(self, points, energy: Real = 0.0):
+        return _apply_newton_correction(
+            points, self.energy_func,
+            lambda kx, ky, kz: (np.array(self.velocity_func(kx, ky, kz))
+                                / velocity_units),
+            self.chemical_potential + energy)
     
-    def _generate_reindex(self, sort_axis):
-        new_order = np.argsort(self.kpoints[:, sort_axis])
-        old_to_new_map = np.empty(len(new_order), dtype=int)
-        old_to_new_map[new_order] = np.arange(len(new_order))
-        return new_order, old_to_new_map[self.kfaces]
-
-    def _stitch_periodic_boundaries(self):
-        """
-        Find duplicate points on the periodic boundaries, then make the
-        periodic mesh arrays.
-        """
-        duplicates = dict()
-        threshold = np.min(self._gvec / self.resolution) / 10
-        for axis in self.periodic:
-            low_border = np.argwhere(
-                self.kpoints[:, axis] + self._gvec[axis] < threshold).ravel()
-            high_border = np.argwhere(
-                self.kpoints[:, axis] - self._gvec[axis] > -threshold).ravel()
-            if len(low_border) == 0 or len(high_border) == 0:
-                continue
-
-            min_dist = min(self._get_min_border_distance(low_border),
-                           self._get_min_border_distance(high_border))
-
-            k1 = self.kpoints[low_border][None, :]
-            k2 = self.kpoints[high_border][:, None]
-            kdiff = k2 - k1
-            kdiff[:, :, axis] += self._gvec[axis]
-            kdiff[:, :, axis] %= 2 * self._gvec[axis]
-            kdiff[:, :, axis] -= self._gvec[axis]
-            kdiff = np.linalg.norm(kdiff, axis=-1)
-
-            min_pair = np.argmin(kdiff, axis=1)
-            is_duplicate = kdiff[np.arange(len(high_border)), min_pair
-                                 ] < min_dist / 2
-            duplicates.update(dict(zip(
-                high_border[is_duplicate],
-                low_border[min_pair[is_duplicate]])))
-        self._build_periodic_projector(duplicates)
-    
-    def _get_min_border_distance(self, border):
-        """
-        Find minimum intra-layer distance to set the threshold
-        for duplicate point detection.
-        """
-        is_triangle_point_in_border = np.isin(self.kfaces, border)
-        border_triangles = self.kfaces[np.any(
-            is_triangle_point_in_border, axis=1)]
-        points = self.kpoints[border_triangles]
-        is_triangle_point_in_border = is_triangle_point_in_border[
-            np.any(is_triangle_point_in_border, axis=1)]
-        is_pair_intra_layer = np.logical_xor(
-            is_triangle_point_in_border,
-            np.roll(is_triangle_point_in_border, 1, axis=-1))
-        return np.min(np.linalg.norm(
-            (points - np.roll(points, 1, axis=1))[is_pair_intra_layer],
-            axis=-1))
-
-    def _build_periodic_projector(self, duplicates):
-        """
-        Build the periodic kpoints and kfaces arrays by removing
-        duplicate points and reindexing.
-        """
-        if not duplicates:
-            self.periodic_projector = scipy.sparse.eye(
-                len(self.kpoints), format='csr')
-        else:
-            unique_mask = np.full(len(self.kpoints), True)
-            unique_mask[list(duplicates.keys())] = False
-            reindex_map = np.cumsum(unique_mask) - 1
-            reindex_map[list(duplicates.keys())] = reindex_map[
-                list(duplicates.values())]
-            self.periodic_projector = scipy.sparse.csr_array(
-                (np.ones(len(self.kpoints)),
-                (reindex_map, np.arange(len(self.kpoints)))),
-                shape=(np.count_nonzero(unique_mask), len(self.kpoints)))
-
-    def _apply_newton_correction(self, points):
-        residuals = self.energy_func(
-            points[:, 0], points[:, 1], points[:, 2]) - self.chemical_potential
-        gradients = np.column_stack(self.velocity_func(
-            points[:, 0], points[:, 1], points[:, 2])) / velocity_units
-        gradient_norms = np.linalg.norm(gradients, axis=-1)
-        return points - (residuals/gradient_norms**2)[:, None]*gradients
-    
-    def _curvature_correct_points(self, points, normals):
+    def _curvature_correct_points(self, points, normals, energy: Real = 0.0):
         kcenters = np.mean(points, axis=1) * angstrom
         kcenters_tangent = kcenters.copy()
         for _ in range(2):
-            kcenters_tangent = self._apply_newton_correction(kcenters_tangent)
-        center_diff = (kcenters_tangent - kcenters) / angstrom
+            kcenters_tangent = self._apply_newton_correction(
+                kcenters_tangent, energy)
+        center_diff = (kcenters_tangent-kcenters) / angstrom
         projected_diff = np.linalg.norm(center_diff, axis=-1)
 
         # Turn off warnings for division by zero
@@ -479,3 +444,30 @@ class BandStructure:
             np.nan_to_num(cosines, copy=False, nan=1.0)
         diff = projected_diff[:, None] / cosines
         return points + normals*diff[:, :, None]
+
+
+def _apply_newton_correction(points, func, gradient, iso_value):
+    """
+    Apply one step of the Newton-Raphson method to correct the points
+    on the isosurface.
+
+    Parameters
+    ----------
+    points : NDArray
+        The points to be corrected.
+    iso_value : float
+        The isosurface value.
+    gradient : callable
+        A function that computes the gradient of the scalar field at
+        given points.
+
+    Returns
+    -------
+    NDArray
+        The corrected points.
+    """
+    residuals = func(points[:, 0], points[:, 1], points[:, 2]) - iso_value
+    gradient_vectors = np.column_stack(gradient(
+        points[:, 0], points[:, 1], points[:, 2]))
+    gradient_norms = np.linalg.norm(gradient_vectors, axis=-1)
+    return points - (residuals/gradient_norms**2)[:, None]*gradient_vectors
